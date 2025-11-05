@@ -13,6 +13,9 @@ class ClaudeCodeHandler:
         self.claude_path = claude_path
         self.process = None
         self.session_id = None
+        # 챗봇 전용 작업 디렉토리 (chatbot_workspace/CLAUDE.md 읽기 위해)
+        self.chatbot_workspace = Path(__file__).parent.parent.parent / "chatbot_workspace"
+        self.chatbot_workspace.mkdir(exist_ok=True)
 
     async def start(self, system_prompt=None):
         """Claude Code 프로세스 시작"""
@@ -37,9 +40,10 @@ class ClaudeCodeHandler:
                 *args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(self.chatbot_workspace)  # 챗봇 전용 디렉토리에서 실행 (CLAUDE.md 읽기 위해)
             )
-            logger.info("Claude Code process started")
+            logger.info(f"Claude Code process started (cwd: {self.chatbot_workspace})")
         except Exception as e:
             logger.error(f"Failed to start Claude Code: {e}")
             raise
