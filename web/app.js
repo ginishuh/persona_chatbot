@@ -24,11 +24,13 @@ const narratorMode = document.getElementById('narratorMode');
 const narratorDescription = document.getElementById('narratorDescription');
 const charactersList = document.getElementById('charactersList');
 const addCharacterBtn = document.getElementById('addCharacterBtn');
-const adultMode = document.getElementById('adultMode');
+const adultLevel = document.getElementById('adultLevel');
+const narrativeSeparation = document.getElementById('narrativeSeparation');
 const saveContextBtn = document.getElementById('saveContextBtn');
 
 // 헤더 버튼
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+const tokenText = document.getElementById('tokenText');
 
 // 서사 패널 요소
 const narrativeContent = document.getElementById('narrativeContent');
@@ -283,7 +285,7 @@ function handleChatStream(data) {
     }
 }
 
-function handleChatComplete(data) {
+function handleChatComplete(response) {
     removeTypingIndicator();
     currentAssistantMessage = null;
 
@@ -292,8 +294,17 @@ function handleChatComplete(data) {
     sendChatBtn.disabled = false;
     chatInput.focus();
 
+    // response.data가 실제 데이터
+    const data = response.data || response;
+
     if (data.success) {
         log('응답 완료', 'success');
+
+        // 토큰 정보 업데이트
+        console.log('Token info:', data.token_info); // 디버그
+        if (data.token_info) {
+            updateTokenDisplay(data.token_info);
+        }
 
         // 서사 업데이트
         ws.send(JSON.stringify({ action: 'get_narrative' }));
@@ -474,7 +485,8 @@ saveContextBtn.addEventListener('click', () => {
         narrator_mode: narratorMode.value,
         narrator_description: narratorDescription.value.trim(),
         user_is_narrator: userIsNarrator.checked,
-        adult_mode: adultMode.checked,
+        adult_level: adultLevel.value,
+        narrative_separation: narrativeSeparation.checked,
         characters: characters
     }));
 });
@@ -488,7 +500,8 @@ function loadContext(context) {
     narratorMode.value = context.narrator_mode || 'moderate';
     narratorDescription.value = context.narrator_description || '';
     userIsNarrator.checked = context.user_is_narrator || false;
-    adultMode.checked = context.adult_mode || false;
+    adultLevel.value = context.adult_level || 'explicit';
+    narrativeSeparation.checked = context.narrative_separation || false;
 
     // 진행자 설정 표시/숨김
     if (narratorEnabled.checked) {
@@ -577,6 +590,35 @@ saveNarrativeBtn.addEventListener('click', () => {
     }, 500);
 });
 
+// ===== 토큰 표시 =====
+
+function updateTokenDisplay(tokenInfo) {
+    if (!tokenInfo) return;
+
+    const total = tokenInfo.total_tokens;
+    const remaining = tokenInfo.tokens_remaining;
+    const contextWindow = tokenInfo.context_window;
+
+    // 1000 단위로 쉼표 추가
+    const formatNumber = (num) => num.toLocaleString('ko-KR');
+
+    // 남은 비율 계산
+    const usagePercent = ((total / contextWindow) * 100).toFixed(1);
+
+    tokenText.textContent = `토큰: ${formatNumber(total)} / ${formatNumber(contextWindow)} (${usagePercent}%)`;
+    tokenText.title = `입력: ${formatNumber(tokenInfo.input_tokens)}, 캐시 읽기: ${formatNumber(tokenInfo.cache_read_tokens)}, 캐시 생성: ${formatNumber(tokenInfo.cache_creation_tokens)}, 출력: ${formatNumber(tokenInfo.output_tokens)}`;
+
+    // 토큰 사용량에 따라 색상 변경
+    const tokenInfoDiv = document.getElementById('tokenInfo');
+    if (usagePercent > 80) {
+        tokenInfoDiv.style.color = '#f48771'; // 빨강 (경고)
+    } else if (usagePercent > 50) {
+        tokenInfoDiv.style.color = '#dcdcaa'; // 노랑
+    } else {
+        tokenInfoDiv.style.color = '#4ec9b0'; // 청록 (정상)
+    }
+}
+
 // ===== 이벤트 리스너 =====
 
 sendChatBtn.addEventListener('click', sendChatMessage);
@@ -586,6 +628,24 @@ chatInput.addEventListener('keydown', (e) => {
         e.preventDefault();
         sendChatMessage();
     }
+});
+
+// ===== 탭 전환 =====
+
+// 탭 버튼들
+document.querySelectorAll('.tab-button').forEach(button => {
+    button.addEventListener('click', () => {
+        const tabName = button.dataset.tab;
+
+        // 모든 탭 버튼 비활성화
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        // 모든 탭 컨텐츠 숨기기
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+        // 클릭한 탭 활성화
+        button.classList.add('active');
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+    });
 });
 
 // ===== 초기화 =====

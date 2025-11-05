@@ -13,6 +13,9 @@
             <h1>📖 Persona Chat</h1>
             <div class="header-actions">
                 <button id="clearHistoryBtn" class="btn btn-sm btn-warning">🗑️ 대화 초기화</button>
+                <div class="token-info" id="tokenInfo" title="토큰 사용량">
+                    <span id="tokenText">토큰: - / 200K</span>
+                </div>
                 <div class="connection-status">
                     <span class="status-indicator" id="statusIndicator"></span>
                     <span id="statusText">연결 중...</span>
@@ -25,70 +28,90 @@
             <!-- Left Panel: Context Settings -->
             <aside class="left-panel">
                 <div class="panel-header">
-                    <h2>⚙️ 컨텍스트 설정</h2>
+                    <h2>⚙️ 설정</h2>
                     <button id="toggleContextBtn" class="btn-icon" title="접기/펼치기">▼</button>
                 </div>
 
+                <!-- Tabs -->
+                <div class="tabs">
+                    <button class="tab-button" data-tab="basic">기본설정</button>
+                    <button class="tab-button active" data-tab="characters">캐릭터</button>
+                    <button class="tab-button" data-tab="modes">모드</button>
+                </div>
+
                 <div id="contextContent" class="panel-content">
-                    <!-- 세계관 -->
-                    <div class="context-section">
-                        <label>🌍 세계관/배경</label>
-                        <textarea id="worldInput" placeholder="세계관, 시대적 배경 등..." rows="2"></textarea>
+                    <!-- 기본설정 탭 -->
+                    <div class="tab-content" id="tab-basic" style="display:none;">
+                        <div class="context-section">
+                            <label>🌍 세계관/배경</label>
+                            <textarea id="worldInput" placeholder="세계관, 시대적 배경 등..." rows="3"></textarea>
+                        </div>
+                        <div class="context-section">
+                            <label>📍 현재 상황</label>
+                            <textarea id="situationInput" placeholder="현재 벌어지고 있는 상황..." rows="3"></textarea>
+                        </div>
                     </div>
 
-                    <!-- 현재 상황 -->
-                    <div class="context-section">
-                        <label>📍 현재 상황</label>
-                        <textarea id="situationInput" placeholder="현재 벌어지고 있는 상황..." rows="2"></textarea>
+                    <!-- 캐릭터 탭 -->
+                    <div class="tab-content active" id="tab-characters">
+                        <div class="context-section">
+                            <label>🙋 나의 캐릭터</label>
+                            <textarea id="userCharacterInput" placeholder="당신의 캐릭터 설정 (이름, 성격, 배경 등)..." rows="3"></textarea>
+                        </div>
+                        <div class="context-section">
+                            <label>👥 NPC 캐릭터들</label>
+                            <div id="charactersList"></div>
+                            <button id="addCharacterBtn" class="btn btn-sm">+ 캐릭터 추가</button>
+                        </div>
                     </div>
 
-                    <!-- 나의 캐릭터 -->
-                    <div class="context-section">
-                        <label>🙋 나의 캐릭터</label>
-                        <textarea id="userCharacterInput" placeholder="당신의 캐릭터 설정 (이름, 성격, 배경 등)..." rows="2"></textarea>
-                    </div>
-
-                    <!-- 진행자 설정 -->
-                    <div class="context-section">
-                        <label>🎭 진행자 (GM)</label>
-                        <div style="margin-bottom: 0.5rem;">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="narratorEnabled" />
-                                <span>AI 진행자</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="userIsNarrator" />
-                                <span>내가 진행자</span>
-                            </label>
+                    <!-- 모드 탭 -->
+                    <div class="tab-content" id="tab-modes" style="display:none;">
+                        <!-- 진행자 설정 -->
+                        <div class="context-section">
+                            <label>🎭 진행자 모드</label>
+                            <div style="margin-bottom: 0.5rem;">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="narratorEnabled" />
+                                    <span>AI 진행자</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="userIsNarrator" />
+                                    <span>내가 진행자</span>
+                                </label>
+                            </div>
+                            <div id="narratorSettings" style="display: none;">
+                                <select id="narratorMode" class="select-input">
+                                    <option value="active">적극적</option>
+                                    <option value="moderate" selected>보통</option>
+                                    <option value="passive">소극적</option>
+                                </select>
+                                <textarea id="narratorDescription" placeholder="진행자 성향..." rows="2"></textarea>
+                            </div>
                         </div>
 
-                        <div id="narratorSettings" style="display: none;">
-                            <select id="narratorMode" class="select-input">
-                                <option value="active">적극적</option>
-                                <option value="moderate" selected>보통</option>
-                                <option value="passive">소극적</option>
+                        <!-- 성인 콘텐츠 수위 -->
+                        <div class="context-section">
+                            <label>🔞 성인 콘텐츠 수위</label>
+                            <select id="adultLevel" class="select-input">
+                                <option value="explicit">명시적 표현 (기본)</option>
+                                <option value="enhanced">묘사/효과음/신음 강화</option>
+                                <option value="extreme">최고 수위 (욕설, 더티토크)</option>
                             </select>
-                            <textarea id="narratorDescription" placeholder="진행자 성향..." rows="2"></textarea>
+                        </div>
+
+                        <!-- 대화/서술/효과음 분리 -->
+                        <div class="context-section">
+                            <label>📝 표현 분리</label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="narrativeSeparation" />
+                                <span>대화/서술/효과음 분리</span>
+                            </label>
+                            <p class="hint">활성화 시: [캐릭터], [서술], [효과음] 태그 사용</p>
                         </div>
                     </div>
 
-                    <!-- 캐릭터들 -->
-                    <div class="context-section">
-                        <label>👥 캐릭터들</label>
-                        <div id="charactersList"></div>
-                        <button id="addCharacterBtn" class="btn btn-sm">+ 추가</button>
-                    </div>
-
-                    <!-- 성인 모드 -->
-                    <div class="context-section">
-                        <label>🔞 콘텐츠</label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="adultMode" />
-                            <span>성인 콘텐츠 허용 (18+)</span>
-                        </label>
-                    </div>
-
-                    <button id="saveContextBtn" class="btn btn-primary" style="width: 100%;">💾 컨텍스트 저장</button>
+                    <button id="saveContextBtn" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">💾 설정 저장</button>
                 </div>
             </aside>
 
