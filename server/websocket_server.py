@@ -171,10 +171,10 @@ async def handle_message(websocket, message):
         }))
 
 
-async def websocket_handler(websocket, path):
+async def websocket_handler(websocket):
     """WebSocket 연결 핸들러"""
     connected_clients.add(websocket)
-    client_ip = websocket.remote_address[0]
+    client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
     logger.info(f"Client connected: {client_ip} (Total: {len(connected_clients)})")
 
     try:
