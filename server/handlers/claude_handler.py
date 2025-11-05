@@ -25,7 +25,8 @@ class ClaudeCodeHandler:
                 self.claude_path,
                 "--print",
                 "--verbose",
-                "--output-format", "stream-json"
+                "--output-format", "stream-json",
+                "--setting-sources", "user,project,local"  # .claude/claude.md 읽기
             ]
 
             # System prompt 추가
