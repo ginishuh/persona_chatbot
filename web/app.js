@@ -28,13 +28,35 @@ const adultLevel = document.getElementById('adultLevel');
 const narrativeSeparation = document.getElementById('narrativeSeparation');
 const saveContextBtn = document.getElementById('saveContextBtn');
 
+// 파일 관리 요소
+const worldSelect = document.getElementById('worldSelect');
+const saveWorldBtn = document.getElementById('saveWorldBtn');
+const deleteWorldBtn = document.getElementById('deleteWorldBtn');
+const situationSelect = document.getElementById('situationSelect');
+const saveSituationBtn = document.getElementById('saveSituationBtn');
+const deleteSituationBtn = document.getElementById('deleteSituationBtn');
+const myCharacterSelect = document.getElementById('myCharacterSelect');
+const saveMyCharacterBtn = document.getElementById('saveMyCharacterBtn');
+const deleteMyCharacterBtn = document.getElementById('deleteMyCharacterBtn');
+
+// 프리셋 관리 요소
+const presetSelect = document.getElementById('presetSelect');
+const savePresetBtn = document.getElementById('savePresetBtn');
+const loadPresetBtn = document.getElementById('loadPresetBtn');
+const deletePresetBtn = document.getElementById('deletePresetBtn');
+
 // 헤더 버튼
+const modeSwitchBtn = document.getElementById('modeSwitchBtn');
+const gitSyncBtn = document.getElementById('gitSyncBtn');
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 const tokenText = document.getElementById('tokenText');
 
 // 서사 패널 요소
 const narrativeContent = document.getElementById('narrativeContent');
 const saveNarrativeBtn = document.getElementById('saveNarrativeBtn');
+const storySelect = document.getElementById('storySelect');
+const loadStoryBtn = document.getElementById('loadStoryBtn');
+const deleteStoryBtn = document.getElementById('deleteStoryBtn');
 
 let currentAssistantMessage = null;
 let characterColors = {}; // 캐릭터별 색상 매핑
@@ -56,6 +78,17 @@ function connect() {
 
         // 연결 시 서사 조회
         ws.send(JSON.stringify({ action: 'get_narrative' }));
+
+        // 파일 목록 로드
+        loadFileList('world', worldSelect);
+        loadFileList('situation', situationSelect);
+        loadFileList('my_character', myCharacterSelect);
+        loadPresetList();
+        loadStoryList();
+
+        // Git 및 모드 상태 확인
+        checkGitStatus();
+        checkModeStatus();
     };
 
     ws.onmessage = (event) => {
@@ -139,6 +172,170 @@ function handleMessage(msg) {
 
         case 'chat_complete':
             handleChatComplete(data);
+            break;
+
+        case 'list_workspace_files':
+            if (data.success) {
+                handleFileList(data);
+            } else {
+                log(`파일 목록 로드 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'save_workspace_file':
+            if (data.success) {
+                log(`파일 저장 완료: ${data.filename}`, 'success');
+                // 목록 새로고침은 handleFileList에서 처리
+            } else {
+                log(`파일 저장 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'load_workspace_file':
+            if (data.success) {
+                handleFileLoad(data);
+                log(`파일 로드 완료: ${data.filename}`, 'success');
+            } else {
+                log(`파일 로드 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'delete_workspace_file':
+            if (data.success) {
+                log(`파일 삭제 완료: ${data.filename}`, 'success');
+                // 목록 새로고침은 handleFileList에서 처리
+            } else {
+                log(`파일 삭제 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'list_presets':
+            if (data.success) {
+                updatePresetList(data.files);
+            } else {
+                log(`프리셋 목록 로드 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'save_preset':
+            if (data.success) {
+                log(`프리셋 저장 완료: ${data.filename}`, 'success');
+                loadPresetList();
+            } else {
+                log(`프리셋 저장 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'load_preset':
+            if (data.success) {
+                applyPreset(data.preset);
+                log(`프리셋 로드 완료: ${data.filename}`, 'success');
+            } else {
+                log(`프리셋 로드 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'delete_preset':
+            if (data.success) {
+                log(`프리셋 삭제 완료: ${data.filename}`, 'success');
+                loadPresetList();
+            } else {
+                log(`프리셋 삭제 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'git_check_status':
+            handleGitStatus(data);
+            break;
+
+        case 'git_init':
+            if (data.success) {
+                log(data.message, 'success');
+                checkGitStatus(); // 상태 재확인
+            } else {
+                log(`Git 초기화 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'git_sync':
+            if (data.success) {
+                log(data.message, 'success');
+                if (data.warning) {
+                    log(data.warning, 'error');
+                }
+                checkGitStatus(); // 상태 재확인
+            } else {
+                log(`동기화 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'git_pull':
+            if (data.success) {
+                log(data.message, 'success');
+                checkGitStatus(); // 상태 재확인
+            } else {
+                log(`Pull 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'mode_check':
+            handleModeStatus(data);
+            break;
+
+        case 'mode_switch_chatbot':
+            if (data.success) {
+                log(data.message, 'success');
+                alert('⚠️ 챗봇 전용 모드로 전환되었습니다.\n\n브라우저를 새로고침(F5 또는 Ctrl+R)하세요!');
+                checkModeStatus(); // 상태 재확인
+            } else {
+                log(`모드 전환 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'mode_switch_coding':
+            if (data.success) {
+                log(data.message, 'success');
+                alert('⚠️ 에이전트 지침이 복구되었습니다.\n\n브라우저를 새로고침(F5 또는 Ctrl+R)하세요!');
+                checkModeStatus(); // 상태 재확인
+            } else {
+                log(`모드 전환 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'list_stories':
+            if (data.success) {
+                updateStoryList(data.files);
+            } else {
+                log(`서사 목록 로드 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'save_story':
+            if (data.success) {
+                log(`서사 저장 완료: ${data.filename}`, 'success');
+                loadStoryList(); // 목록 새로고침
+            } else {
+                log(`서사 저장 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'load_story':
+            if (data.success) {
+                displayStoryContent(data.content);
+                log(`서사 로드 완료: ${data.filename}`, 'success');
+            } else {
+                log(`서사 로드 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'delete_story':
+            if (data.success) {
+                log(`서사 삭제 완료: ${data.filename}`, 'success');
+                loadStoryList(); // 목록 새로고침
+                narrativeContent.innerHTML = '<p class="placeholder">대화가 진행되면 여기에 서사가 기록됩니다.</p>';
+            } else {
+                log(`서사 삭제 실패: ${data.error}`, 'error');
+            }
             break;
 
         case 'error':
@@ -442,25 +639,110 @@ function addCharacterInput(name = '', description = '') {
 
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
-    nameInput.placeholder = '캐릭터 이름';
+    nameInput.className = 'character-name-input';
+    nameInput.placeholder = '이름';
     nameInput.value = name;
-    nameInput.style.flex = '1';
+    nameInput.style.flex = '0 1 100px';
+    nameInput.style.minWidth = '60px';
+
+    // NPC 파일 관리 버튼들
+    const fileControls = document.createElement('div');
+    fileControls.style.display = 'flex';
+    fileControls.style.gap = '0.25rem';
+    fileControls.style.alignItems = 'center';
+    fileControls.style.flex = '1';
+    fileControls.style.justifyContent = 'flex-end';
+
+    const npcSelect = document.createElement('select');
+    npcSelect.className = 'npc-select select-input';
+    npcSelect.style.fontSize = '0.7rem';
+    npcSelect.style.padding = '0.2rem 0.3rem';
+    npcSelect.style.minWidth = '70px';
+    npcSelect.style.maxWidth = '100px';
+    npcSelect.innerHTML = '<option value="">📂</option>';
+
+    const saveNPCBtn = document.createElement('button');
+    saveNPCBtn.className = 'btn btn-sm';
+    saveNPCBtn.textContent = '💾';
+    saveNPCBtn.title = 'NPC 저장';
+    saveNPCBtn.style.padding = '0.2rem 0.3rem';
+    saveNPCBtn.onclick = () => saveNPC(characterDiv);
 
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn-remove';
-    removeBtn.textContent = '삭제';
+    removeBtn.textContent = '❌';
+    removeBtn.title = '제거';
+    removeBtn.style.padding = '0.2rem 0.3rem';
     removeBtn.onclick = () => characterDiv.remove();
 
+    fileControls.appendChild(npcSelect);
+    fileControls.appendChild(saveNPCBtn);
+    fileControls.appendChild(removeBtn);
+
     header.appendChild(nameInput);
-    header.appendChild(removeBtn);
+    header.appendChild(fileControls);
+
+    // NPC 선택 시 로드
+    npcSelect.onchange = () => {
+        if (npcSelect.value) {
+            window.pendingNPCItem = characterDiv;
+            loadFile('npc', npcSelect.value);
+        }
+    };
 
     const descTextarea = document.createElement('textarea');
+    descTextarea.className = 'character-description-input';
     descTextarea.placeholder = '캐릭터 설명 (성격, 말투, 배경 등)';
     descTextarea.value = description;
 
     characterDiv.appendChild(header);
     characterDiv.appendChild(descTextarea);
     charactersList.appendChild(characterDiv);
+
+    // NPC 목록 로드
+    loadNPCList(npcSelect);
+}
+
+// NPC 저장
+function saveNPC(characterDiv) {
+    const nameInput = characterDiv.querySelector('.character-name-input');
+    const descInput = characterDiv.querySelector('.character-description-input');
+
+    const name = nameInput.value.trim();
+    const desc = descInput.value.trim();
+
+    if (!name) {
+        alert('NPC 이름을 입력하세요');
+        return;
+    }
+    if (!desc) {
+        alert('NPC 설명을 입력하세요');
+        return;
+    }
+
+    const filename = prompt('저장할 파일명:', name);
+    if (!filename) return;
+
+    ws.send(JSON.stringify({
+        action: 'save_workspace_file',
+        file_type: 'npc',
+        filename: filename,
+        content: desc
+    }));
+
+    // 저장 후 목록 새로고침
+    setTimeout(() => {
+        const npcSelect = characterDiv.querySelector('.npc-select');
+        if (npcSelect) {
+            loadNPCList(npcSelect);
+        }
+    }, 500);
+}
+
+// NPC 목록 로드
+function loadNPCList(selectElement) {
+    ws.send(JSON.stringify({ action: 'list_workspace_files', file_type: 'npc' }));
+    window.pendingNPCSelect = selectElement;
 }
 
 // 컨텍스트 저장
@@ -514,10 +796,8 @@ function loadContext(context) {
         context.characters.forEach(char => {
             addCharacterInput(char.name, char.description);
         });
-    } else {
-        // 예시 캐릭터 하나 추가
-        addCharacterInput('예시', '친근하고 활발한 성격의 캐릭터');
     }
+    // 빈 상태로 시작 (사용자가 직접 추가)
 }
 
 // ===== 히스토리 초기화 =====
@@ -547,47 +827,48 @@ function updateNarrative(markdown) {
     narrativeContent.innerHTML = html;
 }
 
-saveNarrativeBtn.addEventListener('click', () => {
-    // 서사 내용 가져오기
-    ws.send(JSON.stringify({ action: 'get_narrative' }));
+// 서사 내용을 마크다운으로 변환
+function getNarrativeMarkdown() {
+    let markdown = '# 서사 기록\n\n';
+    markdown += `생성 일시: ${new Date().toLocaleString('ko-KR')}\n\n---\n\n`;
 
-    // 잠시 후 다운로드 (서버 응답 대기)
-    setTimeout(() => {
-        const narrativeText = narrativeContent.innerText;
+    const messages = chatMessages.querySelectorAll('.chat-message:not(.system)');
 
-        if (!narrativeText || narrativeText.includes('대화가 진행되면')) {
-            alert('저장할 서사가 없습니다.');
-            return;
+    messages.forEach((msg, index) => {
+        const isUser = msg.classList.contains('user');
+        const content = msg.querySelector('.message-content').textContent;
+        const charName = msg.querySelector('.character-name');
+
+        if (isUser) {
+            markdown += `## ${index + 1}. 사용자\n\n${content}\n\n`;
+        } else {
+            const name = charName ? charName.textContent : 'AI';
+            markdown += `## ${index + 1}. ${name}\n\n${content}\n\n---\n\n`;
         }
+    });
 
-        // 마크다운 재구성 (innerText로부터)
-        let markdown = '# 서사 기록\n\n';
-        const messages = chatMessages.querySelectorAll('.chat-message:not(.system)');
+    return markdown;
+}
 
-        messages.forEach((msg, index) => {
-            const isUser = msg.classList.contains('user');
-            const content = msg.querySelector('.message-content').textContent;
-            const charName = msg.querySelector('.character-name');
+// 서사 저장
+saveNarrativeBtn.addEventListener('click', () => {
+    const narrativeText = narrativeContent.innerText;
 
-            if (isUser) {
-                markdown += `## ${index + 1}. 사용자\n\n${content}\n\n`;
-            } else {
-                const name = charName ? charName.textContent : 'AI';
-                markdown += `## ${index + 1}. ${name}\n\n${content}\n\n---\n\n`;
-            }
-        });
+    if (!narrativeText || narrativeText.includes('대화가 진행되면')) {
+        alert('저장할 서사가 없습니다.');
+        return;
+    }
 
-        // 다운로드
-        const blob = new Blob([markdown], { type: 'text/markdown' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `narrative_${new Date().toISOString().slice(0, 10)}.md`;
-        a.click();
-        URL.revokeObjectURL(url);
+    const filename = prompt('서사 이름을 입력하세요:', `서사_${new Date().toISOString().slice(0, 10)}`);
+    if (!filename) return;
 
-        log('서사 저장 완료', 'success');
-    }, 500);
+    const markdown = getNarrativeMarkdown();
+
+    ws.send(JSON.stringify({
+        action: 'save_story',
+        filename: filename,
+        content: markdown
+    }));
 });
 
 // ===== 토큰 표시 =====
@@ -648,8 +929,515 @@ document.querySelectorAll('.tab-button').forEach(button => {
     });
 });
 
+// ===== 파일 관리 =====
+
+// 파일 목록 응답 처리
+function handleFileList(data) {
+    if (window.pendingFileListSelect) {
+        updateFileList(window.pendingFileListSelect, data.files);
+        window.pendingFileListSelect = null;
+        window.pendingFileListType = null;
+    } else if (window.pendingNPCSelect) {
+        // NPC 목록 업데이트
+        updateNPCList(window.pendingNPCSelect, data.files);
+        window.pendingNPCSelect = null;
+    }
+}
+
+// NPC 목록 업데이트
+function updateNPCList(selectElement, files) {
+    const currentValue = selectElement.value;
+    selectElement.innerHTML = '<option value="">불러오기...</option>';
+
+    files.forEach(file => {
+        const option = document.createElement('option');
+        option.value = file.name;
+        option.textContent = file.name;
+        selectElement.appendChild(option);
+    });
+
+    if (currentValue && files.some(f => f.name === currentValue)) {
+        selectElement.value = currentValue;
+    }
+}
+
+// 파일 목록 로드
+async function loadFileList(fileType, selectElement) {
+    // 응답 처리를 위해 fileType을 저장
+    window.pendingFileListType = fileType;
+    window.pendingFileListSelect = selectElement;
+    ws.send(JSON.stringify({ action: 'list_workspace_files', file_type: fileType }));
+}
+
+// 실제 파일 목록 업데이트
+function updateFileList(selectElement, files) {
+    const currentValue = selectElement.value;
+    selectElement.innerHTML = '<option value="">새로 만들기...</option>';
+
+    files.forEach(file => {
+        const option = document.createElement('option');
+        option.value = file.name;
+        option.textContent = file.name;
+        selectElement.appendChild(option);
+    });
+
+    // 이전 선택값 복원
+    if (currentValue && files.some(f => f.name === currentValue)) {
+        selectElement.value = currentValue;
+    }
+}
+
+// 파일 로드 응답 처리
+function handleFileLoad(data) {
+    const content = data.content;
+    const filename = data.filename;
+
+    // 파일 타입에 따라 적절한 곳에 로드
+    if (window.pendingLoadType === 'world') {
+        worldInput.value = content;
+        worldSelect.value = filename.replace('.md', '');
+    } else if (window.pendingLoadType === 'situation') {
+        situationInput.value = content;
+        situationSelect.value = filename.replace('.md', '');
+    } else if (window.pendingLoadType === 'my_character') {
+        userCharacterInput.value = content;
+        myCharacterSelect.value = filename.replace('.md', '');
+    } else if (window.pendingLoadType === 'npc') {
+        // NPC 로드는 addCharacterInput 시 처리
+        if (window.pendingNPCItem) {
+            const nameInput = window.pendingNPCItem.querySelector('.character-name-input');
+            const descInput = window.pendingNPCItem.querySelector('.character-description-input');
+            const npcSelect = window.pendingNPCItem.querySelector('.npc-select');
+
+            descInput.value = content;
+            if (npcSelect) {
+                npcSelect.value = filename.replace('.md', '');
+            }
+
+            window.pendingNPCItem = null;
+        }
+    }
+}
+
+// 파일 저장
+async function saveFile(fileType, selectElement, contentGetter) {
+    const filename = prompt(`파일 이름을 입력하세요 (${fileType}):`);
+    if (!filename) return;
+
+    const content = contentGetter();
+    ws.send(JSON.stringify({
+        action: 'save_workspace_file',
+        file_type: fileType,
+        filename: filename,
+        content: content
+    }));
+
+    // 저장 후 목록 새로고침
+    setTimeout(() => {
+        loadFileList(fileType, selectElement);
+    }, 500);
+}
+
+// 파일 로드
+function loadFile(fileType, filename) {
+    window.pendingLoadType = fileType;
+    ws.send(JSON.stringify({
+        action: 'load_workspace_file',
+        file_type: fileType,
+        filename: filename
+    }));
+}
+
+// 파일 삭제
+function deleteFile(fileType, selectElement) {
+    const filename = selectElement.value;
+    if (!filename) {
+        alert('삭제할 파일을 선택하세요');
+        return;
+    }
+
+    if (!confirm(`"${filename}" 파일을 삭제하시겠습니까?`)) {
+        return;
+    }
+
+    ws.send(JSON.stringify({
+        action: 'delete_workspace_file',
+        file_type: fileType,
+        filename: filename
+    }));
+
+    // 삭제 후 목록 새로고침
+    setTimeout(() => {
+        loadFileList(fileType, selectElement);
+    }, 500);
+}
+
+// 세계관 파일 관리
+saveWorldBtn.addEventListener('click', () => {
+    saveFile('world', worldSelect, () => worldInput.value);
+});
+
+worldSelect.addEventListener('change', () => {
+    if (worldSelect.value) {
+        loadFile('world', worldSelect.value);
+    }
+});
+
+deleteWorldBtn.addEventListener('click', () => {
+    deleteFile('world', worldSelect);
+});
+
+// 상황 파일 관리
+saveSituationBtn.addEventListener('click', () => {
+    saveFile('situation', situationSelect, () => situationInput.value);
+});
+
+situationSelect.addEventListener('change', () => {
+    if (situationSelect.value) {
+        loadFile('situation', situationSelect.value);
+    }
+});
+
+deleteSituationBtn.addEventListener('click', () => {
+    deleteFile('situation', situationSelect);
+});
+
+// 나의 캐릭터 관리
+saveMyCharacterBtn.addEventListener('click', () => {
+    const content = userCharacterInput.value.trim();
+    if (!content) {
+        alert('캐릭터 내용을 입력하세요');
+        return;
+    }
+    saveFile('my_character', myCharacterSelect, () => content);
+});
+
+myCharacterSelect.addEventListener('change', () => {
+    if (myCharacterSelect.value) {
+        loadFile('my_character', myCharacterSelect.value);
+    }
+});
+
+deleteMyCharacterBtn.addEventListener('click', () => {
+    deleteFile('my_character', myCharacterSelect);
+});
+
+// ===== 프리셋 관리 =====
+
+// 프리셋 목록 로드
+function loadPresetList() {
+    ws.send(JSON.stringify({ action: 'list_presets' }));
+}
+
+// 프리셋 목록 업데이트
+function updatePresetList(files) {
+    const currentValue = presetSelect.value;
+    presetSelect.innerHTML = '<option value="">프리셋 선택...</option>';
+
+    files.forEach(file => {
+        const option = document.createElement('option');
+        option.value = file.name;
+        option.textContent = file.name;
+        presetSelect.appendChild(option);
+    });
+
+    if (currentValue && files.some(f => f.name === currentValue)) {
+        presetSelect.value = currentValue;
+    }
+}
+
+// 현재 설정을 프리셋으로 저장
+function savePreset() {
+    const filename = prompt('프리셋 이름을 입력하세요:');
+    if (!filename) return;
+
+    // 현재 모든 캐릭터 수집
+    const characters = [];
+    document.querySelectorAll('.character-item').forEach(item => {
+        const name = item.querySelector('.character-name-input').value;
+        const description = item.querySelector('.character-description-input').value;
+        if (name) {
+            characters.push({ name, description });
+        }
+    });
+
+    // 전체 설정 데이터
+    const preset = {
+        world: worldInput.value,
+        situation: situationInput.value,
+        user_character: userCharacterInput.value,
+        characters: characters,
+        narrator_enabled: narratorEnabled.checked,
+        narrator_mode: narratorMode.value,
+        narrator_description: narratorDescription.value,
+        user_is_narrator: userIsNarrator.checked,
+        adult_level: adultLevel.value,
+        narrative_separation: narrativeSeparation.checked
+    };
+
+    ws.send(JSON.stringify({
+        action: 'save_preset',
+        filename: filename,
+        preset: preset
+    }));
+}
+
+// 프리셋 적용
+function applyPreset(preset) {
+    // 기본 설정
+    worldInput.value = preset.world || '';
+    situationInput.value = preset.situation || '';
+    userCharacterInput.value = preset.user_character || '';
+
+    // 캐릭터 초기화 및 로드
+    charactersList.innerHTML = '';
+    if (preset.characters && preset.characters.length > 0) {
+        preset.characters.forEach(char => {
+            addCharacterInput(char.name, char.description);
+        });
+    }
+
+    // 진행자 설정
+    narratorEnabled.checked = preset.narrator_enabled || false;
+    narratorMode.value = preset.narrator_mode || 'moderate';
+    narratorDescription.value = preset.narrator_description || '';
+    userIsNarrator.checked = preset.user_is_narrator || false;
+
+    // 모드 설정
+    adultLevel.value = preset.adult_level || 'explicit';
+    narrativeSeparation.checked = preset.narrative_separation || false;
+
+    // 진행자 설정 표시/숨김
+    if (narratorEnabled.checked && !userIsNarrator.checked) {
+        narratorSettings.style.display = 'block';
+    } else {
+        narratorSettings.style.display = 'none';
+    }
+}
+
+// 프리셋 삭제
+function deletePreset() {
+    const filename = presetSelect.value;
+    if (!filename) {
+        alert('삭제할 프리셋을 선택하세요');
+        return;
+    }
+
+    if (!confirm(`"${filename}" 프리셋을 삭제하시겠습니까?`)) {
+        return;
+    }
+
+    ws.send(JSON.stringify({
+        action: 'delete_preset',
+        filename: filename
+    }));
+}
+
+// 프리셋 이벤트 리스너
+savePresetBtn.addEventListener('click', savePreset);
+
+loadPresetBtn.addEventListener('click', () => {
+    const filename = presetSelect.value;
+    if (!filename) {
+        alert('불러올 프리셋을 선택하세요');
+        return;
+    }
+
+    ws.send(JSON.stringify({
+        action: 'load_preset',
+        filename: filename
+    }));
+});
+
+deletePresetBtn.addEventListener('click', deletePreset);
+
+// ===== Git 관리 =====
+
+// Git 상태 확인
+function checkGitStatus() {
+    ws.send(JSON.stringify({ action: 'git_check_status' }));
+}
+
+// Git 상태 처리
+function handleGitStatus(data) {
+    if (!data.success) {
+        gitSyncBtn.textContent = '🔄 동기화';
+        gitSyncBtn.title = `Git 오류: ${data.error}`;
+        return;
+    }
+
+    if (!data.is_repo) {
+        // Git 레포가 아님
+        gitSyncBtn.textContent = '📦 Git 초기화';
+        gitSyncBtn.title = '클릭하여 Git 레포지토리 초기화';
+    } else if (data.has_changes) {
+        // 변경사항 있음
+        gitSyncBtn.textContent = '🔄 동기화 *';
+        gitSyncBtn.title = '변경사항이 있습니다. 클릭하여 동기화';
+    } else {
+        // 변경사항 없음
+        gitSyncBtn.textContent = '✓ 동기화';
+        gitSyncBtn.title = '변경사항 없음';
+    }
+}
+
+// Git 동기화 버튼 클릭
+gitSyncBtn.addEventListener('click', () => {
+    // 현재 상태 확인 후 처리
+    ws.send(JSON.stringify({ action: 'git_check_status' }));
+
+    // 잠시 후 실제 처리 (상태 확인 결과를 기다림)
+    setTimeout(() => {
+        const btnText = gitSyncBtn.textContent;
+
+        if (btnText.includes('초기화')) {
+            // Git 초기화
+            if (confirm('persona_data를 Git 레포지토리로 초기화하시겠습니까?')) {
+                ws.send(JSON.stringify({ action: 'git_init' }));
+            }
+        } else {
+            // Git 동기화
+            ws.send(JSON.stringify({ action: 'git_sync' }));
+        }
+    }, 100);
+});
+
+// ===== 모드 관리 (챗봇 ↔ 코딩) =====
+
+// 모드 상태 확인
+function checkModeStatus() {
+    ws.send(JSON.stringify({ action: 'mode_check' }));
+}
+
+// 모드 상태 처리
+function handleModeStatus(data) {
+    if (!data.success) {
+        modeSwitchBtn.textContent = '💬 모드';
+        modeSwitchBtn.title = '모드 확인 실패';
+        return;
+    }
+
+    const mode = data.mode;
+
+    if (mode === 'chatbot') {
+        // 챗봇 전용 모드
+        modeSwitchBtn.textContent = '💬 챗봇';
+        modeSwitchBtn.title = '현재: 챗봇 전용 모드 (클릭: 에이전트 지침 복구)';
+    } else if (mode === 'coding') {
+        // 코딩 모드
+        modeSwitchBtn.textContent = '⚙️ 코딩';
+        modeSwitchBtn.title = '현재: 코딩 모드 (클릭: 챗봇 전용 전환)';
+    } else if (mode === 'none') {
+        // 파일 없음
+        modeSwitchBtn.textContent = '💬 모드';
+        modeSwitchBtn.title = 'CLAUDE.md 파일 없음';
+    } else {
+        // 혼재 상태
+        modeSwitchBtn.textContent = '⚠️ 혼재';
+        modeSwitchBtn.title = '.md와 .md.bak가 혼재되어 있습니다';
+    }
+}
+
+// 모드 전환 버튼 클릭
+modeSwitchBtn.addEventListener('click', () => {
+    // 현재 모드 확인
+    ws.send(JSON.stringify({ action: 'mode_check' }));
+
+    // 잠시 후 실제 처리
+    setTimeout(() => {
+        const btnText = modeSwitchBtn.textContent;
+
+        if (btnText.includes('챗봇')) {
+            // 챗봇 → 코딩
+            if (confirm('에이전트 지침을 복구하시겠습니까?\n(CLAUDE.md 파일 복원)')) {
+                ws.send(JSON.stringify({ action: 'mode_switch_coding' }));
+            }
+        } else if (btnText.includes('코딩')) {
+            // 코딩 → 챗봇
+            if (confirm('챗봇 전용 모드로 전환하시겠습니까?\n(CLAUDE.md 파일 비활성화)')) {
+                ws.send(JSON.stringify({ action: 'mode_switch_chatbot' }));
+            }
+        } else {
+            alert('모드를 확인할 수 없습니다');
+        }
+    }, 100);
+});
+
+// ===== 서사 관리 =====
+
+// 서사 목록 로드
+function loadStoryList() {
+    ws.send(JSON.stringify({ action: 'list_stories' }));
+}
+
+// 서사 목록 업데이트
+function updateStoryList(files) {
+    const currentValue = storySelect.value;
+    storySelect.innerHTML = '<option value="">저장된 서사...</option>';
+
+    files.forEach(file => {
+        const option = document.createElement('option');
+        option.value = file.name;
+        option.textContent = file.name;
+        storySelect.appendChild(option);
+    });
+
+    if (currentValue && files.some(f => f.name === currentValue)) {
+        storySelect.value = currentValue;
+    }
+}
+
+// 서사 표시
+function displayStoryContent(markdown) {
+    // 간단한 마크다운 렌더링
+    let html = markdown
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^---$/gm, '<hr>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/^(.+)$/gm, '<p>$1</p>');
+
+    narrativeContent.innerHTML = html;
+}
+
+// 서사 로드 버튼
+loadStoryBtn.addEventListener('click', () => {
+    const filename = storySelect.value;
+    if (!filename) {
+        alert('불러올 서사를 선택하세요');
+        return;
+    }
+
+    ws.send(JSON.stringify({
+        action: 'load_story',
+        filename: filename
+    }));
+});
+
+// 서사 삭제 버튼
+deleteStoryBtn.addEventListener('click', () => {
+    const filename = storySelect.value;
+    if (!filename) {
+        alert('삭제할 서사를 선택하세요');
+        return;
+    }
+
+    if (!confirm(`"${filename}" 서사를 삭제하시겠습니까?`)) {
+        return;
+    }
+
+    ws.send(JSON.stringify({
+        action: 'delete_story',
+        filename: filename
+    }));
+});
+
 // ===== 초기화 =====
 
 window.addEventListener('load', () => {
     connect();
+
+    // 주기적 상태 확인 (10초마다)
+    setInterval(checkGitStatus, 10000);
+    setInterval(checkModeStatus, 10000);
 });

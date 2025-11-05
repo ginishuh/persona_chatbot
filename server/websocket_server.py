@@ -12,6 +12,8 @@ from handlers.git_handler import GitHandler
 from handlers.claude_handler import ClaudeCodeHandler
 from handlers.context_handler import ContextHandler
 from handlers.history_handler import HistoryHandler
+from handlers.workspace_handler import WorkspaceHandler
+from handlers.mode_handler import ModeHandler
 
 # 로깅 설정
 logging.basicConfig(
@@ -21,11 +23,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 핸들러 초기화
+# 프로젝트 루트 경로 (server/ 폴더의 상위 디렉토리)
+project_root = Path(__file__).parent.parent
+
 file_handler = FileHandler()
 git_handler = GitHandler()
 claude_handler = ClaudeCodeHandler()
 context_handler = ContextHandler()
 history_handler = HistoryHandler(max_turns=15)  # 최근 15턴 유지
+workspace_handler = WorkspaceHandler(str(project_root / "persona_data"))
+mode_handler = ModeHandler(project_root=str(project_root))
 
 # 연결된 클라이언트들
 connected_clients = set()
@@ -78,13 +85,15 @@ async def handle_message(websocket, message):
             narrator_mode = data.get("narrator_mode", "moderate")
             narrator_description = data.get("narrator_description", "")
             user_is_narrator = data.get("user_is_narrator", False)
-            adult_mode = data.get("adult_mode", False)
+            adult_level = data.get("adult_level", "explicit")
+            narrative_separation = data.get("narrative_separation", False)
 
             context_handler.set_world(world)
             context_handler.set_situation(situation)
             context_handler.set_user_character(user_character)
             context_handler.set_narrator(narrator_enabled, narrator_mode, narrator_description, user_is_narrator)
-            context_handler.set_adult_mode(adult_mode)
+            context_handler.set_adult_level(adult_level)
+            context_handler.set_narrative_separation(narrative_separation)
             context_handler.set_characters(characters)
 
             await websocket.send(json.dumps({
@@ -114,6 +123,129 @@ async def handle_message(websocket, message):
                 "action": "get_narrative",
                 "data": {"success": True, "markdown": narrative_md}
             }))
+
+        # 워크스페이스 파일 목록
+        elif action == "list_workspace_files":
+            file_type = data.get("file_type")
+            result = await workspace_handler.list_files(file_type)
+            await websocket.send(json.dumps({"action": "list_workspace_files", "data": result}))
+
+        # 워크스페이스 파일 읽기
+        elif action == "load_workspace_file":
+            file_type = data.get("file_type")
+            filename = data.get("filename")
+            result = await workspace_handler.read_file(file_type, filename)
+            await websocket.send(json.dumps({"action": "load_workspace_file", "data": result}))
+
+        # 워크스페이스 파일 저장
+        elif action == "save_workspace_file":
+            file_type = data.get("file_type")
+            filename = data.get("filename")
+            content = data.get("content")
+            result = await workspace_handler.save_file(file_type, filename, content)
+            await websocket.send(json.dumps({"action": "save_workspace_file", "data": result}))
+
+        # 워크스페이스 파일 삭제
+        elif action == "delete_workspace_file":
+            file_type = data.get("file_type")
+            filename = data.get("filename")
+            result = await workspace_handler.delete_file(file_type, filename)
+            await websocket.send(json.dumps({"action": "delete_workspace_file", "data": result}))
+
+        # 워크스페이스 설정 로드
+        elif action == "load_workspace_config":
+            result = await workspace_handler.load_config()
+            await websocket.send(json.dumps({"action": "load_workspace_config", "data": result}))
+
+        # 워크스페이스 설정 저장
+        elif action == "save_workspace_config":
+            config = data.get("config", {})
+            result = await workspace_handler.save_config(config)
+            await websocket.send(json.dumps({"action": "save_workspace_config", "data": result}))
+
+        # 프리셋 목록
+        elif action == "list_presets":
+            result = await workspace_handler.list_presets()
+            await websocket.send(json.dumps({"action": "list_presets", "data": result}))
+
+        # 프리셋 저장
+        elif action == "save_preset":
+            filename = data.get("filename")
+            preset_data = data.get("preset")
+            result = await workspace_handler.save_preset(filename, preset_data)
+            await websocket.send(json.dumps({"action": "save_preset", "data": result}))
+
+        # 프리셋 로드
+        elif action == "load_preset":
+            filename = data.get("filename")
+            result = await workspace_handler.load_preset(filename)
+            await websocket.send(json.dumps({"action": "load_preset", "data": result}))
+
+        # 프리셋 삭제
+        elif action == "delete_preset":
+            filename = data.get("filename")
+            result = await workspace_handler.delete_preset(filename)
+            await websocket.send(json.dumps({"action": "delete_preset", "data": result}))
+
+        # Git 상태 확인
+        elif action == "git_check_status":
+            result = await workspace_handler.git_check_status()
+            await websocket.send(json.dumps({"action": "git_check_status", "data": result}))
+
+        # Git 초기화
+        elif action == "git_init":
+            result = await workspace_handler.git_init()
+            await websocket.send(json.dumps({"action": "git_init", "data": result}))
+
+        # Git 동기화
+        elif action == "git_sync":
+            commit_message = data.get("message")
+            result = await workspace_handler.git_sync(commit_message)
+            await websocket.send(json.dumps({"action": "git_sync", "data": result}))
+
+        # Git Pull
+        elif action == "git_pull":
+            result = await workspace_handler.git_pull()
+            await websocket.send(json.dumps({"action": "git_pull", "data": result}))
+
+        # 모드 확인
+        elif action == "mode_check":
+            result = await mode_handler.check_mode()
+            await websocket.send(json.dumps({"action": "mode_check", "data": result}))
+
+        # 챗봇 모드 전환
+        elif action == "mode_switch_chatbot":
+            result = await mode_handler.switch_to_chatbot()
+            await websocket.send(json.dumps({"action": "mode_switch_chatbot", "data": result}))
+
+        # 코딩 모드 전환
+        elif action == "mode_switch_coding":
+            result = await mode_handler.switch_to_coding()
+            await websocket.send(json.dumps({"action": "mode_switch_coding", "data": result}))
+
+        # 서사 목록
+        elif action == "list_stories":
+            result = await workspace_handler.list_stories()
+            await websocket.send(json.dumps({"action": "list_stories", "data": result}))
+
+        # 서사 저장
+        elif action == "save_story":
+            filename = data.get("filename")
+            content = data.get("content")
+            result = await workspace_handler.save_story(filename, content)
+            await websocket.send(json.dumps({"action": "save_story", "data": result}))
+
+        # 서사 로드
+        elif action == "load_story":
+            filename = data.get("filename")
+            result = await workspace_handler.load_story(filename)
+            await websocket.send(json.dumps({"action": "load_story", "data": result}))
+
+        # 서사 삭제
+        elif action == "delete_story":
+            filename = data.get("filename")
+            result = await workspace_handler.delete_story(filename)
+            await websocket.send(json.dumps({"action": "delete_story", "data": result}))
 
         # Claude Code 채팅 (컨텍스트 + 히스토리 포함)
         elif action == "chat":

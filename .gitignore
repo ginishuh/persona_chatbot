@@ -25,5 +25,5 @@ Thumbs.db
 # Logs
 *.log
 
-# STORIES (실제 서사 파일은 별도 관리)
-STORIES/
+# User data (별도 git 레포로 관리)
+persona_data/
