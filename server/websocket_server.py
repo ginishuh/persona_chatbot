@@ -30,7 +30,7 @@ file_handler = FileHandler()
 git_handler = GitHandler()
 claude_handler = ClaudeCodeHandler()
 context_handler = ContextHandler()
-history_handler = HistoryHandler(max_turns=15)  # 최근 15턴 유지
+history_handler = HistoryHandler(max_turns=None)  # 무제한 히스토리
 workspace_handler = WorkspaceHandler(str(project_root / "persona_data"))
 mode_handler = ModeHandler(project_root=str(project_root))
 
