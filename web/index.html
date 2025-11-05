@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persona Chat - 멀티 캐릭터 대화</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>📖 Persona Chat</h1>
+            <div class="header-actions">
+                <button id="clearHistoryBtn" class="btn btn-sm btn-warning">🗑️ 대화 초기화</button>
+                <div class="connection-status">
+                    <span class="status-indicator" id="statusIndicator"></span>
+                    <span id="statusText">연결 중...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main 3-Column Layout -->
+        <div class="main-content">
+            <!-- Left Panel: Context Settings -->
+            <aside class="left-panel">
+                <div class="panel-header">
+                    <h2>⚙️ 컨텍스트 설정</h2>
+                    <button id="toggleContextBtn" class="btn-icon" title="접기/펼치기">▼</button>
+                </div>
+
+                <div id="contextContent" class="panel-content">
+                    <!-- 세계관 -->
+                    <div class="context-section">
+                        <label>🌍 세계관/배경</label>
+                        <textarea id="worldInput" placeholder="세계관, 시대적 배경 등..." rows="2"></textarea>
+                    </div>
+
+                    <!-- 현재 상황 -->
+                    <div class="context-section">
+                        <label>📍 현재 상황</label>
+                        <textarea id="situationInput" placeholder="현재 벌어지고 있는 상황..." rows="2"></textarea>
+                    </div>
+
+                    <!-- 나의 캐릭터 -->
+                    <div class="context-section">
+                        <label>🙋 나의 캐릭터</label>
+                        <textarea id="userCharacterInput" placeholder="당신의 캐릭터 설정 (이름, 성격, 배경 등)..." rows="2"></textarea>
+                    </div>
+
+                    <!-- 진행자 설정 -->
+                    <div class="context-section">
+                        <label>🎭 진행자 (GM)</label>
+                        <div style="margin-bottom: 0.5rem;">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="narratorEnabled" />
+                                <span>AI 진행자</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="userIsNarrator" />
+                                <span>내가 진행자</span>
+                            </label>
+                        </div>
+
+                        <div id="narratorSettings" style="display: none;">
+                            <select id="narratorMode" class="select-input">
+                                <option value="active">적극적</option>
+                                <option value="moderate" selected>보통</option>
+                                <option value="passive">소극적</option>
+                            </select>
+                            <textarea id="narratorDescription" placeholder="진행자 성향..." rows="2"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- 캐릭터들 -->
+                    <div class="context-section">
+                        <label>👥 캐릭터들</label>
+                        <div id="charactersList"></div>
+                        <button id="addCharacterBtn" class="btn btn-sm">+ 추가</button>
+                    </div>
+
+                    <!-- 성인 모드 -->
+                    <div class="context-section">
+                        <label>🔞 콘텐츠</label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="adultMode" />
+                            <span>성인 콘텐츠 허용 (18+)</span>
+                        </label>
+                    </div>
+
+                    <button id="saveContextBtn" class="btn btn-primary" style="width: 100%;">💾 컨텍스트 저장</button>
+                </div>
+            </aside>
+
+            <!-- Center Panel: Chat -->
+            <main class="center-panel">
+                <div id="chatMessages" class="chat-messages">
+                    <div class="chat-message system">
+                        <p>대화를 시작하세요</p>
+                    </div>
+                </div>
+                <div class="chat-input-container">
+                    <textarea id="chatInput" placeholder="메시지를 입력하세요..." rows="3"></textarea>
+                    <button id="sendChatBtn" class="btn btn-primary">전송</button>
+                </div>
+            </main>
+
+            <!-- Right Panel: Narrative -->
+            <aside class="right-panel">
+                <div class="panel-header">
+                    <h2>📜 서사 기록</h2>
+                    <button id="saveNarrativeBtn" class="btn btn-sm">💾 저장</button>
+                </div>
+
+                <div id="narrativeContent" class="panel-content narrative-markdown">
+                    <p class="placeholder">대화가 진행되면 여기에 서사가 기록됩니다.</p>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Footer: Logs -->
+        <footer>
+            <div id="logArea" class="log-area">
+                <p>준비 완료</p>
+            </div>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

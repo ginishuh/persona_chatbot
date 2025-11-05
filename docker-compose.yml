@@ -1,0 +1,16 @@
+services:
+  websocket-server:
+    build: .
+    container_name: persona_chatbot_server
+    ports:
+      - "${WS_PORT:-8765}:8765"  # WebSocket (기본값: 8765)
+      - "${HTTP_PORT:-8888}:8000"  # HTTP (기본값: 8888)
+    volumes:
+      - ./STORIES:/app/STORIES  # 서사 파일 마운트
+      - ./server:/app/server    # 개발 중 코드 수정 반영
+      - ./web:/app/web          # 개발 중 웹 파일 수정 반영
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WS_PORT=${WS_PORT:-8765}
+      - HTTP_PORT=${HTTP_PORT:-3000}
+    restart: unless-stopped
