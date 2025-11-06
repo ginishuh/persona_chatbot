@@ -429,6 +429,33 @@ function handleChatStream(data) {
         return;
     }
 
+    // Droid 세션 시작
+    if (jsonData.type === 'system' && jsonData.subtype === 'droid_init' && jsonData.session_id) {
+        log('Droid 세션 시작', 'success');
+        return;
+    }
+
+    // Gemini 세션 시작
+    if (jsonData.type === 'system' && jsonData.subtype === 'gemini_init' && jsonData.session_id) {
+        log('Gemini 세션 시작', 'success');
+        return;
+    }
+
+    // Droid/Gemini content_block_delta 처리
+    if (jsonData.type === 'content_block_delta') {
+        removeTypingIndicator();
+
+        const deltaText = jsonData.delta?.text || '';
+        if (deltaText) {
+            // 스트리밍 텍스트 누적
+            if (!window.streamingText) {
+                window.streamingText = '';
+            }
+            window.streamingText += deltaText;
+        }
+        return;
+    }
+
     if (jsonData.type === 'assistant') {
         removeTypingIndicator();
 
@@ -506,6 +533,31 @@ function handleChatComplete(response) {
 
     if (data.success) {
         log('응답 완료', 'success');
+
+        // Droid/Gemini: 누적된 스트리밍 텍스트 처리
+        if (window.streamingText) {
+            console.log('=== Droid/Gemini 응답 원본 ===');
+            console.log(window.streamingText);
+
+            const parsedMessages = parseMultiCharacterResponse(window.streamingText);
+            console.log('=== 파싱 결과 ===');
+            console.log('파싱된 메시지 수:', parsedMessages.length);
+            console.log('파싱된 메시지:', parsedMessages);
+
+            if (parsedMessages.length > 0) {
+                // 파싱된 메시지들 표시
+                parsedMessages.forEach(msg => {
+                    const newMsg = addCharacterMessage(msg.character, msg.text);
+                    newMsg.dataset.permanent = 'true'; // 완료된 메시지
+                });
+            } else {
+                // 파싱 실패 시 일반 메시지로 표시
+                addChatMessage('assistant', window.streamingText);
+            }
+
+            // 스트리밍 텍스트 초기화
+            window.streamingText = '';
+        }
 
         // 토큰 정보 업데이트
         console.log('Token info:', data.token_info); // 디버그

@@ -124,6 +124,13 @@ class DroidHandler:
                             if data.get('type') == 'system' and data.get('subtype') == 'init':
                                 self.session_id = data.get('session_id')
                                 logger.info(f"Droid Session ID: {self.session_id}")
+                                # 프론트엔드에 세션 시작 알림
+                                if callback:
+                                    await callback({
+                                        "type": "system",
+                                        "subtype": "droid_init",
+                                        "session_id": self.session_id
+                                    })
 
                             # 콜백 호출 (Claude 형식으로 변환)
                             if callback:
