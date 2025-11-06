@@ -442,8 +442,17 @@ function handleChatStream(data) {
         }
 
         if (textContent) {
+            // 디버깅: 원본 응답 출력
+            console.log('=== Claude 응답 원본 ===');
+            console.log(textContent);
+
             // 멀티 캐릭터 파싱 시도
             const parsedMessages = parseMultiCharacterResponse(textContent);
+
+            // 디버깅: 파싱 결과 출력
+            console.log('=== 파싱 결과 ===');
+            console.log('파싱된 메시지 수:', parsedMessages.length);
+            console.log('파싱된 메시지:', parsedMessages);
 
             if (parsedMessages.length > 0) {
                 // 기존 assistant 메시지 제거 (스트리밍 업데이트)
@@ -576,7 +585,15 @@ function addCharacterMessage(characterName, text) {
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
-    contentDiv.textContent = text;
+
+    // 효과음 자동 줄바꿈 처리
+    // *...* 패턴 앞뒤로 줄바꿈 추가
+    const formattedText = text
+        .replace(/(\*[^*]+\*)/g, '\n$1\n')  // 효과음 앞뒤 줄바꿈
+        .replace(/\n{3,}/g, '\n\n')  // 연속된 줄바꿈 최대 2개로 제한
+        .trim();
+
+    contentDiv.textContent = formattedText;
 
     const timeSpan = document.createElement('span');
     timeSpan.className = 'message-time';

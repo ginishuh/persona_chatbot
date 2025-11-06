@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -9,8 +10,9 @@ logger = logging.getLogger(__name__)
 class ClaudeCodeHandler:
     """Claude Code 프로세스 관리 및 통신"""
 
-    def __init__(self, claude_path="/home/ginis/.nvm/versions/node/v22.17.1/bin/claude"):
-        self.claude_path = claude_path
+    def __init__(self, claude_path=None):
+        # 환경 변수 또는 기본값 사용
+        self.claude_path = claude_path or os.getenv("CLAUDE_PATH", "claude")
         self.process = None
         self.session_id = None
         # 챗봇 전용 작업 디렉토리 (chatbot_workspace/CLAUDE.md 읽기 위해)

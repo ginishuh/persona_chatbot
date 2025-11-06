@@ -8,6 +8,23 @@ Persona Chat is a web-based multi-character conversation system for interactive 
 
 **Key Feature**: The chatbot runs in an isolated workspace (`chatbot_workspace/`) with its own CLAUDE.md that contains adult content guidelines and character performance instructions. This isolation prevents those instructions from affecting development work.
 
+## Language Convention
+
+**All documentation, commit messages, code comments, and user-facing communication should be written in Korean (한국어).**
+
+**Exceptions:**
+- Agent instruction files (`CLAUDE.md`, `agents.md`) should remain in English for compatibility
+- Code identifiers (variable names, function names, class names) should use English
+- Technical terms and API references can use English when appropriate
+
+This applies to:
+- README files and project documentation
+- Commit messages (except the Claude Code footer)
+- Code comments and docstrings
+- User interface text
+- Error messages and logs
+- Development notes and TODOs
+
 ## Architecture
 
 ### Core Communication Flow
