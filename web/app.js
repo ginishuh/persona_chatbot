@@ -583,7 +583,7 @@ function parseMultiCharacterResponse(text) {
     let currentText = [];
 
     for (const line of lines) {
-        const match = line.match(/^\[(.+?)\]:\s*(.*)$/);
+        const match = line.match(/^\[(.+?)\]:?\s*(.*)$/);  // 콜론 옵션으로 변경
         if (match) {
             // 이전 캐릭터 메시지 저장
             if (currentChar && currentText.length > 0) {
