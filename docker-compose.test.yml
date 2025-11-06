@@ -10,8 +10,10 @@ services:
       - "8765:8765"
       - "9000:9000"
     volumes:
-      # Claude CLI 인증 정보 마운트 (호스트 사용자 권한으로 실행)
+      # AI CLI 인증 정보 마운트 (호스트 사용자 권한으로 실행)
       - ${HOME}/.claude:/home/node/.claude
+      - ${HOME}/.config/gemini:/home/node/.config/gemini
+      - ${HOME}/.factory:/home/node/.factory
       # 개발 중 코드 변경 반영 (선택사항)
       - ./server:/app/server
       - ./web:/app/web
