@@ -1,0 +1,43 @@
+# Development files (레포 루트)
+/CLAUDE.md
+/AGENTS.md
+/.claude/
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+test_*.sh
+test_*.py
+
+# Documentation (레포 루트만 제외, chatbot_workspace는 포함)
+/README.md
+
+# Stories (런타임에 생성되는 파일)
+STORIES/
