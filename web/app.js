@@ -456,6 +456,8 @@ function handleChatStream(data) {
         return;
     }
 
+    // (폴백 제거됨)
+
     if (jsonData.type === 'assistant') {
         removeTypingIndicator();
 

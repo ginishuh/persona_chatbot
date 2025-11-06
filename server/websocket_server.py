@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import websockets
 from pathlib import Path
 from http.server import SimpleHTTPRequestHandler
@@ -283,6 +284,7 @@ async def handle_message(websocket, message):
             else:  # claude (기본값)
                 handler = claude_handler
 
+            # 단일 시도 (폴백 없음)
             result = await handler.send_message(
                 prompt,
                 system_prompt=system_prompt,
@@ -296,7 +298,7 @@ async def handle_message(websocket, message):
             # 최종 결과 전송
             await websocket.send(json.dumps({
                 "action": "chat_complete",
-                "data": result
+                "data": {**result, "provider_used": provider}
             }))
 
         else:
