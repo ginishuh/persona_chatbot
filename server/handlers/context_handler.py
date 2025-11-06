@@ -12,7 +12,8 @@ class ContextHandler:
             "narrator_description": "",
             "user_is_narrator": False,  # 사용자가 진행자인 경우
             "adult_level": "explicit",  # 성인 콘텐츠 수위: explicit, enhanced, extreme
-            "narrative_separation": False  # 대화/서술/효과음 분리
+            "narrative_separation": False,  # 대화/서술/효과음 분리
+            "ai_provider": "claude"  # AI 제공자: claude, droid
         }
 
     def set_world(self, world_description):
@@ -60,6 +61,15 @@ class ContextHandler:
         enabled: True/False
         """
         self.current_context["narrative_separation"] = enabled
+
+    def set_ai_provider(self, provider):
+        """
+        AI 제공자 설정
+        provider: "claude", "droid", 또는 "gemini"
+        """
+        if provider not in ["claude", "droid", "gemini"]:
+            raise ValueError("provider must be 'claude', 'droid', or 'gemini'")
+        self.current_context["ai_provider"] = provider
 
     def build_system_prompt(self, history_text=""):
         """

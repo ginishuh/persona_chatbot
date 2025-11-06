@@ -45,23 +45,65 @@ Claude Code를 활용한 웹 기반 멀티 캐릭터 대화 및 서사 관리 �
 - asyncio (비동기 처리)
 - websockets 12.0 (WebSocket 통신)
 - aiofiles 23.2.1 (비동기 파일 I/O)
-- Claude Code CLI (AI 대화 처리)
+- **AI 제공자 (3개 지원)**:
+  - **Claude** (Anthropic) - Claude Code CLI
+  - **Gemini** (Google) - Gemini CLI
+  - **Droid** (Factory.ai) - Droid CLI
 
 ### Frontend
 - HTML5 / CSS3 / Vanilla JavaScript
 - WebSocket API (실시간 통신)
 - VS Code 스타일 UI
 
+### AI 제공자 상세
+
+시스템은 3개의 AI CLI를 지원하며, UI에서 선택하여 사용할 수 있습니다:
+
+#### 1. Claude (Anthropic)
+- **인증**: OAuth (`~/.claude/.credentials.json`)
+- **모델**: Claude Sonnet 4.5
+- **상태**: ✅ 완벽 지원
+- **설치**: `npm install -g @anthropic-ai/claude-code`
+
+#### 2. Gemini (Google)
+- **인증**: OAuth (`~/.config/gemini/oauth_creds.json`) 또는 API 키 (`GEMINI_API_KEY`)
+- **모델**: Gemini 2.5 Pro
+- **무료 할당량**: 60 requests/min, 1,000 requests/day
+- **상태**: ✅ 완벽 지원
+- **설치**: `npm install -g @google/gemini-cli`
+
+#### 3. Droid (Factory.ai)
+- **인증**: OAuth (`~/.factory/auth.json`)
+- **모델**: ⚠️ **사용자 설정 가능** (기본: `custom:glm-4.6`)
+- **중요 사항**:
+  - Droid는 `~/.factory/config.json`에서 사용자별 모델 설정을 읽습니다
+  - 이 프로젝트는 `custom:glm-4.6` 모델을 사용하도록 기본 설정되어 있습니다 (무료)
+  - 다른 모델을 사용하려면 `server/handlers/droid_handler.py`에서 `--model` 파라미터를 수정하세요
+  - Factory.ai의 Claude 모델은 유료 구독이 필요합니다
+- **상태**: ✅ 완벽 지원 (GLM-4.6)
+- **설치**: `curl -fsSL https://app.factory.ai/cli | sh`
+
 ## 설치 및 실행
 
 ### 1. 사전 요구사항
 - Python 3.8 이상
-- Claude Code CLI 설치 및 인증 완료
+- **AI CLI 중 최소 1개 이상** 설치 및 인증 완료:
+  - **Claude Code CLI** (권장)
+  - **Gemini CLI** (선택)
+  - **Droid CLI** (선택)
 - Git (선택사항, Git 기능 사용 시)
 
 ```bash
 # Claude Code 인증 확인
 claude auth login
+
+# Gemini CLI 인증 (OAuth 또는 API 키)
+gemini auth login  # OAuth
+# 또는
+export GEMINI_API_KEY="your-api-key"  # API 키
+
+# Droid CLI 인증
+droid auth login
 ```
 
 ### 2. 설치
@@ -74,11 +116,21 @@ cd persona_chatbot
 python3 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# 의존성 설치
+# Python 의존성 설치
 pip install -r requirements.txt
 
 # STORIES 디렉토리 생성 (없는 경우)
 mkdir -p STORIES
+
+# AI CLI 설치 (선택한 제공자에 따라)
+# Claude Code CLI
+npm install -g @anthropic-ai/claude-code
+
+# Gemini CLI (선택사항)
+npm install -g @google/gemini-cli
+
+# Droid CLI (선택사항)
+curl -fsSL https://app.factory.ai/cli | sh
 ```
 
 ### 3. 실행
@@ -179,6 +231,8 @@ persona_chatbot/
 │       ├── file_handler.py      # 파일 관리 핸들러
 │       ├── git_handler.py       # Git 작업 핸들러
 │       ├── claude_handler.py    # Claude Code 통신 핸들러
+│       ├── droid_handler.py     # Droid CLI 통신 핸들러 ⭐ NEW
+│       ├── gemini_handler.py    # Gemini CLI 통신 핸들러 ⭐ NEW
 │       ├── context_handler.py   # 컨텍스트 관리 핸들러
 │       ├── history_handler.py   # 대화 히스토리 관리 핸들러
 │       ├── workspace_handler.py # 워크스페이스 파일 관리
@@ -194,6 +248,8 @@ persona_chatbot/
 ├── requirements.txt             # Python 의존성
 ├── Dockerfile.test              # Docker 이미지 (테스트용)
 ├── docker-compose.test.yml      # Docker Compose 설정
+├── test_auth.sh                 # Docker 인증 테스트 스크립트
+├── test_websocket.py            # WebSocket 테스트 스크립트
 ├── CLAUDE.md                    # 개발용 지침 (한국어 사용 규칙)
 ├── AGENTS.md                    # 에이전트 설정
 └── README.md                    # 프로젝트 문서
@@ -602,6 +658,7 @@ claude auth login
 - [x] 3단 레이아웃 UI
 - [x] Docker 지원 (볼륨 마운트 방식)
 - [x] 효과음 자동 줄바꿈 처리
+- [x] 멀티 AI 제공자 지원 (Claude, Droid, Gemini)
 - [ ] Claude API 연동 (현재는 CLI만 지원)
 - [ ] 대화 히스토리 영구 저장
 - [ ] 캐릭터 프리셋 저장 및 관리
@@ -626,7 +683,7 @@ claude auth login
 
 ## Docker 지원
 
-Docker 컨테이너로 실행할 수 있습니다. 볼륨 마운트 방식으로 호스트의 Claude CLI 인증 정보를 사용합니다.
+Docker 컨테이너로 실행할 수 있습니다. 볼륨 마운트 방식으로 호스트의 AI CLI 인증 정보를 사용합니다.
 
 ### Docker 실행 방법
 
@@ -643,17 +700,28 @@ docker compose -f docker-compose.test.yml down
 
 ### Docker 구성
 
-- **Dockerfile.test**: Node.js 22 + Python 3.11 + Claude Code CLI
+- **Dockerfile.test**: Node.js 22 + Python 3.11 + 3개 AI CLI
+  - Claude Code CLI: `npm install -g @anthropic-ai/claude-code`
+  - Droid CLI: `curl -fsSL https://app.factory.ai/cli | sh`
+  - Gemini CLI: `npm install -g @google/gemini-cli`
 - **docker-compose.test.yml**: 서비스 설정
   - 포트: 8765 (WebSocket), 9000 (HTTP)
-  - 볼륨 마운트: `~/.claude` (인증 정보)
+  - 볼륨 마운트: `~/.claude` (Claude 인증 정보)
+  - 환경 변수:
+    - `CLAUDE_PATH=claude`
+    - `DROID_PATH=droid`
+    - `GEMINI_PATH=gemini`
+    - `FACTORY_API_KEY=${FACTORY_API_KEY}` (선택)
+    - `GEMINI_API_KEY=${GEMINI_API_KEY}` (선택, API 키 방식 사용 시)
   - 사용자 권한: 호스트 UID/GID로 실행 (파일 권한 문제 방지)
 
 ### 주의사항
 
-- 호스트에서 `claude auth login` 완료 필요
-- `~/.claude` 디렉토리가 컨테이너와 공유됨
+- **Claude**: 호스트에서 `claude auth login` 완료 필요, `~/.claude` 디렉토리 공유
+- **Gemini**: OAuth 또는 `GEMINI_API_KEY` 환경 변수
+- **Droid**: OAuth 또는 `FACTORY_API_KEY` 환경 변수, `~/.factory/config.json`에서 모델 설정
 - 컨테이너는 `chatbot_workspace/CLAUDE.md`를 읽어서 성인 콘텐츠 지침 적용
+- 사용하지 않는 AI CLI는 설치하지 않아도 됨 (최소 1개 이상 필요)
 
 ## 기여
 
@@ -665,7 +733,10 @@ MIT License
 
 ## 크레딧
 
-- Claude Code by Anthropic
+- **AI 제공자**:
+  - Claude Code CLI by Anthropic
+  - Gemini CLI by Google
+  - Droid CLI by Factory.ai
 - WebSocket 라이브러리: websockets
 - 비동기 파일 I/O: aiofiles
 

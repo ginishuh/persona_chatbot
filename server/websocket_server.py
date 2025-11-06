@@ -10,6 +10,8 @@ import threading
 from handlers.file_handler import FileHandler
 from handlers.git_handler import GitHandler
 from handlers.claude_handler import ClaudeCodeHandler
+from handlers.droid_handler import DroidHandler
+from handlers.gemini_handler import GeminiHandler
 from handlers.context_handler import ContextHandler
 from handlers.history_handler import HistoryHandler
 from handlers.workspace_handler import WorkspaceHandler
@@ -29,6 +31,8 @@ project_root = Path(__file__).parent.parent
 file_handler = FileHandler()
 git_handler = GitHandler()
 claude_handler = ClaudeCodeHandler()
+droid_handler = DroidHandler()
+gemini_handler = GeminiHandler()
 context_handler = ContextHandler()
 history_handler = HistoryHandler(max_turns=None)  # 무제한 히스토리
 workspace_handler = WorkspaceHandler(str(project_root / "persona_data"))
@@ -87,6 +91,7 @@ async def handle_message(websocket, message):
             user_is_narrator = data.get("user_is_narrator", False)
             adult_level = data.get("adult_level", "explicit")
             narrative_separation = data.get("narrative_separation", False)
+            ai_provider = data.get("ai_provider", "claude")
 
             context_handler.set_world(world)
             context_handler.set_situation(situation)
@@ -94,6 +99,7 @@ async def handle_message(websocket, message):
             context_handler.set_narrator(narrator_enabled, narrator_mode, narrator_description, user_is_narrator)
             context_handler.set_adult_level(adult_level)
             context_handler.set_narrative_separation(narrative_separation)
+            context_handler.set_ai_provider(ai_provider)
             context_handler.set_characters(characters)
 
             await websocket.send(json.dumps({
@@ -247,9 +253,11 @@ async def handle_message(websocket, message):
             result = await workspace_handler.delete_story(filename)
             await websocket.send(json.dumps({"action": "delete_story", "data": result}))
 
-        # Claude Code 채팅 (컨텍스트 + 히스토리 포함)
+        # AI 채팅 (컨텍스트 + 히스토리 포함)
         elif action == "chat":
             prompt = data.get("prompt", "")
+            # provider 파라미터 (없으면 컨텍스트의 기본값 사용)
+            provider = data.get("provider", context_handler.get_context().get("ai_provider", "claude"))
 
             # 사용자 메시지를 히스토리에 추가
             history_handler.add_user_message(prompt)
@@ -267,7 +275,15 @@ async def handle_message(websocket, message):
                     "data": json_data
                 }))
 
-            result = await claude_handler.send_message(
+            # AI 제공자 선택
+            if provider == "droid":
+                handler = droid_handler
+            elif provider == "gemini":
+                handler = gemini_handler
+            else:  # claude (기본값)
+                handler = claude_handler
+
+            result = await handler.send_message(
                 prompt,
                 system_prompt=system_prompt,
                 callback=stream_callback

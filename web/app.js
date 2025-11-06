@@ -24,6 +24,7 @@ const narratorMode = document.getElementById('narratorMode');
 const narratorDescription = document.getElementById('narratorDescription');
 const charactersList = document.getElementById('charactersList');
 const addCharacterBtn = document.getElementById('addCharacterBtn');
+const aiProvider = document.getElementById('aiProvider');
 const adultLevel = document.getElementById('adultLevel');
 const narrativeSeparation = document.getElementById('narrativeSeparation');
 const saveContextBtn = document.getElementById('saveContextBtn');
@@ -784,6 +785,7 @@ saveContextBtn.addEventListener('click', () => {
         narrator_mode: narratorMode.value,
         narrator_description: narratorDescription.value.trim(),
         user_is_narrator: userIsNarrator.checked,
+        ai_provider: aiProvider.value,
         adult_level: adultLevel.value,
         narrative_separation: narrativeSeparation.checked,
         characters: characters
@@ -799,6 +801,7 @@ function loadContext(context) {
     narratorMode.value = context.narrator_mode || 'moderate';
     narratorDescription.value = context.narrator_description || '';
     userIsNarrator.checked = context.user_is_narrator || false;
+    aiProvider.value = context.ai_provider || 'claude';
     adultLevel.value = context.adult_level || 'explicit';
     narrativeSeparation.checked = context.narrative_separation || false;
 
