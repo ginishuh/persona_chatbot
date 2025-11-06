@@ -13,7 +13,11 @@ RUN apt-get update && apt-get install -y \
 RUN npm install -g @anthropic-ai/claude-code
 
 # Droid CLI 설치
-RUN curl -fsSL https://app.factory.ai/cli | sh
+RUN curl -fsSL https://app.factory.ai/cli | sh && \
+    cp /root/.local/bin/droid /usr/local/bin/droid && \
+    chmod 755 /usr/local/bin/droid && \
+    cp -r /root/.factory /tmp/.factory-shared && \
+    chmod -R 755 /tmp/.factory-shared
 
 # Gemini CLI 설치
 RUN npm install -g @google/gemini-cli
