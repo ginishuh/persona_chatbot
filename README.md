@@ -10,6 +10,7 @@ Claude Code를 활용한 웹 기반 멀티 캐릭터 대화 및 서사 관리 �
 - `[캐릭터명]: 대화내용` 형식으로 자동 파싱
 - 실시간 스트리밍 응답
 - **대화 히스토리 관리**: 최근 15턴 자동 유지로 맥락 있는 대화 가능
+- **효과음 자동 줄바꿈**: `*...*` 형식의 효과음이 자동으로 줄바꿈되어 표시
 
 ### 2. TRPG 스타일 GM/진행자 시스템
 - **AI 진행자 모드**: AI가 게임 마스터(GM) 역할 수행
@@ -179,16 +180,22 @@ persona_chatbot/
 │       ├── git_handler.py       # Git 작업 핸들러
 │       ├── claude_handler.py    # Claude Code 통신 핸들러
 │       ├── context_handler.py   # 컨텍스트 관리 핸들러
-│       └── history_handler.py   # 대화 히스토리 관리 핸들러 ⭐ NEW
+│       ├── history_handler.py   # 대화 히스토리 관리 핸들러
+│       ├── workspace_handler.py # 워크스페이스 파일 관리
+│       └── mode_handler.py      # 모드 상태 관리
 ├── web/
 │   ├── index.html               # 메인 HTML (3단 레이아웃)
-│   ├── app.js                   # 프론트엔드 로직
+│   ├── app.js                   # 프론트엔드 로직 (효과음 줄바꿈 포함)
 │   └── style.css                # 스타일시트
+├── chatbot_workspace/
+│   └── CLAUDE.md                # 챗봇 전용 지침 (성인 콘텐츠 규칙)
 ├── STORIES/                     # 서사 파일 저장 디렉토리
 ├── venv/                        # Python 가상환경
 ├── requirements.txt             # Python 의존성
-├── Dockerfile                   # Docker 이미지 (사용 안 함)
-├── docker-compose.yml           # Docker Compose (사용 안 함)
+├── Dockerfile.test              # Docker 이미지 (테스트용)
+├── docker-compose.test.yml      # Docker Compose 설정
+├── CLAUDE.md                    # 개발용 지침 (한국어 사용 규칙)
+├── AGENTS.md                    # 에이전트 설정
 └── README.md                    # 프로젝트 문서
 ```
 
@@ -593,6 +600,8 @@ claude auth login
 - [x] GM/진행자 모드
 - [x] 성인 콘텐츠 모드
 - [x] 3단 레이아웃 UI
+- [x] Docker 지원 (볼륨 마운트 방식)
+- [x] 효과음 자동 줄바꿈 처리
 - [ ] Claude API 연동 (현재는 CLI만 지원)
 - [ ] 대화 히스토리 영구 저장
 - [ ] 캐릭터 프리셋 저장 및 관리
@@ -615,9 +624,36 @@ claude auth login
 
 향후 Claude API를 사용하면 이 문제가 해결될 수 있습니다.
 
-## Docker 지원 (선택사항)
+## Docker 지원
 
-Docker를 사용하고 싶은 경우, Dockerfile과 docker-compose.yml이 포함되어 있습니다. 단, Claude Code 인증 문제로 인해 권장되지 않습니다.
+Docker 컨테이너로 실행할 수 있습니다. 볼륨 마운트 방식으로 호스트의 Claude CLI 인증 정보를 사용합니다.
+
+### Docker 실행 방법
+
+```bash
+# 컨테이너 빌드 및 실행
+docker compose -f docker-compose.test.yml up -d
+
+# 로그 확인
+docker compose -f docker-compose.test.yml logs -f
+
+# 컨테이너 중지
+docker compose -f docker-compose.test.yml down
+```
+
+### Docker 구성
+
+- **Dockerfile.test**: Node.js 22 + Python 3.11 + Claude Code CLI
+- **docker-compose.test.yml**: 서비스 설정
+  - 포트: 8765 (WebSocket), 9000 (HTTP)
+  - 볼륨 마운트: `~/.claude` (인증 정보)
+  - 사용자 권한: 호스트 UID/GID로 실행 (파일 권한 문제 방지)
+
+### 주의사항
+
+- 호스트에서 `claude auth login` 완료 필요
+- `~/.claude` 디렉토리가 컨테이너와 공유됨
+- 컨테이너는 `chatbot_workspace/CLAUDE.md`를 읽어서 성인 콘텐츠 지침 적용
 
 ## 기여
 
