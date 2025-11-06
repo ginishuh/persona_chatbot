@@ -31,7 +31,7 @@ class DroidHandler:
                 "exec",
                 "--output-format", "stream-json",
                 "--auto", "low",  # 기본 autonomy level
-                "--model", "glm-4.6"  # GLM-4.6 모델 (Factory built-in)
+                "--model", "custom:glm-4.6"  # Z.ai GLM-4.6 (사용자 커스텀 모델)
             ]
 
             # System prompt는 stdin으로 함께 전달 (droid는 --system-prompt 옵션 없음)
