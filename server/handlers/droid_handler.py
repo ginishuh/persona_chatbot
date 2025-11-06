@@ -34,8 +34,6 @@ class DroidHandler:
                 "--model", "custom:glm-4.6"  # Z.ai GLM-4.6 (사용자 커스텀 모델)
             ]
 
-            # System prompt는 stdin으로 함께 전달 (droid는 --system-prompt 옵션 없음)
-
             self.process = await asyncio.create_subprocess_exec(
                 *args,
                 stdin=asyncio.subprocess.PIPE,
@@ -107,6 +105,9 @@ class DroidHandler:
 
             try:
                 # stdout 읽기 (타임아웃 추가)
+                response_started = False
+                response_complete = False
+
                 while True:
                     try:
                         line = await asyncio.wait_for(
@@ -136,6 +137,7 @@ class DroidHandler:
                             if callback:
                                 # Droid 형식: {"type":"message","role":"assistant","text":"..."}
                                 if data.get('type') == 'message' and data.get('role') == 'assistant':
+                                    response_started = True
                                     text_content = data.get('text', '')
                                     if text_content:
                                         # Claude 형식으로 변환: content_block_delta
@@ -145,6 +147,12 @@ class DroidHandler:
                                         }
                                         await callback(claude_format)
                                         assistant_message += text_content
+
+                            # 응답 완료 감지 (type: "response_complete" 또는 프로세스 종료)
+                            if data.get('type') == 'response_complete':
+                                response_complete = True
+                                logger.info("Droid response complete")
+                                break
 
                         except json.JSONDecodeError as e:
                             logger.error(f"Failed to parse JSON: {e}")
@@ -158,7 +166,11 @@ class DroidHandler:
                 stderr_task.cancel()
 
             # 프로세스 종료 대기
-            await self.process.wait()
+            try:
+                await asyncio.wait_for(self.process.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                self.process.kill()
+                await self.process.wait()
             self.process = None
 
             # Droid는 토큰 정보를 제공하지 않으므로 None으로 반환
