@@ -723,6 +723,206 @@ docker compose -f docker-compose.test.yml down
 - 컨테이너는 `chatbot_workspace/CLAUDE.md`를 읽어서 성인 콘텐츠 지침 적용
 - 사용하지 않는 AI CLI는 설치하지 않아도 됨 (최소 1개 이상 필요)
 
+## Docker 아키텍처
+
+이 프로젝트는 **하이브리드 Docker 전략**을 사용합니다: 실행 환경은 컨테이너에 포함하고, 데이터와 코드는 호스트에서 마운트합니다.
+
+### 컨테이너에 포함된 것 (Docker Image)
+
+다음 항목들은 Docker 이미지에 빌드되어 포함됩니다:
+
+**시스템 및 런타임**
+- Node.js 22 (Claude Code CLI, Gemini CLI 실행용)
+- Python 3.11 (WebSocket 서버 실행용)
+- 시스템 패키지 (`curl`, `git`, `procps` 등)
+
+**AI CLI 도구**
+- Claude Code CLI (`@anthropic-ai/claude-code`)
+- Gemini CLI (`@google/gemini-cli`)
+- Droid CLI (Factory.ai)
+
+**Python 의존성**
+- websockets 12.0
+- aiofiles 23.2.1
+
+**애플리케이션 코드** (초기 빌드 시)
+- `server/` (WebSocket 서버 및 핸들러)
+- `web/` (프론트엔드 HTML/CSS/JS)
+- `chatbot_workspace/CLAUDE.md` (챗봇 전용 지침)
+
+### 호스트에서 마운트되는 것 (Volume Mounts)
+
+다음 항목들은 컨테이너 실행 시 호스트에서 마운트됩니다:
+
+```yaml
+volumes:
+  # AI CLI 인증 정보
+  - ${HOME}/.claude:/home/node/.claude              # Claude OAuth 인증
+  - ${HOME}/.factory:/home/node/.factory            # Droid OAuth 인증 (선택)
+  - ${HOME}/.config/gemini:/home/node/.config/gemini # Gemini OAuth 인증 (선택)
+
+  # 개발 중 코드 변경 실시간 반영
+  - ./server:/app/server                            # 서버 코드
+  - ./web:/app/web                                  # 웹 프론트엔드
+
+  # 챗봇 데이터 및 설정
+  - ./chatbot_workspace:/app/chatbot_workspace      # 페르소나 데이터, CLAUDE.md
+```
+
+**마운트 이유**:
+1. **인증 정보**: AI CLI 인증은 호스트에서 수행하고 컨테이너와 공유
+2. **라이브 개발**: 코드 수정 시 컨테이너 재빌드 불필요
+3. **데이터 영속성**: 페르소나 데이터가 컨테이너 삭제 시에도 보존됨
+
+### Workspace 격리 (CLAUDE.md)
+
+이 프로젝트는 **개발용 지침**과 **챗봇용 지침**을 분리합니다:
+
+#### 개발용 지침 (레포 루트)
+- **위치**: `/home/ginis/persona_chatbot/CLAUDE.md`
+- **용도**: Claude Code가 코드 작업 시 참조
+- **내용**: 프로젝트 아키텍처, 개발 가이드, 기술 스택
+- **Docker에서**: ❌ **제외됨** (`.dockerignore`로 차단)
+
+#### 챗봇용 지침 (chatbot_workspace)
+- **위치**: `/home/ginis/persona_chatbot/chatbot_workspace/CLAUDE.md`
+- **용도**: 챗봇 AI가 대화 시 참조
+- **내용**: 성인 콘텐츠 규칙, 캐릭터 연기 원칙, 응답 형식
+- **Docker에서**: ✅ **포함됨** (필수 파일)
+
+#### 격리 메커니즘
+
+```python
+# server/handlers/claude_handler.py
+self.chatbot_workspace = Path(__file__).parent.parent.parent / "chatbot_workspace"
+
+args = [
+    self.claude_path,
+    "--setting-sources", "user,local",  # "project" 제외 (레포 루트 CLAUDE.md 무시)
+    # ...
+]
+
+self.process = await asyncio.create_subprocess_exec(
+    *args,
+    cwd=str(self.chatbot_workspace)  # 작업 디렉토리를 chatbot_workspace로 설정
+)
+```
+
+**동작 원리**:
+1. `cwd=chatbot_workspace` → AI CLI가 `chatbot_workspace/` 에서 실행
+2. `--setting-sources user,local` → `project` 레벨 설정 무시
+3. 결과: `chatbot_workspace/CLAUDE.md`만 읽고, 레포 루트 `CLAUDE.md`는 무시
+
+### .dockerignore를 통한 빌드 최적화
+
+Docker 이미지 빌드 시 불필요한 파일을 제외하여 이미지 크기를 줄이고 보안을 강화합니다.
+
+#### 제외되는 파일
+
+```dockerignore
+# 개발용 문서 (호스트에만 필요)
+/CLAUDE.md                    # 개발용 지침 (챗봇용 아님!)
+/AGENTS.md                    # 에이전트 설정
+/.claude/                     # 개발 환경 설정
+/README.md                    # 프로젝트 문서
+
+# 소스 관리
+.git                          # Git 히스토리 (불필요)
+.gitignore
+
+# 런타임 생성 파일
+STORIES/                      # 대화 기록 (런타임 생성)
+__pycache__/                  # Python 캐시
+venv/                         # Python 가상환경
+node_modules/                 # Node 의존성 (이미 설치됨)
+
+# 개발 도구
+.vscode/, .idea/              # IDE 설정
+test_*.sh, test_*.py          # 테스트 스크립트
+```
+
+#### 포함되는 파일
+
+```
+✅ server/                     # WebSocket 서버 (필수)
+✅ web/                        # 프론트엔드 (필수)
+✅ chatbot_workspace/CLAUDE.md # 챗봇 지침 (필수)
+✅ requirements.txt            # Python 의존성 목록
+✅ docker-compose.test.yml     # Docker 설정
+✅ Dockerfile.test             # Docker 빌드 스크립트
+```
+
+**효과**:
+- 이미지 크기 감소 (수백 MB 절약)
+- 빌드 속도 향상
+- 개발용 지침이 프로덕션 컨테이너에 노출되지 않음
+
+### 데이터 영속성 및 백업
+
+#### 영속 데이터 위치
+
+컨테이너가 삭제되어도 다음 데이터는 호스트에 보존됩니다:
+
+1. **페르소나 데이터**: `./persona_data/` (git submodule)
+   - 캐릭터, NPC, 세계관, 스토리 등
+
+2. **챗봇 설정**: `./chatbot_workspace/`
+   - CLAUDE.md (챗봇 지침)
+   - 임시 작업 파일
+
+3. **대화 기록**: `./STORIES/`
+   - 마크다운 서사 파일
+
+4. **AI 인증 정보**: `~/.claude/`, `~/.factory/`, `~/.config/gemini/`
+   - OAuth 토큰 및 설정
+
+#### 백업 전략
+
+```bash
+# 전체 페르소나 데이터 백업
+cd persona_data
+git add -A
+git commit -m "Backup: $(date)"
+git push
+
+# 대화 기록 백업
+tar -czf stories-backup-$(date +%Y%m%d).tar.gz STORIES/
+
+# 챗봇 설정 백업
+cp -r chatbot_workspace chatbot_workspace.backup
+```
+
+#### 컨테이너 재생성
+
+컨테이너를 삭제하고 재생성해도 데이터는 유지됩니다:
+
+```bash
+# 컨테이너 삭제 (데이터는 호스트에 유지됨)
+docker compose -f docker-compose.test.yml down
+
+# 이미지 재빌드
+docker compose -f docker-compose.test.yml build
+
+# 컨테이너 재시작 (기존 데이터 자동 마운트)
+docker compose -f docker-compose.test.yml up -d
+```
+
+### Docker vs 로컬 실행 비교
+
+| 항목 | Docker | 로컬 실행 |
+|------|--------|-----------|
+| **환경 격리** | ✅ 완전 격리 | ❌ 호스트 환경 영향 받음 |
+| **의존성 관리** | ✅ 이미지에 포함 | ❌ 수동 설치 필요 |
+| **포트 충돌** | ✅ 컨테이너 내부 격리 | ⚠️ 호스트 포트 충돌 가능 |
+| **배포** | ✅ 어디서나 동일 | ❌ 환경별 설정 필요 |
+| **개발 속도** | ⚠️ 빌드 시간 필요 | ✅ 즉시 실행 |
+| **디버깅** | ⚠️ 컨테이너 진입 필요 | ✅ 직접 디버깅 |
+| **데이터 접근** | ✅ 볼륨 마운트로 동일 | ✅ 직접 접근 |
+
+**권장 사용 시나리오**:
+- **Docker**: 프로덕션 배포, 팀 협업, 환경 통일
+- **로컬**: 빠른 개발, 디버깅, 프로토타이핑
+
 ## 기여
 
 이슈 및 Pull Request를 환영합니다.
