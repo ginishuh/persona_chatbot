@@ -31,7 +31,7 @@ class ClaudeCodeHandler:
                 "--print",
                 "--verbose",
                 "--output-format", "stream-json",
-                "--setting-sources", "user,project,local"  # .claude/claude.md 읽기
+                "--setting-sources", "user,local"  # chatbot_workspace/CLAUDE.md만 읽기 (project 제외)
             ]
 
             # System prompt 추가

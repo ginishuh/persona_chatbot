@@ -127,15 +127,17 @@ class DroidHandler:
 
                             # 콜백 호출 (Claude 형식으로 변환)
                             if callback:
-                                # Droid 형식을 Claude 형식으로 변환
+                                # Droid 형식: {"type":"message","role":"assistant","text":"..."}
                                 if data.get('type') == 'message' and data.get('role') == 'assistant':
-                                    # Claude 형식으로 변환: content_block_delta
-                                    claude_format = {
-                                        "type": "content_block_delta",
-                                        "delta": {"text": data.get('text', '')}
-                                    }
-                                    await callback(claude_format)
-                                    assistant_message = data.get('text', '')
+                                    text_content = data.get('text', '')
+                                    if text_content:
+                                        # Claude 형식으로 변환: content_block_delta
+                                        claude_format = {
+                                            "type": "content_block_delta",
+                                            "delta": {"text": text_content}
+                                        }
+                                        await callback(claude_format)
+                                        assistant_message += text_content
 
                         except json.JSONDecodeError as e:
                             logger.error(f"Failed to parse JSON: {e}")

@@ -28,11 +28,10 @@ class GeminiHandler:
         try:
             args = [
                 self.gemini_path,
-                "-p",  # prompt flag for non-interactive mode
                 "--output-format", "stream-json"
             ]
 
-            # System prompt는 stdin으로 함께 전달
+            # System prompt와 프롬프트를 stdin으로 전달
 
             self.process = await asyncio.create_subprocess_exec(
                 *args,
@@ -125,18 +124,17 @@ class GeminiHandler:
 
                             # 콜백 호출 (Claude 형식으로 변환)
                             if callback:
-                                # Gemini 형식을 Claude 형식으로 변환
-                                # Gemini의 JSON 구조를 확인하고 적절히 변환
-                                if data.get('type') == 'content' or 'text' in data:
-                                    text_content = data.get('text', '')
-                                    if text_content:
+                                # Gemini 형식: {"type":"message","role":"assistant","content":"...","delta":true}
+                                if data.get('type') == 'message' and data.get('role') == 'assistant':
+                                    content = data.get('content', '')
+                                    if content and data.get('delta'):
                                         # Claude 형식으로 변환: content_block_delta
                                         claude_format = {
                                             "type": "content_block_delta",
-                                            "delta": {"text": text_content}
+                                            "delta": {"text": content}
                                         }
                                         await callback(claude_format)
-                                        assistant_message += text_content
+                                        assistant_message += content
 
                         except json.JSONDecodeError as e:
                             # JSON이 아닌 일반 텍스트일 수 있음
