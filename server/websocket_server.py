@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 # 핸들러 초기화
 # 프로젝트 루트 경로 (server/ 폴더의 상위 디렉토리)
 project_root = Path(__file__).parent.parent
+LOGIN_PASSWORD = os.getenv("APP_LOGIN_PASSWORD", "")
+LOGIN_REQUIRED = bool(LOGIN_PASSWORD)
 
 file_handler = FileHandler()
 git_handler = GitHandler()
@@ -41,6 +43,7 @@ mode_handler = ModeHandler(project_root=str(project_root))
 
 # 연결된 클라이언트들
 connected_clients = set()
+authenticated_clients = set()
 
 
 async def handle_message(websocket, message):
@@ -50,6 +53,28 @@ async def handle_message(websocket, message):
         action = data.get("action")
 
         logger.info(f"Received action: {action}")
+
+        if LOGIN_REQUIRED and websocket not in authenticated_clients and action != "login":
+            await websocket.send(json.dumps({
+                "action": "auth_required",
+                "data": {"required": True}
+            }))
+            return
+
+        if action == "login":
+            password = data.get("password", "")
+            if not LOGIN_REQUIRED or password == LOGIN_PASSWORD:
+                authenticated_clients.add(websocket)
+                await websocket.send(json.dumps({
+                    "action": "login",
+                    "data": {"success": True}
+                }))
+            else:
+                await websocket.send(json.dumps({
+                    "action": "login",
+                    "data": {"success": False, "error": "비밀번호가 일치하지 않습니다."}
+                }))
+            return
 
         # 파일 목록 조회
         if action == "list_files":
@@ -324,6 +349,8 @@ async def handle_message(websocket, message):
 async def websocket_handler(websocket):
     """WebSocket 연결 핸들러"""
     connected_clients.add(websocket)
+    if not LOGIN_REQUIRED:
+        authenticated_clients.add(websocket)
     client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
     logger.info(f"Client connected: {client_ip} (Total: {len(connected_clients)})")
 
@@ -334,6 +361,12 @@ async def websocket_handler(websocket):
             "data": {"success": True, "message": "Connected to Persona Chat WebSocket Server"}
         }))
 
+        if LOGIN_REQUIRED:
+            await websocket.send(json.dumps({
+                "action": "auth_required",
+                "data": {"required": True}
+            }))
+
         # 메시지 수신 루프
         async for message in websocket:
             await handle_message(websocket, message)
@@ -342,6 +375,7 @@ async def websocket_handler(websocket):
         logger.info(f"Client disconnected: {client_ip}")
     finally:
         connected_clients.remove(websocket)
+        authenticated_clients.discard(websocket)
         logger.info(f"Total connected clients: {len(connected_clients)}")
 
 

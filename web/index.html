@@ -204,6 +204,16 @@
         </footer>
     </div>
 
+    <div id="loginModal" class="login-modal hidden">
+        <div class="login-modal-content">
+            <h2>🔒 로그인 필요</h2>
+            <p class="login-description">.env에 설정한 비밀번호를 입력하세요.</p>
+            <input type="password" id="loginPassword" placeholder="비밀번호" autocomplete="current-password" />
+            <button id="loginButton" class="btn btn-primary" style="width: 100%; margin-top: 0.75rem;">로그인</button>
+            <p id="loginError" class="login-error"></p>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>

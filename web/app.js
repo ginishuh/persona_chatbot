@@ -59,8 +59,16 @@ const storySelect = document.getElementById('storySelect');
 const loadStoryBtn = document.getElementById('loadStoryBtn');
 const deleteStoryBtn = document.getElementById('deleteStoryBtn');
 
+// 로그인 요소
+const loginModal = document.getElementById('loginModal');
+const loginPasswordInput = document.getElementById('loginPassword');
+const loginButton = document.getElementById('loginButton');
+const loginError = document.getElementById('loginError');
+
 let currentAssistantMessage = null;
 let characterColors = {}; // 캐릭터별 색상 매핑
+let authRequired = false;
+let isAuthenticated = false;
 
 // ===== WebSocket 연결 =====
 
@@ -73,23 +81,9 @@ function connect() {
     ws.onopen = () => {
         updateStatus('connected', '연결됨');
         log('WebSocket 연결 성공', 'success');
-
-        // 연결 시 컨텍스트 조회
-        ws.send(JSON.stringify({ action: 'get_context' }));
-
-        // 연결 시 서사 조회
-        ws.send(JSON.stringify({ action: 'get_narrative' }));
-
-        // 파일 목록 로드
-        loadFileList('world', worldSelect);
-        loadFileList('situation', situationSelect);
-        loadFileList('my_character', myCharacterSelect);
-        loadPresetList();
-        loadStoryList();
-
-        // Git 및 모드 상태 확인
-        checkGitStatus();
-        checkModeStatus();
+        isAuthenticated = true;
+        hideLoginModal();
+        initializeAppData();
     };
 
     ws.onmessage = (event) => {
@@ -104,6 +98,9 @@ function connect() {
     ws.onclose = () => {
         updateStatus('disconnected', '연결 끊김');
         log('연결이 끊어졌습니다. 5초 후 재연결...', 'error');
+        authRequired = false;
+        isAuthenticated = false;
+        hideLoginModal();
         setTimeout(connect, 5000);
     };
 }
@@ -130,6 +127,64 @@ function log(message, type = 'info') {
     }
 }
 
+function initializeAppData() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    ws.send(JSON.stringify({ action: 'get_context' }));
+    ws.send(JSON.stringify({ action: 'get_narrative' }));
+
+    loadFileList('world', worldSelect);
+    loadFileList('situation', situationSelect);
+    loadFileList('my_character', myCharacterSelect);
+    loadPresetList();
+    loadStoryList();
+    checkGitStatus();
+    checkModeStatus();
+}
+
+function showLoginModal() {
+    if (!loginModal) return;
+    loginModal.classList.remove('hidden');
+    loginPasswordInput.value = '';
+    loginError.textContent = '';
+    chatInput.disabled = true;
+    sendChatBtn.disabled = true;
+    setTimeout(() => loginPasswordInput.focus(), 100);
+}
+
+function hideLoginModal() {
+    if (!loginModal) return;
+    loginModal.classList.add('hidden');
+    loginError.textContent = '';
+    chatInput.disabled = false;
+    sendChatBtn.disabled = false;
+}
+
+function submitLogin() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const password = loginPasswordInput.value.trim();
+    if (!password) {
+        loginError.textContent = '비밀번호를 입력하세요.';
+        return;
+    }
+    ws.send(JSON.stringify({
+        action: 'login',
+        password
+    }));
+    loginError.textContent = '';
+}
+
+if (loginButton) {
+    loginButton.addEventListener('click', submitLogin);
+}
+if (loginPasswordInput) {
+    loginPasswordInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            submitLogin();
+        }
+    });
+}
+
 // 메시지 처리
 function handleMessage(msg) {
     const { action, data } = msg;
@@ -137,6 +192,27 @@ function handleMessage(msg) {
     switch (action) {
         case 'connected':
             log('서버 연결 완료', 'success');
+            break;
+
+        case 'auth_required':
+            authRequired = true;
+            isAuthenticated = false;
+            showLoginModal();
+            log('로그인이 필요합니다', 'warning');
+            break;
+
+        case 'login':
+            if (data.success) {
+                authRequired = false;
+                isAuthenticated = true;
+                hideLoginModal();
+                log('로그인 성공', 'success');
+                initializeAppData();
+            } else {
+                const errorMsg = data.error || '로그인에 실패했습니다.';
+                loginError.textContent = errorMsg;
+                log(`로그인 실패: ${errorMsg}`, 'error');
+            }
             break;
 
         case 'get_context':
@@ -395,6 +471,10 @@ function sendChatMessage() {
     const prompt = chatInput.value.trim();
 
     if (!prompt) return;
+    if (authRequired && !isAuthenticated) {
+        log('로그인 후 이용 가능합니다.', 'error');
+        return;
+    }
 
     if (ws && ws.readyState === WebSocket.OPEN) {
         // 사용자 메시지 표시
