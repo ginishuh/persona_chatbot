@@ -131,6 +131,19 @@ npm install -g @google/gemini-cli
 curl -fsSL https://app.factory.ai/cli | sh
 ```
 
+### 2-1. `persona_data` 프라이빗 레포 준비
+
+`persona_data/` 디렉터리는 사용자별 민감한 설정/스토리 데이터를 담으므로, **별도 비공개 저장소**로 관리하는 것을 권장합니다. 아래 절차대로 세팅하세요.
+
+1. GitHub(또는 선호하는 Git 호스팅)에서 새로운 **Private** 저장소를 만든다. 저장소 이름은 자유지만 **로컬에서는 폴더명을 `persona_data`로 유지**해야 합니다.
+2. `persona_chatbot`과 동일한 상위 경로에서 다음 명령으로 클론한다:
+   ```bash
+   git clone git@github.com:YOURNAME/YOUR-PRIVATE-REPO.git persona_data
+   ```
+3. 필요 시 이 저장소 안에 프리셋/스토리/환경 파일을 추가하고, 본 레포와는 별도로 버전 관리한다.
+4. 다른 이름으로 클론했다면 반드시 폴더명을 `persona_data`로 바꿔 주세요. `workspace_handler`가 고정 경로(`persona_data/`)만 참조합니다.
+5. 원격 백업을 원하지 않는다면, 최소한 로컬 Git 레포로 만들어 두고 `.gitignore` 적용 범위를 확인해 민감 정보가 루트 레포에 커밋되지 않도록 합니다.
+
 ### 3. 실행
 
 ```bash
