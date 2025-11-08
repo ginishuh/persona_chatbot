@@ -838,7 +838,18 @@ function parseMultiCharacterResponse(text) {
 
 function getCharacterColor(characterName) {
     if (!characterColors[characterName]) {
-        const colors = ['character-0', 'character-1', 'character-2', 'character-3', 'character-4'];
+        const colors = [
+            'character-0',
+            'character-1',
+            'character-2',
+            'character-3',
+            'character-4',
+            'character-5',
+            'character-6',
+            'character-7',
+            'character-8',
+            'character-9'
+        ];
         const index = Object.keys(characterColors).length % colors.length;
         characterColors[characterName] = colors[index];
     }

@@ -390,6 +390,26 @@ header h1 {
     background: #5f1e3a;
 }
 
+.chat-message.character-5 .message-content {
+    background: #5f1e1e;
+}
+
+.chat-message.character-6 .message-content {
+    background: #1e5b5f;
+}
+
+.chat-message.character-7 .message-content {
+    background: #5f4b1e;
+}
+
+.chat-message.character-8 .message-content {
+    background: #2f1e5f;
+}
+
+.chat-message.character-9 .message-content {
+    background: #1e5f4b;
+}
+
 /* Narrator style */
 .chat-message.narrator .message-content {
     background: #2a2d2e;
