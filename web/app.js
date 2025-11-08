@@ -60,6 +60,7 @@ const gitSyncBtn = document.getElementById('gitSyncBtn');
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 const resetSessionsBtn = document.getElementById('resetSessionsBtn');
 const tokenText = document.getElementById('tokenText');
+const sessionRetentionToggle = document.getElementById('sessionRetentionToggle');
 
 // 서사 패널 요소
 const narrativeContent = document.getElementById('narrativeContent');
@@ -222,6 +223,7 @@ function initializeAppData() {
     sendMessage({ action: 'get_context' });
     sendMessage({ action: 'get_narrative' });
     sendMessage({ action: 'get_history_settings' });
+    sendMessage({ action: 'get_session_settings' });
 
     loadFileList('world', worldSelect);
     loadFileList('situation', situationSelect);
@@ -303,6 +305,24 @@ function setupHistoryControls() {
 }
 
 setupHistoryControls();
+
+function applySessionRetentionUI(enabled) {
+    if (sessionRetentionToggle) {
+        sessionRetentionToggle.checked = !!enabled;
+    }
+}
+
+function setupSessionRetentionControls() {
+    if (!sessionRetentionToggle) return;
+    sessionRetentionToggle.addEventListener('change', () => {
+        sendMessage({
+            action: 'set_session_retention',
+            enabled: sessionRetentionToggle.checked
+        });
+    });
+}
+
+setupSessionRetentionControls();
 
 function scheduleTokenRefresh() {
     if (tokenRefreshTimeout) {
@@ -489,6 +509,23 @@ function handleMessage(msg) {
                 const errorMsg = data.error || '맥락 길이 설정에 실패했습니다.';
                 log(errorMsg, 'error');
                 sendMessage({ action: 'get_history_settings' });
+            }
+            break;
+
+        case 'get_session_settings':
+            if (data.success) {
+                applySessionRetentionUI(data.retention_enabled);
+            }
+            break;
+
+        case 'set_session_retention':
+            if (data.success) {
+                applySessionRetentionUI(data.retention_enabled);
+                const stateText = data.retention_enabled ? 'ON' : 'OFF';
+                log(`세션 유지가 ${stateText} 상태로 설정되었습니다.`, 'success');
+            } else {
+                log(data.error || '세션 유지 설정에 실패했습니다.', 'error');
+                sendMessage({ action: 'get_session_settings' });
             }
             break;
 
