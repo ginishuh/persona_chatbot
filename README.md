@@ -25,7 +25,6 @@ Claude Code를 활용한 웹 기반 멀티 캐릭터 대화 및 서사 관리 �
 - **현재 상황**: 현재 벌어지고 있는 상황 설명
 - **나의 캐릭터**: 사용자 자신의 캐릭터 설정 (이름, 성격, 배경)
 - **캐릭터 관리**: 대화에 참여할 캐릭터들을 추가/삭제 및 설정
-- **성인 콘텐츠 모드**: 18+ 콘텐츠 허용 (선택적)
 
 ### 4. 서사 기록 시스템
 - 대화 내용을 자동으로 마크다운 형식으로 기록
@@ -184,8 +183,7 @@ http://localhost:9000
    - 캐릭터 이름 (예: "민수")
    - 캐릭터 설명 (예: "외향적이고 유머러스한 학생")
 7. 여러 캐릭터를 추가 가능
-8. **성인 콘텐츠 허용** (선택): 18+ 콘텐츠 활성화
-9. "💾 컨텍스트 저장" 클릭
+8. "💾 컨텍스트 저장" 클릭
 
 ### 2. 대화하기
 
@@ -256,7 +254,7 @@ persona_chatbot/
 │   ├── app.js                   # 프론트엔드 로직 (효과음 줄바꿈 포함)
 │   └── style.css                # 스타일시트
 ├── chatbot_workspace/
-│   └── CLAUDE.md                # 챗봇 전용 지침 (성인 콘텐츠 규칙)
+│   └── CLAUDE.md                # 챗봇 전용 지침
 ├── STORIES/                     # 서사 파일 저장 디렉토리
 ├── venv/                        # Python 가상환경
 ├── requirements.txt             # Python 의존성
@@ -315,9 +313,8 @@ clear()                             # 히스토리 초기화
 - 현재 상황 (situation)
 - 사용자 캐릭터 (user_character)
 - 캐릭터 목록 (characters)
-- 진행자 설정 (narrator_enabled, narrator_mode, narrator_description) ⭐ NEW
-- 사용자 진행자 (user_is_narrator) ⭐ NEW
-- 성인 콘텐츠 모드 (adult_mode) ⭐ NEW
+- 진행자 설정 (narrator_enabled, narrator_mode, narrator_description)
+- 사용자 진행자 (user_is_narrator)
 
 **System Prompt 생성:**
 
@@ -325,9 +322,6 @@ clear()                             # 히스토리 초기화
 
 ```
 [진행자 모드별 프롬프트]
-
-=== 콘텐츠 제한 해제 === (성인 모드 활성화 시)
-...
 
 === 세계관 ===
 [세계관 설명]
@@ -674,7 +668,6 @@ claude auth login
 - [x] 대화 히스토리 관리 (슬라이더/무제한/세션 토글)
 - [x] 서사 기록 자동 생성 및 다운로드
 - [x] GM/진행자 모드
-- [x] 성인 콘텐츠 모드
 - [x] 3단 레이아웃 UI
 - [x] Docker 지원 (볼륨 마운트 방식)
 - [x] 효과음 자동 줄바꿈 처리
@@ -771,7 +764,7 @@ docker compose down
   - 실 서비스 환경에서는 HTTPS/WSS 프록시와 추가 인증(예: HTTP Basic Auth, OAuth)을 권장합니다.
   - `.env`의 `APP_LOGIN_MAX_ATTEMPTS` / `APP_LOGIN_LOCK_MINUTES` 값을 조정해 로그인 시도 제한을 강화할 수 있습니다.
   - 기본 포트는 127.0.0.1에만 바인딩되므로 외부에서 접근하려면 프록시나 포트 포워딩으로 공개해야 합니다.
-- 컨테이너는 `chatbot_workspace/CLAUDE.md`를 읽어서 성인 콘텐츠 지침 적용
+- 컨테이너는 `chatbot_workspace/CLAUDE.md`를 참고해 챗봇 지침을 적용
 - 사용하지 않는 AI CLI는 설치하지 않아도 됨 (최소 1개 이상 필요)
 
 ## Docker 아키텍처
@@ -838,7 +831,7 @@ volumes:
 #### 챗봇용 지침 (chatbot_workspace)
 - **위치**: `/home/ginis/persona_chatbot/chatbot_workspace/CLAUDE.md`
 - **용도**: 챗봇 AI가 대화 시 참조
-- **내용**: 성인 콘텐츠 규칙, 캐릭터 연기 원칙, 응답 형식
+- **내용**: 캐릭터 연기 원칙, 응답 형식, 서사 규칙
 - **Docker에서**: ✅ **포함됨** (필수 파일)
 
 #### 격리 메커니즘
