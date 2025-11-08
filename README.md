@@ -66,10 +66,10 @@ python server/websocket_server.py
    - 저장소 이름은 자유롭게 설정 (예: `my-persona-data`)
    - 반드시 **Private**으로 설정
 
-2. **persona_chatbot과 같은 상위 경로에 클론**
+2. **persona_chatbot 디렉토리 내부에 클론**
    ```bash
-   # persona_chatbot의 상위 디렉토리로 이동
-   cd /path/to/parent/directory
+   # persona_chatbot 프로젝트 디렉토리로 이동
+   cd persona_chatbot
 
    # 프라이빗 레포 클론 (폴더명을 반드시 persona_data로 지정)
    git clone git@github.com:YOURNAME/YOUR-PRIVATE-REPO.git persona_data
@@ -77,9 +77,13 @@ python server/websocket_server.py
 
 3. **폴더 구조 확인**
    ```
-   parent-directory/
-   ├── persona_chatbot/      # 이 프로젝트
-   └── persona_data/         # 프라이빗 데이터 레포 (이름 고정!)
+   persona_chatbot/
+   ├── server/
+   ├── web/
+   ├── chatbot_workspace/
+   ├── persona_data/         # 프라이빗 데이터 레포 (이름 고정!)
+   ├── README.md
+   └── ...
    ```
 
 > **중요**: 서버는 `persona_data` 폴더명을 고정으로 참조합니다. 다른 이름으로 클론한 경우 반드시 폴더명을 `persona_data`로 변경하세요.
