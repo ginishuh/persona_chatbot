@@ -614,9 +614,11 @@ claude auth login
 
 ### 대화가 끊기거나 맥락을 잊어버리는 경우
 
-- 좌측 패널 → `모드` 탭의 **🧠 맥락 길이** 슬라이더에서 5~60턴 사이로 조정하거나 `무제한`을 켤 수 있습니다. 기본값은 30턴입니다.
-- 서버 측에서 직접 고정하고 싶다면 `server/handlers/history_handler.py`의 `HistoryHandler(max_turns=...)` 기본값을 수정하면 됩니다.
-- 헤더의 **♻️ 세션** 버튼을 누르면 현재 연결에서 Claude/Droid/Gemini 등 AI 세션 ID를 모두 초기화해 다음 호출부터 새 세션으로 시작합니다.
+- 시스템이 자동으로 15턴을 유지하므로 이후 오래된 대화는 잊어버립니다
+- 필요시 `history_handler.py`의 `max_turns` 값을 조정:
+  ```python
+  history_handler = HistoryHandler(max_turns=30)  # 30턴으로 증가
+  ```
 
 ## UI 레이아웃
 

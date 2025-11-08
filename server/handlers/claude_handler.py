@@ -14,11 +14,12 @@ class ClaudeCodeHandler:
         # 환경 변수 또는 기본값 사용
         self.claude_path = claude_path or os.getenv("CLAUDE_PATH", "claude")
         self.process = None
+        self.session_id = None
         # 챗봇 전용 작업 디렉토리 (chatbot_workspace/CLAUDE.md 읽기 위해)
         self.chatbot_workspace = Path(__file__).parent.parent.parent / "chatbot_workspace"
         self.chatbot_workspace.mkdir(exist_ok=True)
 
-    async def start(self, system_prompt=None, resume_session_id=None):
+    async def start(self, system_prompt=None):
         """Claude Code 프로세스 시작"""
         if self.process is not None:
             logger.warning("Claude Code process already running")
@@ -32,9 +33,6 @@ class ClaudeCodeHandler:
                 "--output-format", "stream-json",
                 "--setting-sources", "user,local"  # chatbot_workspace/CLAUDE.md만 읽기 (project 제외)
             ]
-
-            if resume_session_id:
-                args.extend(["--resume", str(resume_session_id)])
 
             # System prompt 추가
             if system_prompt:
@@ -67,8 +65,9 @@ class ClaudeCodeHandler:
             logger.warning("Claude Code process killed (timeout)")
         finally:
             self.process = None
+            self.session_id = None
 
-    async def send_message(self, prompt, system_prompt=None, callback=None, session_id=None):
+    async def send_message(self, prompt, system_prompt=None, callback=None):
         """
         Claude Code에 메시지 전송 및 스트리밍 응답 수신
 
@@ -76,13 +75,12 @@ class ClaudeCodeHandler:
             prompt: 전송할 프롬프트
             system_prompt: 시스템 프롬프트 (캐릭터 설정 등)
             callback: 각 JSON 라인을 받을 때 호출될 async 콜백 함수
-            session_id: 이어서 사용할 세션 ID (있다면 --resume으로 전달)
 
         Returns:
             최종 결과 딕셔너리
         """
         if self.process is None:
-            await self.start(system_prompt, resume_session_id=session_id)
+            await self.start(system_prompt)
 
         try:
             # 프롬프트 전송
@@ -94,7 +92,6 @@ class ClaudeCodeHandler:
             # 응답 수신 (스트리밍)
             result = None
             assistant_message = ""
-            current_session_id = session_id
 
             # stderr를 비동기로 읽어서 버퍼 막힘 방지
             async def read_stderr():
@@ -122,9 +119,9 @@ class ClaudeCodeHandler:
                             data = json.loads(line.decode('utf-8').strip())
 
                             # 세션 ID 저장
-                            if 'session_id' in data:
-                                current_session_id = data['session_id']
-                                logger.info(f"Session ID: {current_session_id}")
+                            if 'session_id' in data and self.session_id is None:
+                                self.session_id = data['session_id']
+                                logger.info(f"Session ID: {self.session_id}")
 
                             # 콜백 호출
                             if callback:
@@ -184,8 +181,7 @@ class ClaudeCodeHandler:
                 "success": True,
                 "message": assistant_message,
                 "result": result,
-                "token_info": token_info,
-                "session_id": current_session_id
+                "token_info": token_info
             }
 
         except Exception as e:
@@ -193,6 +189,5 @@ class ClaudeCodeHandler:
             await self.stop()
             return {
                 "success": False,
-                "error": str(e),
-                "session_id": session_id
+                "error": str(e)
             }
