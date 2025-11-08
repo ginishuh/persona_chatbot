@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile.full
     user: "${UID:-1000}:${GID:-1000}"
     container_name: persona_chatbot_server
+    restart: unless-stopped
     ports:
       - "127.0.0.1:${WS_PORT:-8765}:8765"  # WebSocket (로컬 전용)
       - "127.0.0.1:${HTTP_PORT:-9000}:9000"  # HTTP (로컬 전용)
