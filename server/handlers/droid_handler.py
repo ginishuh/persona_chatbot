@@ -21,13 +21,15 @@ class DroidHandler:
         # 콤마로 구분된 폴백 모델 목록 (예: "glm-4.6,glm-4")
         self.fallback_models = [m.strip() for m in os.getenv("DROID_FALLBACK_MODELS", "").split(",") if m.strip()]
         self.auto_level = os.getenv("DROID_AUTO", "low")
+        # 컨테이너 환경(비상호작용)에서는 권한 확인이 block되므로 옵션으로 건너뛰기 허용
+        self.skip_permissions_unsafe = os.getenv("DROID_SKIP_PERMISSIONS_UNSAFE", "false").lower() in ("1", "true", "yes", "on")
         # 실행 방식: exec | direct | auto
         # Factory 공식 권장은 headless `droid exec` 경로
         self.exec_style = os.getenv("DROID_EXEC_STYLE", "exec").lower()
         self.extra_args = [a for a in os.getenv("DROID_EXTRA_ARGS", "").split() if a]
         # 읽기 타임아웃(초) 및 첫 토큰 타임아웃(초)
         self.read_timeout = float(os.getenv("DROID_READ_TIMEOUT", "120"))
-        self.first_token_timeout = float(os.getenv("DROID_FIRST_TOKEN_TIMEOUT", "30"))
+        self.first_token_timeout = float(os.getenv("DROID_FIRST_TOKEN_TIMEOUT", "60"))
 
         self.process = None
         self.session_id = None
@@ -54,10 +56,22 @@ class DroidHandler:
             args = [
                 self.droid_path,
                 "exec",
-                "--output-format", "stream-json",  # 라인 단위 JSON 스트림 (공식 문서)
-                "--auto", self.auto_level,
-                "--model", use_model,
             ]
+
+            if not self.skip_permissions_unsafe:
+                args.extend(["--output-format", "stream-json"])  # JSON 스트림 모드
+            else:
+                logger.info("Droid skip-permissions 모드: text 출력 사용")
+
+            if self.skip_permissions_unsafe:
+                args.append("--skip-permissions-unsafe")
+                logger.info("Droid executes with --skip-permissions-unsafe (비상호작용 환경)")
+            else:
+                args.extend(["--auto", self.auto_level])
+
+            args.extend(["--model", use_model])
+            logger.info(f"Droid command args: {args}")
+            logger.info(f"Droid working directory: {self.chatbot_workspace}")
 
             # 기존 세션 이어가기
             if self.session_id:
@@ -84,13 +98,23 @@ class DroidHandler:
             return
 
         try:
-            self.process.terminate()
-            await asyncio.wait_for(self.process.wait(), timeout=5.0)
-            logger.info("Droid process stopped")
-        except asyncio.TimeoutError:
-            self.process.kill()
-            await self.process.wait()
-            logger.warning("Droid process killed (timeout)")
+            # Check if process has already terminated
+            if self.process.returncode is None:
+                self.process.terminate()
+                await asyncio.wait_for(self.process.wait(), timeout=5.0)
+                logger.info("Droid process stopped")
+            else:
+                logger.info("Droid process already stopped")
+        except (ProcessLookupError, asyncio.TimeoutError) as e:
+            if isinstance(e, asyncio.TimeoutError):
+                try:
+                    self.process.kill()
+                    await self.process.wait()
+                    logger.warning("Droid process killed (timeout)")
+                except ProcessLookupError:
+                    logger.info("Droid process already gone")
+            else:
+                logger.info("Droid process already gone")
         finally:
             self.process = None
             self.session_id = None
@@ -107,6 +131,8 @@ class DroidHandler:
         Returns:
             최종 결과 딕셔너리
         """
+        logger.info(f"Starting Droid send_message with prompt: {prompt[:100]}...")
+        
         async def _invoke_once(model_for_try: str | None):
             """단일 모델로 한 번 호출 수행.
 
@@ -117,6 +143,33 @@ class DroidHandler:
 
             # stderr 수집 버퍼
             stderr_buffer: list[str] = []
+            
+            # ANSI escape 코드 제거를 위한 함수
+            import re
+            ansi_escape = re.compile(r'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\[?25[lh])')
+            
+            def remove_ansi_escape(text):
+                # 더 포괄적인 ANSI escape 시퀀스 제거
+                import re
+                # ESC로 시작하는 모든 ANSI 시퀀스 제거
+                text = re.sub(r'\x1b\[[0-9;]*m', '', text)  # 색상 코드
+                text = re.sub(r'\x1b\[[0-9]*;?[0-9]*[A-Za-z]', '', text)  # 커서 이동 등
+                text = re.sub(r'\x1b\[@-Z\\-_]', '', text)  # 기타 제어 문자
+                text = re.sub(r'\x1b\[?[0-9]*[A-Za-z]', '', text)  # 간단한 형식
+                return text
+
+            def is_noise_text(text: str) -> bool:
+                """Droid CLI 자동 업데이트 메시지 등 사용자에게 불필요한 출력 여부"""
+                noise_phrases = [
+                    "Downloading update...",
+                    "Auto-update failed",
+                    "Please update manually",
+                    "curl -fsSL https://app.factory.ai/cli | sh",
+                ]
+                stripped = text.strip()
+                if not stripped:
+                    return True
+                return any(phrase in stripped for phrase in noise_phrases)
 
             async def read_stderr():
                 while True:
@@ -145,9 +198,11 @@ class DroidHandler:
 
                 # 프롬프트 전송
                 prompt_with_newline = full_prompt + "\n"
+                logger.info(f"Sending prompt to Droid (length: {len(prompt_with_newline)})")
                 self.process.stdin.write(prompt_with_newline.encode('utf-8'))
                 await self.process.stdin.drain()
                 self.process.stdin.close()  # stdin 닫기 (중요!)
+                logger.info("Prompt sent to Droid, stdin closed")
 
                 assistant_message = ""
                 stderr_task = asyncio.create_task(read_stderr())
@@ -158,6 +213,7 @@ class DroidHandler:
                 error_payload = None
 
                 try:
+                    # Read all remaining output after stdin is closed
                     while True:
                         try:
                             line = await asyncio.wait_for(
@@ -166,20 +222,24 @@ class DroidHandler:
                             )
 
                             if not line:
+                                # No more output, break the loop
                                 break
 
                             raw = line.decode('utf-8').strip()
+                            logger.debug(f"Droid raw output: {raw}")
                             try:
                                 data = json.loads(raw)
                             except json.JSONDecodeError:
                                 # JSON이 아닐 경우에도 토큰으로 취급(유연 파싱)
                                 if raw:
-                                    if callback:
-                                        await callback({
-                                            "type": "content_block_delta",
-                                            "delta": {"text": raw}
-                                        })
-                                    assistant_message += raw
+                                    clean_text = remove_ansi_escape(raw)
+                                    if not is_noise_text(clean_text):
+                                        if callback:
+                                            await callback({
+                                                "type": "content_block_delta",
+                                                "delta": {"text": clean_text}
+                                            })
+                                        assistant_message += clean_text
                                 logger.debug(f"Droid non-JSON output: {raw}")
                                 continue
 
@@ -209,9 +269,10 @@ class DroidHandler:
                             # 1) 기존 가정 형식
                             if data.get('type') == 'message' and (data.get('role') in ('assistant', 'bot', None)):
                                 if isinstance(data.get('text'), str):
-                                    text_chunks.append(data.get('text'))
+                                    text_chunks.append(remove_ansi_escape(data.get('text')))
                                 if isinstance(data.get('content'), str):
-                                    text_chunks.append(data.get('content'))
+                                    text_chunks.append(remove_ansi_escape(data.get('content')))
+                                
 
                             # 2) Claude 유사 형식
                             if data.get('type') == 'assistant':
@@ -219,18 +280,18 @@ class DroidHandler:
                                 content_items = message_obj.get('content', [])
                                 for item in content_items:
                                     if isinstance(item, dict) and item.get('type') == 'text' and isinstance(item.get('text'), str):
-                                        text_chunks.append(item.get('text'))
+                                        text_chunks.append(remove_ansi_escape(item.get('text')))
 
                             # 3) 일반적인 델타 키들
                             if isinstance(data.get('delta'), str):
-                                text_chunks.append(data.get('delta'))
+                                text_chunks.append(remove_ansi_escape(data.get('delta')))
                             if isinstance(data.get('token'), str):
-                                text_chunks.append(data.get('token'))
+                                text_chunks.append(remove_ansi_escape(data.get('token')))
 
                             if text_chunks:
                                 response_started = True
                                 for chunk in text_chunks:
-                                    if chunk:
+                                    if chunk and not is_noise_text(chunk):
                                         if callback:
                                             await callback({
                                                 "type": "content_block_delta",
@@ -238,10 +299,15 @@ class DroidHandler:
                                             })
                                         assistant_message += chunk
 
-                            # 응답 완료 감지
-                            if data.get('type') in ('response_complete', 'result'):
-                                logger.info("Droid response complete")
-                                break
+                            # 응답 완료 감지 - droid doesn't send explicit completion messages
+                            # if data.get('type') in ('response_complete', 'result'):
+                            #     logger.info("Droid response complete")
+                            #     break
+                                
+                            # tool_result 에러는 무시하고 계속 진행
+                            if data.get('type') == 'tool_result' and data.get('isError') == True:
+                                logger.warning(f"Droid tool error (ignoring): {data.get('value')}")
+                                continue
 
                             # 첫 토큰 타임아웃 체크
                             if not response_started and asyncio.get_event_loop().time() > first_token_deadline:

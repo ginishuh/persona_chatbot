@@ -66,7 +66,7 @@ Claude Code를 활용한 웹 기반 멀티 캐릭터 대화 및 서사 관리 �
 - **설치**: `npm install -g @anthropic-ai/claude-code`
 
 #### 2. Gemini (Google)
-- **인증**: OAuth (`~/.config/gemini/oauth_creds.json`) 또는 API 키 (`GEMINI_API_KEY`)
+- **인증**: OAuth (`~/.config/gemini/oauth_creds.json`)  ← API 키 미지원
 - **모델**: Gemini 2.5 Pro
 - **무료 할당량**: 60 requests/min, 1,000 requests/day
 - **상태**: ✅ 완벽 지원
@@ -97,10 +97,8 @@ Claude Code를 활용한 웹 기반 멀티 캐릭터 대화 및 서사 관리 �
 # Claude Code 인증 확인
 claude auth login
 
-# Gemini CLI 인증 (OAuth 또는 API 키)
-gemini auth login  # OAuth
-# 또는
-export GEMINI_API_KEY="your-api-key"  # API 키
+# Gemini CLI 인증 (OAuth)
+gemini auth login
 
 # Droid CLI 인증
 droid auth login
@@ -246,8 +244,8 @@ persona_chatbot/
 ├── STORIES/                     # 서사 파일 저장 디렉토리
 ├── venv/                        # Python 가상환경
 ├── requirements.txt             # Python 의존성
-├── Dockerfile.test              # Docker 이미지 (테스트용)
-├── docker-compose.test.yml      # Docker Compose 설정
+├── Dockerfile.test              # Node + Python 통합 Docker 이미지 (선택)
+├── docker-compose.yml           # 기본 Docker Compose 설정
 ├── test_auth.sh                 # Docker 인증 테스트 스크립트
 ├── test_websocket.py            # WebSocket 테스트 스크립트
 ├── CLAUDE.md                    # 개발용 지침 (한국어 사용 규칙)
@@ -689,37 +687,45 @@ Docker 컨테이너로 실행할 수 있습니다. 볼륨 마운트 방식으로
 
 ```bash
 # 컨테이너 빌드 및 실행
-docker compose -f docker-compose.test.yml up -d
+docker compose up -d
 
 # 로그 확인
-docker compose -f docker-compose.test.yml logs -f
+docker compose logs -f
 
 # 컨테이너 중지
-docker compose -f docker-compose.test.yml down
+docker compose down
 ```
+
+> **기본 docker-compose.yml 사용 시 참고**  
+> - 기본 Python 기반 이미지에도 Droid CLI가 포함되므로, `.env`에 `FACTORY_API_KEY=sk-...` 형식으로 키만 지정해도 컨테이너에서 바로 Droid 메시지를 보낼 수 있습니다.  
+> - 커스텀 모델을 사용할 경우 호스트의 `~/.factory` 폴더를 그대로 마운트하도록 구성되어 있으니, `config.json` 안의 `custom_models` 항목이 컨테이너에서도 동일하게 적용됩니다.  
+> - 비상호작용 환경에서 Droid CLI가 권한 승인을 못 받아 멈추는 문제를 막기 위해 `DROID_SKIP_PERMISSIONS_UNSAFE=1`을 기본값으로 설정했습니다 (컨테이너 내부 한정).  
+> - `FACTORY_API_KEY` 값은 `~/.factory/config.json`의 `custom_models` 배열에 있는 `api_key`를 복사하면 됩니다. 예: `FACTORY_API_KEY=$(jq -r '.custom_models[0].api_key' ~/.factory/config.json)`.  
+> - 컨테이너에서는 `FACTORY_AUTO_UPDATE=0`으로 자동 업데이트를 끄고, 대신 최신 Droid CLI를 설치하려면 `docker exec -u root persona_chatbot_server sh -c "curl -fsSL https://app.factory.ai/cli | sh && cp /root/.local/bin/droid /usr/local/bin/droid"` 명령을 한 번 실행해 주세요.  
+> - 만약 포트 충돌 또는 네트워크 잔여물이 생기면 `docker compose down --remove-orphans && docker compose up -d`로 정리한 뒤 재실행하세요.
+> - 기본 compose는 `Dockerfile.test`를 사용하므로 Node 22 + Python 3.11 + 3개 AI CLI가 모두 포함된 단일 컨테이너가 뜹니다.
 
 ### Docker 구성
 
-- **Dockerfile.test**: Node.js 22 + Python 3.11 + 3개 AI CLI
+- **Dockerfile.test**: Node.js 22 + Python 3.11 + 3개 AI CLI (수동 빌드용)
   - Claude Code CLI: `npm install -g @anthropic-ai/claude-code`
   - Droid CLI: `curl -fsSL https://app.factory.ai/cli | sh`
   - Gemini CLI: `npm install -g @google/gemini-cli`
-- **docker-compose.test.yml**: 서비스 설정
+- **docker-compose.yml**: Dockerfile.test 기반 WebSocket/HTTP 통합 서비스
   - 포트: 8765 (WebSocket), 9000 (HTTP)
-  - 볼륨 마운트: `~/.claude` (Claude 인증 정보)
+  - 볼륨 마운트: `./STORIES`, `./server`, `./web`, `./persona_data`, `./chatbot_workspace`, `${HOME}/.factory:/home/node/.factory`, `${HOME}/.claude:/home/node/.claude`, `${HOME}/.config/gemini:/home/node/.config/gemini`
   - 환경 변수:
-    - `CLAUDE_PATH=claude`
-    - `DROID_PATH=droid`
-    - `GEMINI_PATH=gemini`
-    - `FACTORY_API_KEY=${FACTORY_API_KEY}` (선택)
-    - `GEMINI_API_KEY=${GEMINI_API_KEY}` (선택, API 키 방식 사용 시)
-  - 사용자 권한: 호스트 UID/GID로 실행 (파일 권한 문제 방지)
+    - `PYTHONUNBUFFERED=1`
+    - `CLAUDE_PATH=claude`, `DROID_PATH=droid`, `GEMINI_PATH=gemini`
+    - `FACTORY_API_KEY` (선택)
+    - `DROID_SKIP_PERMISSIONS_UNSAFE=1`
+  - 컨테이너 사용자: `${UID:-1000}:${GID:-1000}` (파일 권한 문제 방지), `stdin_open`/`tty` 활성화
 
 ### 주의사항
 
-- **Claude**: 호스트에서 `claude auth login` 완료 필요, `~/.claude` 디렉토리 공유
-- **Gemini**: OAuth 또는 `GEMINI_API_KEY` 환경 변수
-- **Droid**: OAuth 또는 `FACTORY_API_KEY` 환경 변수, `~/.factory/config.json`에서 모델 설정
+- **Claude**: 호스트에서 `claude auth login` 완료 후 필요 시 `docker-compose.yml`에 `~/.claude` 볼륨을 직접 추가
+- **Gemini**: OAuth 인증만 지원 (`gemini auth login` 후 `~/.config/gemini` 공유 필요 시 직접 추가)
+- **Droid**: `FACTORY_API_KEY` 환경 변수 또는 `~/.factory/config.json` 커스텀 모델 설정 마운트 필수
 - 컨테이너는 `chatbot_workspace/CLAUDE.md`를 읽어서 성인 콘텐츠 지침 적용
 - 사용하지 않는 AI CLI는 설치하지 않아도 됨 (최소 1개 이상 필요)
 
@@ -848,7 +854,7 @@ test_*.sh, test_*.py          # 테스트 스크립트
 ✅ web/                        # 프론트엔드 (필수)
 ✅ chatbot_workspace/CLAUDE.md # 챗봇 지침 (필수)
 ✅ requirements.txt            # Python 의존성 목록
-✅ docker-compose.test.yml     # Docker 설정
+✅ docker-compose.yml          # Docker 설정
 ✅ Dockerfile.test             # Docker 빌드 스크립트
 ```
 
@@ -898,13 +904,13 @@ cp -r chatbot_workspace chatbot_workspace.backup
 
 ```bash
 # 컨테이너 삭제 (데이터는 호스트에 유지됨)
-docker compose -f docker-compose.test.yml down
+docker compose down
 
 # 이미지 재빌드
-docker compose -f docker-compose.test.yml build
+docker compose build
 
 # 컨테이너 재시작 (기존 데이터 자동 마운트)
-docker compose -f docker-compose.test.yml up -d
+docker compose up -d
 ```
 
 ### Docker vs 로컬 실행 비교

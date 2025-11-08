@@ -2,8 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Git 설치 (git 명령어 사용을 위해)
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# Git 및 CLI 설치 도구 준비
+RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*
+
+# Droid CLI 설치 (컨테이너 내부에서 Factory.ai 호출 지원)
+RUN curl -fsSL https://app.factory.ai/cli | sh && \
+    cp /root/.local/bin/droid /usr/local/bin/droid && \
+    chmod 755 /usr/local/bin/droid
 
 # Python 의존성 설치
 COPY requirements.txt .

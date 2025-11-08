@@ -1,16 +1,29 @@
 services:
-  websocket-server:
-    build: .
+  persona-chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    user: "${UID:-1000}:${GID:-1000}"
     container_name: persona_chatbot_server
     ports:
       - "${WS_PORT:-8765}:8765"  # WebSocket (기본값: 8765)
-      - "${HTTP_PORT:-8888}:8000"  # HTTP (기본값: 8888)
+      - "${HTTP_PORT:-9000}:9000"  # HTTP (기본값: 9000)
     volumes:
       - ./STORIES:/app/STORIES  # 서사 파일 마운트
       - ./server:/app/server    # 개발 중 코드 수정 반영
       - ./web:/app/web          # 개발 중 웹 파일 수정 반영
+      - ./persona_data:/app/persona_data  # 프리셋/워크스페이스 공유
+      - ./chatbot_workspace:/app/chatbot_workspace  # CLAUDE 지침/작업 폴더 공유
+      - ${HOME}/.factory:/home/node/.factory     # Droid 커스텀 모델/인증 정보
+      - ${HOME}/.claude:/home/node/.claude       # Claude OAuth 인증 정보 (선택)
+      - ${HOME}/.config/gemini:/home/node/.config/gemini # Gemini OAuth 인증 정보 (선택)
     environment:
       - PYTHONUNBUFFERED=1
-      - WS_PORT=${WS_PORT:-8765}
-      - HTTP_PORT=${HTTP_PORT:-3000}
-    restart: unless-stopped
+      - CLAUDE_PATH=claude
+      - DROID_PATH=droid
+      - GEMINI_PATH=gemini
+      - FACTORY_API_KEY=${FACTORY_API_KEY:-}
+      - DROID_SKIP_PERMISSIONS_UNSAFE=1
+      - FACTORY_AUTO_UPDATE=0
+    stdin_open: true
+    tty: true
