@@ -131,7 +131,7 @@ class DroidHandler:
             최종 결과 딕셔너리
         """
         logger.info(f"Starting Droid send_message with prompt: {prompt[:100]}...")
-        latest_session_id = session_id
+        latest_session_id: str | None = session_id
         
         async def _invoke_once(model_for_try: str | None, session_id_for_try: str | None):
             """단일 모델로 한 번 호출 수행.
@@ -366,17 +366,20 @@ class DroidHandler:
                     }
 
             # 실패 최종 반환
+            logger.warning(f"All Droid attempts failed (last session_id={latest_session_id})")
+            fallback_session_id = None if latest_session_id == session_id else latest_session_id
             return {
                 "success": False,
                 "error": err or {"type": "unknown"},
-                "session_id": latest_session_id
+                "session_id": fallback_session_id
             }
 
         except Exception as e:
             logger.error(f"Error sending message: {e}")
             await self.stop()
+            fallback_session_id = None if latest_session_id == session_id else latest_session_id
             return {
                 "success": False,
                 "error": str(e),
-                "session_id": latest_session_id
+                "session_id": fallback_session_id
             }

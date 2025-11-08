@@ -305,7 +305,7 @@ async def handle_message(websocket, message):
                 else:
                     new_limit = int(requested)
                     if new_limit < 5 or new_limit > 1000:
-                        raise ValueError("range")
+                        raise ValueError(f"맥락 길이는 5~1000 사이여야 합니다 (입력값: {new_limit})")
 
                 history_handler.set_max_turns(new_limit)
                 await websocket.send(json.dumps({
