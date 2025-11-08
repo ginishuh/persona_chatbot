@@ -143,6 +143,7 @@ curl -fsSL https://app.factory.ai/cli | sh
 3. 필요 시 이 저장소 안에 프리셋/스토리/환경 파일을 추가하고, 본 레포와는 별도로 버전 관리한다.
 4. 다른 이름으로 클론했다면 반드시 폴더명을 `persona_data`로 바꿔 주세요. `workspace_handler`가 고정 경로(`persona_data/`)만 참조합니다.
 5. 원격 백업을 원하지 않는다면, 최소한 로컬 Git 레포로 만들어 두고 `.gitignore` 적용 범위를 확인해 민감 정보가 루트 레포에 커밋되지 않도록 합니다.
+6. 헤더의 **🔄 동기화** 버튼은 항상 이 `persona_data` 레포에서 `git add/commit/push`를 수행합니다. 다른 저장소를 푸시하려면 `persona_data/.git/config`의 remote 설정만 바꿔 주면 됩니다.
 
 ### 3. 실행
 
