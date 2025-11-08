@@ -680,6 +680,22 @@ claude auth login
 
 향후 Claude API를 사용하면 이 문제가 해결될 수 있습니다.
 
+### 챗봇 지침 파일 관리
+
+`chatbot_workspace/` 디렉터리에는 각 AI CLI가 참조하는 지침 파일이 있습니다.
+
+- `CLAUDE.md` → Claude Code CLI와 Droid CLI가 공통으로 읽는 지침.
+- `GEMINI.md` → Gemini CLI 전용 지침.
+
+레포에는 `CLAUDE.sample.md`, `GEMINI.sample.md`가 포함되어 있으므로, 최초 실행 전에 다음과 같이 복사해 원하는 규칙을 작성하세요.
+
+```bash
+cp chatbot_workspace/CLAUDE.sample.md chatbot_workspace/CLAUDE.md
+cp chatbot_workspace/GEMINI.sample.md chatbot_workspace/GEMINI.md
+```
+
+이 두 파일은 `.gitignore`에 포함되어 있어 로컬에서 자유롭게 수정해도 Git에 영향을 주지 않습니다.
+
 ## Docker 지원
 
 Docker 컨테이너로 실행할 수 있습니다. 볼륨 마운트 방식으로 호스트의 AI CLI 인증 정보를 사용합니다.
