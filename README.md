@@ -720,6 +720,7 @@ docker compose down
     - `FACTORY_API_KEY` (선택)
     - `DROID_SKIP_PERMISSIONS_UNSAFE=1`
     - `APP_LOGIN_PASSWORD`, `APP_JWT_SECRET`, `APP_JWT_TTL`, `APP_PUBLIC_WS_URL`
+    - `FACTORY_AUTH_DIR`, `CLAUDE_AUTH_DIR`, `GEMINI_AUTH_DIR` (호스트 인증 폴더 위치)
   - 컨테이너 사용자: `${UID:-1000}:${GID:-1000}` (파일 권한 문제 방지), `stdin_open`/`tty` 활성화
 
 ### 주의사항
