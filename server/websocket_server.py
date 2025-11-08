@@ -37,10 +37,12 @@ LOGIN_REQUIRED = bool(LOGIN_PASSWORD)
 JWT_SECRET = os.getenv("APP_JWT_SECRET", "")
 JWT_ALGORITHM = os.getenv("APP_JWT_ALGORITHM", "HS256")
 JWT_TTL_SECONDS = int(os.getenv("APP_JWT_TTL", "604800"))
+LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("APP_LOGIN_MAX_ATTEMPTS", "5"))
+LOGIN_RATE_LIMIT_WINDOW = timedelta(minutes=int(os.getenv("APP_LOGIN_LOCK_MINUTES", "15")))
+TOKEN_EXPIRED_GRACE = timedelta(minutes=int(os.getenv("APP_JWT_GRACE_MINUTES", "60")))
 
 if LOGIN_REQUIRED and not JWT_SECRET:
-    JWT_SECRET = secrets.token_hex(32)
-    logger.warning("APP_JWT_SECRET not set; generated ephemeral secret. Tokens reset on restart.")
+    raise RuntimeError("APP_JWT_SECRET must be set when APP_LOGIN_PASSWORD is enabled")
 
 file_handler = FileHandler()
 git_handler = GitHandler()
@@ -54,18 +56,21 @@ mode_handler = ModeHandler(project_root=str(project_root))
 
 # 연결된 클라이언트들
 connected_clients = set()
+login_attempts = {}
 
 def issue_token():
     """JWT 발급"""
     if not JWT_SECRET:
-        return None
+        return None, None
     now = datetime.utcnow()
+    exp = now + timedelta(seconds=JWT_TTL_SECONDS)
     payload = {
         "sub": "persona_chat_user",
         "iat": now,
-        "exp": now + timedelta(seconds=JWT_TTL_SECONDS)
+        "exp": exp
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return token, exp.isoformat() + "Z"
 
 
 def verify_token(token):
@@ -99,36 +104,72 @@ async def handle_login_action(websocket, data):
         }))
         return
 
+    client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
+    now = datetime.utcnow()
+    attempts = login_attempts.setdefault(client_ip, [])
+    attempts[:] = [(ts, success) for ts, success in attempts if now - ts < LOGIN_RATE_LIMIT_WINDOW]
+    recent_failures = sum(1 for ts, success in attempts if not success)
+
+    if recent_failures >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
+        await websocket.send(json.dumps({
+            "action": "login",
+            "data": {"success": False, "error": "로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.", "code": "rate_limited"}
+        }))
+        return
+
+    def record_attempt(success: bool):
+        attempts.append((datetime.utcnow(), success))
+
     token = data.get("token")
     password = data.get("password", "")
 
     if token:
-        _, error = verify_token(token)
+        payload, error = verify_token(token)
         if error:
+            if error == "token_expired":
+                try:
+                    unverified = jwt.decode(token, options={"verify_signature": False, "verify_exp": False})
+                    exp = datetime.fromtimestamp(unverified.get("exp"))
+                    if datetime.utcnow() - exp < TOKEN_EXPIRED_GRACE:
+                        new_token, expires_at = issue_token()
+                        await websocket.send(json.dumps({
+                            "action": "login",
+                            "data": {"success": True, "token": new_token, "expires_at": expires_at, "renewed": True}
+                        }))
+                        record_attempt(True)
+                        return
+                except Exception:
+                    pass
+
             await websocket.send(json.dumps({
                 "action": "login",
                 "data": {"success": False, "error": "토큰이 유효하지 않습니다.", "code": error}
             }))
+            record_attempt(False)
             return
 
+        new_token, expires_at = issue_token()
         await websocket.send(json.dumps({
             "action": "login",
-            "data": {"success": True, "token": token}
+            "data": {"success": True, "token": new_token, "expires_at": expires_at, "renewed": True}
         }))
+        record_attempt(True)
         return
 
     if password and password == LOGIN_PASSWORD:
-        issued = issue_token()
+        issued, expires_at = issue_token()
         await websocket.send(json.dumps({
             "action": "login",
-            "data": {"success": True, "token": issued}
+            "data": {"success": True, "token": issued, "expires_at": expires_at, "renewed": False}
         }))
+        record_attempt(True)
         return
 
     await websocket.send(json.dumps({
         "action": "login",
         "data": {"success": False, "error": "비밀번호가 일치하지 않습니다.", "code": "invalid_password"}
     }))
+    record_attempt(False)
 
 
 async def handle_message(websocket, message):
@@ -458,12 +499,31 @@ def run_http_server():
     web_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
     os.chdir(web_dir)
 
+    app_config = {
+        "ws_url": os.getenv("APP_PUBLIC_WS_URL", ""),
+        "ws_port": int(os.getenv("WS_PORT", "8765")),
+        "login_required": LOGIN_REQUIRED
+    }
+
     class CustomHandler(SimpleHTTPRequestHandler):
         def log_message(self, format, *args):
             logger.info(f"HTTP: {format % args}")
 
-    with TCPServer(("0.0.0.0", 9000), CustomHandler) as httpd:
-        logger.info("HTTP server started on port 9000")
+        def do_GET(self):
+            if self.path == "/app-config.json":
+                payload = json.dumps(app_config).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            return super().do_GET()
+
+    http_port = int(os.getenv("HTTP_PORT", "9000"))
+    with TCPServer(("127.0.0.1", http_port), CustomHandler) as httpd:
+        logger.info(f"HTTP server started on port {http_port}")
         httpd.serve_forever()
 
 
@@ -476,8 +536,9 @@ async def main():
     http_thread.start()
 
     # WebSocket 서버 시작
-    async with websockets.serve(websocket_handler, "0.0.0.0", 8765):
-        logger.info("WebSocket server started on port 8765")
+    ws_port = int(os.getenv("WS_PORT", "8765"))
+    async with websockets.serve(websocket_handler, "127.0.0.1", ws_port):
+        logger.info(f"WebSocket server started on port {ws_port}")
         logger.info("Server is ready!")
         await asyncio.Future()  # 계속 실행
 
