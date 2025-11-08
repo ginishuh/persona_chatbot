@@ -657,9 +657,10 @@ claude auth login
 - [x] Docker 지원 (볼륨 마운트 방식)
 - [x] 효과음 자동 줄바꿈 처리
 - [x] 멀티 AI 제공자 지원 (Claude, Droid, Gemini)
+- [x] 캐릭터 프리셋 저장 및 관리
+- [x] 간단 로그인 + JWT 세션 갱신
 - [ ] Claude API 연동 (현재는 CLI만 지원)
 - [ ] 대화 히스토리 영구 저장
-- [ ] 캐릭터 프리셋 저장 및 관리
 - [ ] 다중 컨텍스트 프로필 (세이브 슬롯)
 - [ ] 캐릭터 아바타/이미지 지원
 - [ ] 음성 출력 (TTS) 연동
@@ -696,14 +697,12 @@ docker compose logs -f
 docker compose down
 ```
 
-> **기본 docker-compose.yml 사용 시 참고**  
-> - 기본 Python 기반 이미지에도 Droid CLI가 포함되므로, `.env`에 `FACTORY_API_KEY=sk-...` 형식으로 키만 지정해도 컨테이너에서 바로 Droid 메시지를 보낼 수 있습니다.  
-> - 커스텀 모델을 사용할 경우 호스트의 `~/.factory` 폴더를 그대로 마운트하도록 구성되어 있으니, `config.json` 안의 `custom_models` 항목이 컨테이너에서도 동일하게 적용됩니다.  
-> - 비상호작용 환경에서 Droid CLI가 권한 승인을 못 받아 멈추는 문제를 막기 위해 `DROID_SKIP_PERMISSIONS_UNSAFE=1`을 기본값으로 설정했습니다 (컨테이너 내부 한정).  
-> - `FACTORY_API_KEY` 값은 `~/.factory/config.json`의 `custom_models` 배열에 있는 `api_key`를 복사하면 됩니다. 예: `FACTORY_API_KEY=$(jq -r '.custom_models[0].api_key' ~/.factory/config.json)`.  
-> - 컨테이너에서는 `FACTORY_AUTO_UPDATE=0`으로 자동 업데이트를 끄고, 대신 최신 Droid CLI를 설치하려면 `docker exec -u root persona_chatbot_server sh -c "curl -fsSL https://app.factory.ai/cli | sh && cp /root/.local/bin/droid /usr/local/bin/droid"` 명령을 한 번 실행해 주세요.  
-> - 만약 포트 충돌 또는 네트워크 잔여물이 생기면 `docker compose down --remove-orphans && docker compose up -d`로 정리한 뒤 재실행하세요.
-> - 기본 compose는 `Dockerfile.test`를 사용하므로 Node 22 + Python 3.11 + 3개 AI CLI가 모두 포함된 단일 컨테이너가 뜹니다.
+> **docker-compose 실행 시 참고**  
+> - 이미지에는 Claude/Gemini/Droid CLI가 모두 포함되어 있으며, `.env`에 `FACTORY_API_KEY`만 지정하면 바로 Droid 메시지를 보낼 수 있습니다.  
+> - 커스텀 모델이나 OAuth 인증 파일은 `FACTORY_AUTH_DIR` / `CLAUDE_AUTH_DIR` / `GEMINI_AUTH_DIR` 환경 변수로 절대 경로를 지정해 주세요.  
+> - 컨테이너는 127.0.0.1:9000(HTTP) / 127.0.0.1:8765(WS)에만 바인딩되므로 외부에 노출하려면 리버스 프록시(Nginx, Caddy 등)를 권장합니다.  
+> - Droid CLI는 `FACTORY_AUTO_UPDATE=0`으로 자동 업데이트를 비활성화했습니다. 새 버전이 필요하면 `docker exec -u root persona_chatbot_server sh -c "curl -fsSL https://app.factory.ai/cli | sh && cp /root/.local/bin/droid /usr/local/bin/droid"`을 실행해 갱신하세요.  
+> - 포트 충돌이나 오래된 네트워크 리소스가 생기면 `docker compose down --remove-orphans && docker compose up -d`로 정리 후 재기동하세요.
 
 ### Docker 구성
 
@@ -732,6 +731,7 @@ docker compose down
 - **보안 참고사항**:
   - 이 로그인 기능은 기본적인 접근 제어를 위한 것으로, 토큰이 `sessionStorage`에 저장되므로 XSS 공격에 취약할 수 있습니다.
   - 실 서비스 환경에서는 HTTPS/WSS 프록시와 추가 인증(예: HTTP Basic Auth, OAuth)을 권장합니다.
+  - `.env`의 `APP_LOGIN_MAX_ATTEMPTS` / `APP_LOGIN_LOCK_MINUTES` 값을 조정해 로그인 시도 제한을 강화할 수 있습니다.
   - 기본 포트는 127.0.0.1에만 바인딩되므로 외부에서 접근하려면 프록시나 포트 포워딩으로 공개해야 합니다.
 - 컨테이너는 `chatbot_workspace/CLAUDE.md`를 읽어서 성인 콘텐츠 지침 적용
 - 사용하지 않는 AI CLI는 설치하지 않아도 됨 (최소 1개 이상 필요)
