@@ -33,6 +33,9 @@ const aiProvider = document.getElementById('aiProvider');
 const adultLevel = document.getElementById('adultLevel');
 const narrativeSeparation = document.getElementById('narrativeSeparation');
 const saveContextBtn = document.getElementById('saveContextBtn');
+const historyLengthSlider = document.getElementById('historyLengthSlider');
+const historyLengthValue = document.getElementById('historyLengthValue');
+const historyUnlimitedToggle = document.getElementById('historyUnlimitedToggle');
 
 // 파일 관리 요소
 const worldSelect = document.getElementById('worldSelect');
@@ -55,6 +58,7 @@ const deletePresetBtn = document.getElementById('deletePresetBtn');
 const modeSwitchBtn = document.getElementById('modeSwitchBtn');
 const gitSyncBtn = document.getElementById('gitSyncBtn');
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+const resetSessionsBtn = document.getElementById('resetSessionsBtn');
 const tokenText = document.getElementById('tokenText');
 
 // 서사 패널 요소
@@ -82,6 +86,8 @@ let authTokenExpiresAt = '';
 let tokenRefreshTimeout = null;
 let refreshRetryCount = 0;
 const MAX_REFRESH_RETRIES = 3;
+const HISTORY_LIMIT_DEFAULT = 30;
+let currentHistoryLimit = HISTORY_LIMIT_DEFAULT;
 try {
     authToken = sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
     authTokenExpiresAt = sessionStorage.getItem(AUTH_EXP_KEY) || '';
@@ -215,6 +221,7 @@ function initializeAppData() {
 
     sendMessage({ action: 'get_context' });
     sendMessage({ action: 'get_narrative' });
+    sendMessage({ action: 'get_history_settings' });
 
     loadFileList('world', worldSelect);
     loadFileList('situation', situationSelect);
@@ -224,6 +231,78 @@ function initializeAppData() {
     checkGitStatus();
     checkModeStatus();
 }
+
+// ===== 맥락 길이 슬라이더 =====
+
+function formatHistoryLimitLabel(limit) {
+    return (limit === null || limit === undefined) ? '무제한' : `${limit}턴`;
+}
+
+function applyHistoryLimitUI(limit) {
+    const unlimited = limit === null || limit === undefined;
+    currentHistoryLimit = unlimited ? null : limit;
+
+    if (historyLengthSlider) {
+        if (!unlimited && typeof limit === 'number') {
+            historyLengthSlider.value = limit;
+        }
+        historyLengthSlider.disabled = unlimited;
+    }
+
+    if (historyUnlimitedToggle) {
+        historyUnlimitedToggle.checked = unlimited;
+    }
+
+    if (historyLengthValue) {
+        historyLengthValue.textContent = formatHistoryLimitLabel(limit);
+    }
+}
+
+function sendHistoryLimit(limit) {
+    sendMessage({
+        action: 'set_history_limit',
+        max_turns: limit
+    });
+}
+
+function setupHistoryControls() {
+    if (historyLengthValue && historyLengthSlider) {
+        historyLengthValue.textContent = formatHistoryLimitLabel(parseInt(historyLengthSlider.value, 10) || HISTORY_LIMIT_DEFAULT);
+    }
+
+    if (historyLengthSlider) {
+        historyLengthSlider.addEventListener('input', () => {
+            if (historyLengthValue && (!historyUnlimitedToggle || !historyUnlimitedToggle.checked)) {
+                const value = parseInt(historyLengthSlider.value, 10) || HISTORY_LIMIT_DEFAULT;
+                historyLengthValue.textContent = formatHistoryLimitLabel(value);
+            }
+        });
+
+        historyLengthSlider.addEventListener('change', () => {
+            if (historyUnlimitedToggle && historyUnlimitedToggle.checked) {
+                return;
+            }
+            const value = parseInt(historyLengthSlider.value, 10) || HISTORY_LIMIT_DEFAULT;
+            currentHistoryLimit = value;
+            sendHistoryLimit(value);
+        });
+    }
+
+    if (historyUnlimitedToggle) {
+        historyUnlimitedToggle.addEventListener('change', () => {
+            if (historyUnlimitedToggle.checked) {
+                applyHistoryLimitUI(null);
+                sendHistoryLimit(null);
+            } else {
+                const value = parseInt(historyLengthSlider?.value, 10) || HISTORY_LIMIT_DEFAULT;
+                applyHistoryLimitUI(value);
+                sendHistoryLimit(value);
+            }
+        });
+    }
+}
+
+setupHistoryControls();
 
 function scheduleTokenRefresh() {
     if (tokenRefreshTimeout) {
@@ -393,6 +472,31 @@ function handleMessage(msg) {
         case 'get_narrative':
             if (data.success) {
                 updateNarrative(data.markdown);
+            }
+            break;
+
+        case 'get_history_settings':
+            if (data.success) {
+                applyHistoryLimitUI(data.max_turns);
+            }
+            break;
+
+        case 'set_history_limit':
+            if (data.success) {
+                applyHistoryLimitUI(data.max_turns);
+                log(`맥락 길이가 ${formatHistoryLimitLabel(data.max_turns)}로 설정되었습니다.`, 'success');
+            } else {
+                const errorMsg = data.error || '맥락 길이 설정에 실패했습니다.';
+                log(errorMsg, 'error');
+                sendMessage({ action: 'get_history_settings' });
+            }
+            break;
+
+        case 'reset_sessions':
+            if (data.success) {
+                log(data.message || 'AI 세션이 초기화되었습니다.', 'success');
+            } else {
+                log(data.error || '세션 초기화에 실패했습니다.', 'error');
             }
             break;
 
@@ -1114,6 +1218,14 @@ clearHistoryBtn.addEventListener('click', () => {
         sendMessage({ action: 'clear_history' });
     }
 });
+
+if (resetSessionsBtn) {
+    resetSessionsBtn.addEventListener('click', () => {
+        if (confirm('현재 연결된 AI 세션을 모두 초기화하시겠습니까?')) {
+            sendMessage({ action: 'reset_sessions' });
+        }
+    });
+}
 
 // ===== 서사 관리 =====
 

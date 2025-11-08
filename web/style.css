@@ -243,6 +243,51 @@ header h1 {
     accent-color: #0e639c;
 }
 
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.slider-row input[type="range"] {
+    flex: 1;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: #3e3e42;
+    outline: none;
+}
+
+.slider-row input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #0e639c;
+    cursor: pointer;
+}
+
+.slider-row input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #0e639c;
+    border: none;
+    cursor: pointer;
+}
+
+.slider-value {
+    min-width: 48px;
+    text-align: right;
+    font-weight: 600;
+    color: #dcdcaa;
+}
+
+.slider-checkbox {
+    margin-top: 0.25rem;
+    font-size: 0.85rem;
+}
+
 .select-input {
     width: 100%;
     background: #1e1e1e;
