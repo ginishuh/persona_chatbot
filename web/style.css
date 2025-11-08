@@ -243,6 +243,76 @@ header h1 {
     accent-color: #0e639c;
 }
 
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.slider-row input[type="range"] {
+    flex: 1;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: #3e3e42;
+    outline: none;
+}
+
+.slider-row input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #0e639c;
+    cursor: pointer;
+}
+
+.slider-row input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #0e639c;
+    border: none;
+    cursor: pointer;
+}
+
+.slider-value {
+    min-width: 48px;
+    text-align: right;
+    font-weight: 600;
+    color: #dcdcaa;
+}
+
+.slider-checkbox {
+    margin-top: 0.25rem;
+    font-size: 0.85rem;
+}
+
+.session-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 42px;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: #3e3e42;
+    color: #d4d4d4;
+    border: 1px solid #555;
+}
+
+.session-status-badge.on {
+    background: #1b5e20;
+    border-color: #2e7d32;
+    color: #a5d6a7;
+}
+
+.checkbox-label.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
 .select-input {
     width: 100%;
     background: #1e1e1e;

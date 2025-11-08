@@ -32,12 +32,11 @@ class DroidHandler:
         self.first_token_timeout = float(os.getenv("DROID_FIRST_TOKEN_TIMEOUT", "60"))
 
         self.process = None
-        self.session_id = None
         # 챗봇 전용 작업 디렉토리 (chatbot_workspace/CLAUDE.md 읽기 위해)
         self.chatbot_workspace = Path(__file__).parent.parent.parent / "chatbot_workspace"
         self.chatbot_workspace.mkdir(exist_ok=True)
 
-    async def start(self, system_prompt=None, model: str | None = None, style: str | None = None):
+    async def start(self, system_prompt=None, model: str | None = None, style: str | None = None, session_id: str | None = None):
         """Droid 프로세스 시작
 
         Args:
@@ -74,8 +73,8 @@ class DroidHandler:
             logger.info(f"Droid working directory: {self.chatbot_workspace}")
 
             # 기존 세션 이어가기
-            if self.session_id:
-                args.extend(["--session-id", str(self.session_id)])
+            if session_id:
+                args.extend(["--session-id", str(session_id)])
 
             if self.extra_args:
                 args.extend(self.extra_args)
@@ -117,9 +116,8 @@ class DroidHandler:
                 logger.info("Droid process already gone")
         finally:
             self.process = None
-            self.session_id = None
 
-    async def send_message(self, prompt, system_prompt=None, callback=None):
+    async def send_message(self, prompt, system_prompt=None, callback=None, session_id: str | None = None):
         """
         Droid에 메시지 전송 및 스트리밍 응답 수신
 
@@ -127,17 +125,20 @@ class DroidHandler:
             prompt: 전송할 프롬프트
             system_prompt: 시스템 프롬프트 (캐릭터 설정 등) - 프롬프트에 포함됨
             callback: 각 JSON 라인을 받을 때 호출될 async 콜백 함수
+            session_id: 이어서 사용할 세션 ID
 
         Returns:
             최종 결과 딕셔너리
         """
         logger.info(f"Starting Droid send_message with prompt: {prompt[:100]}...")
+        latest_session_id: str | None = session_id
         
-        async def _invoke_once(model_for_try: str | None):
+        async def _invoke_once(model_for_try: str | None, session_id_for_try: str | None):
             """단일 모델로 한 번 호출 수행.
 
             Returns: (success: bool, assistant_message: str, error: dict|None)
             """
+            nonlocal latest_session_id
             # 실행 스타일 순서 결정
             styles = ["exec"]
 
@@ -189,7 +190,7 @@ class DroidHandler:
 
             for style in styles:
                 if self.process is None:
-                    await self.start(model=model_for_try, style=style)
+                    await self.start(model=model_for_try, style=style, session_id=session_id_for_try)
 
                 # System prompt를 프롬프트 앞에 추가
                 full_prompt = prompt
@@ -245,13 +246,15 @@ class DroidHandler:
 
                             # 세션 ID 저장 (init 메시지에서)
                             if data.get('type') == 'system' and data.get('subtype') == 'init':
-                                self.session_id = data.get('session_id')
-                                logger.info(f"Droid Session ID: {self.session_id}")
+                                new_session = data.get('session_id')
+                                if new_session:
+                                    latest_session_id = new_session
+                                    logger.info(f"Droid Session ID: {new_session}")
                                 if callback:
                                     await callback({
                                         "type": "system",
                                         "subtype": "droid_init",
-                                        "session_id": self.session_id
+                                        "session_id": new_session
                                     })
 
                             # 오류 이벤트 캐치 (가능 시)
@@ -345,32 +348,38 @@ class DroidHandler:
 
         try:
             # 1) 기본 모델 시도
-            ok, msg, err = await _invoke_once(self.primary_model)
+            ok, msg, err = await _invoke_once(self.primary_model, latest_session_id)
             if ok and msg:
-                return {"success": True, "message": msg, "token_info": None}
+                return {"success": True, "message": msg, "token_info": None, "session_id": latest_session_id}
 
             # 2) 폴백 모델 순차 시도
             for idx, fb_model in enumerate(self.fallback_models):
                 logger.warning(f"Retrying with fallback model {fb_model} (#{idx+1})")
-                ok, msg, err = await _invoke_once(fb_model)
+                ok, msg, err = await _invoke_once(fb_model, latest_session_id)
                 if ok and msg:
                     return {
                         "success": True,
                         "message": msg,
                         "token_info": None,
-                        "fallback_used": fb_model
+                        "fallback_used": fb_model,
+                        "session_id": latest_session_id
                     }
 
             # 실패 최종 반환
+            logger.warning(f"All Droid attempts failed (last session_id={latest_session_id})")
+            fallback_session_id = None if latest_session_id == session_id else latest_session_id
             return {
                 "success": False,
-                "error": err or {"type": "unknown"}
+                "error": err or {"type": "unknown"},
+                "session_id": fallback_session_id
             }
 
         except Exception as e:
             logger.error(f"Error sending message: {e}")
             await self.stop()
+            fallback_session_id = None if latest_session_id == session_id else latest_session_id
             return {
                 "success": False,
-                "error": str(e)
+                "error": str(e),
+                "session_id": fallback_session_id
             }

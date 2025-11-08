@@ -131,6 +131,20 @@ npm install -g @google/gemini-cli
 curl -fsSL https://app.factory.ai/cli | sh
 ```
 
+### 2-1. `persona_data` 프라이빗 레포 준비
+
+`persona_data/` 디렉터리는 사용자별 민감한 설정/스토리 데이터를 담으므로, **별도 비공개 저장소**로 관리하는 것을 권장합니다. 아래 절차대로 세팅하세요.
+
+1. GitHub(또는 선호하는 Git 호스팅)에서 새로운 **Private** 저장소를 만든다. 저장소 이름은 자유지만 **로컬에서는 폴더명을 `persona_data`로 유지**해야 합니다.
+2. `persona_chatbot`과 동일한 상위 경로에서 다음 명령으로 클론한다:
+   ```bash
+   git clone git@github.com:YOURNAME/YOUR-PRIVATE-REPO.git persona_data
+   ```
+3. 필요 시 이 저장소 안에 프리셋/스토리/환경 파일을 추가하고, 본 레포와는 별도로 버전 관리한다.
+4. 다른 이름으로 클론했다면 반드시 폴더명을 `persona_data`로 바꿔 주세요. `workspace_handler`가 고정 경로(`persona_data/`)만 참조합니다.
+5. 원격 백업을 원하지 않는다면, 최소한 로컬 Git 레포로 만들어 두고 `.gitignore` 적용 범위를 확인해 민감 정보가 루트 레포에 커밋되지 않도록 합니다.
+6. 헤더의 **🔄 동기화** 버튼은 항상 이 `persona_data` 레포에서 `git add/commit/push`를 수행합니다. 다른 저장소를 푸시하려면 `persona_data/.git/config`의 remote 설정만 바꿔 주면 됩니다.
+
 ### 3. 실행
 
 ```bash
@@ -612,13 +626,19 @@ claude auth login
 
 3. 로그 확인 (서버 터미널에서 확인)
 
-### 대화가 끊기거나 맥락을 잊어버리는 경우
+### 맥락 길이 & 세션 관리
 
-- 시스템이 자동으로 15턴을 유지하므로 이후 오래된 대화는 잊어버립니다
-- 필요시 `history_handler.py`의 `max_turns` 값을 조정:
-  ```python
-  history_handler = HistoryHandler(max_turns=30)  # 30턴으로 증가
-  ```
+| 기능 | 위치 | 설명 |
+| --- | --- | --- |
+| 맥락 길이 슬라이더 | 좌측 패널 → `모드` 탭 → **🧠 맥락 길이** | 5~60턴 범위에서 선택. 모델에게 전달되는 최근 대화 길이를 제어하여 토큰 사용량과 맥락 품질을 조절합니다. |
+| 무제한 토글 | 슬라이더 바로 아래 `무제한` 체크박스 | 체크 시 히스토리 윈도우 제한을 제거해 모든 턴을 prompt에 포함합니다. 토큰 폭주 가능성이 있으니 신중히 사용하세요. |
+| 세션 유지 토글 | 좌측 패널 → `모드` 탭 → **♻️ 세션 유지** | 기본 OFF. 켜면 Claude/Droid CLI 세션을 재사용해 내부 캐시/워크플로를 이어가고, 끄면 항상 새 세션으로 stateless하게 동작합니다. Gemini는 현재 stateless만 지원합니다. |
+| 세션 리셋 | 헤더 우측 **♻️ 세션** 버튼 | 현재 WebSocket 연결에서 Claude/Droid/Gemini별로 유지 중인 세션 ID를 초기화하여 다음 메시지부터 완전히 새 세션을 시작합니다. `clear_history`처럼 대화 내용 자체는 유지됩니다. |
+
+추가 팁:
+
+- 서사(MD) 저장 기능은 항상 **전체 대화**(`full_history`)를 기준으로 작성되므로, 슬라이더를 줄여도 내보내기 내용이 잘리지 않습니다.
+- 서버 기본값을 바꾸고 싶다면 `server/handlers/history_handler.py`의 `HistoryHandler(max_turns=...)` 인자를 조정하세요. `None`이면 기본부터 무제한입니다.
 
 ## UI 레이아웃
 

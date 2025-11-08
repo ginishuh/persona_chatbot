@@ -14,7 +14,6 @@ class GeminiHandler:
         # 환경 변수 또는 기본값 사용
         self.gemini_path = gemini_path or os.getenv("GEMINI_PATH", "gemini")
         self.process = None
-        self.session_id = None
         # 챗봇 전용 작업 디렉토리
         self.chatbot_workspace = Path(__file__).parent.parent.parent / "chatbot_workspace"
         self.chatbot_workspace.mkdir(exist_ok=True)
@@ -60,9 +59,8 @@ class GeminiHandler:
             logger.warning("Gemini process killed (timeout)")
         finally:
             self.process = None
-            self.session_id = None
 
-    async def send_message(self, prompt, system_prompt=None, callback=None):
+    async def send_message(self, prompt, system_prompt=None, callback=None, session_id=None):
         """
         Gemini에 메시지 전송 및 스트리밍 응답 수신
 
@@ -70,6 +68,7 @@ class GeminiHandler:
             prompt: 전송할 프롬프트
             system_prompt: 시스템 프롬프트 (캐릭터 설정 등) - 프롬프트에 포함됨
             callback: 각 JSON 라인을 받을 때 호출될 async 콜백 함수
+            session_id: (미사용) 향후 세션 지원용
 
         Returns:
             최종 결과 딕셔너리
@@ -91,6 +90,7 @@ class GeminiHandler:
 
             # 응답 수신 (스트리밍)
             assistant_message = ""
+            current_session_id = session_id
 
             # stderr를 비동기로 읽어서 버퍼 막힘 방지
             async def read_stderr():
@@ -119,14 +119,14 @@ class GeminiHandler:
 
                             # 세션 ID 저장 (있는 경우)
                             if 'session_id' in data:
-                                self.session_id = data.get('session_id')
-                                logger.info(f"Gemini Session ID: {self.session_id}")
+                                current_session_id = data.get('session_id')
+                                logger.info(f"Gemini Session ID: {current_session_id}")
                                 # 프론트엔드에 세션 시작 알림
                                 if callback:
                                     await callback({
                                         "type": "system",
                                         "subtype": "gemini_init",
-                                        "session_id": self.session_id
+                                        "session_id": current_session_id
                                     })
 
                             # 콜백 호출 (Claude 형식으로 변환)
@@ -171,7 +171,8 @@ class GeminiHandler:
             return {
                 "success": True,
                 "message": assistant_message,
-                "token_info": None
+                "token_info": None,
+                "session_id": current_session_id
             }
 
         except Exception as e:
@@ -179,5 +180,6 @@ class GeminiHandler:
             await self.stop()
             return {
                 "success": False,
-                "error": str(e)
+                "error": str(e),
+                "session_id": session_id
             }

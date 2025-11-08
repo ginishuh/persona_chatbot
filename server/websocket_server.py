@@ -50,13 +50,40 @@ claude_handler = ClaudeCodeHandler()
 droid_handler = DroidHandler()
 gemini_handler = GeminiHandler()
 context_handler = ContextHandler()
-history_handler = HistoryHandler(max_turns=None)  # 무제한 히스토리
+history_handler = HistoryHandler(max_turns=30)  # 세션 지원에 맞춰 30턴만 유지
 workspace_handler = WorkspaceHandler(str(project_root / "persona_data"))
 mode_handler = ModeHandler(project_root=str(project_root))
 
 # 연결된 클라이언트들
 connected_clients = set()
 login_attempts = {}
+client_sessions: dict = {}
+client_session_settings: dict = {}
+
+
+def initialize_client_state(websocket):
+    """클라이언트별 세션/설정 초기값"""
+    client_sessions[websocket] = {}
+    client_session_settings[websocket] = {"retention_enabled": False}
+
+
+def clear_client_sessions(websocket):
+    """특정 클라이언트의 세션 정보를 초기화"""
+    if websocket in client_sessions:
+        client_sessions[websocket].clear()
+    else:
+        client_sessions[websocket] = {}
+
+
+def remove_client_sessions(websocket):
+    """클라이언트 연결 종료 시 세션/설정 제거"""
+    client_sessions.pop(websocket, None)
+    client_session_settings.pop(websocket, None)
+
+
+def is_session_retention_enabled(websocket):
+    settings = client_session_settings.get(websocket, {})
+    return settings.get("retention_enabled", False)
 
 def issue_token():
     """JWT 발급"""
@@ -258,9 +285,72 @@ async def handle_message(websocket, message):
         # 히스토리 초기화
         elif action == "clear_history":
             history_handler.clear()
+            clear_client_sessions(websocket)
             await websocket.send(json.dumps({
                 "action": "clear_history",
                 "data": {"success": True, "message": "대화 히스토리가 초기화되었습니다"}
+            }))
+
+        # 히스토리 설정 조회
+        elif action == "get_history_settings":
+            await websocket.send(json.dumps({
+                "action": "get_history_settings",
+                "data": {
+                    "success": True,
+                    "max_turns": history_handler.max_turns
+                }
+            }))
+
+        # 세션 리셋
+        elif action == "reset_sessions":
+            clear_client_sessions(websocket)
+            await websocket.send(json.dumps({
+                "action": "reset_sessions",
+                "data": {"success": True, "message": "프로바이더 세션이 초기화되었습니다."}
+            }))
+
+        # 히스토리 길이 조정
+        elif action == "set_history_limit":
+            requested = data.get("max_turns")
+            try:
+                if requested is None:
+                    new_limit = None
+                else:
+                    new_limit = int(requested)
+                    if new_limit < 5 or new_limit > 1000:
+                        raise ValueError(f"맥락 길이는 5~1000 사이여야 합니다 (입력값: {new_limit})")
+
+                history_handler.set_max_turns(new_limit)
+                await websocket.send(json.dumps({
+                    "action": "set_history_limit",
+                    "data": {"success": True, "max_turns": history_handler.max_turns}
+                }))
+            except (ValueError, TypeError) as exc:
+                await websocket.send(json.dumps({
+                    "action": "set_history_limit",
+                    "data": {
+                        "success": False,
+                        "error": str(exc) if isinstance(exc, ValueError) else "올바른 숫자(5~1000) 또는 null을 입력하세요."
+                    }
+                }))
+
+        # 세션 설정 조회
+        elif action == "get_session_settings":
+            settings = client_session_settings.get(websocket, {"retention_enabled": False})
+            await websocket.send(json.dumps({
+                "action": "get_session_settings",
+                "data": {"success": True, **settings}
+            }))
+
+        # 세션 유지 토글
+        elif action == "set_session_retention":
+            enabled = bool(data.get("enabled"))
+            client_session_settings.setdefault(websocket, {})["retention_enabled"] = enabled
+            if not enabled:
+                clear_client_sessions(websocket)
+            await websocket.send(json.dumps({
+                "action": "set_session_retention",
+                "data": {"success": True, "retention_enabled": enabled}
             }))
 
         # 서사 가져오기 (마크다운)
@@ -399,6 +489,9 @@ async def handle_message(websocket, message):
             prompt = data.get("prompt", "")
             # provider 파라미터 (없으면 컨텍스트의 기본값 사용)
             provider = data.get("provider", context_handler.get_context().get("ai_provider", "claude"))
+            provider_sessions = client_sessions.setdefault(websocket, {})
+            retention_enabled = is_session_retention_enabled(websocket)
+            provider_session_id = provider_sessions.get(provider) if retention_enabled else None
 
             # 사용자 메시지를 히스토리에 추가
             history_handler.add_user_message(prompt)
@@ -428,7 +521,8 @@ async def handle_message(websocket, message):
             result = await handler.send_message(
                 prompt,
                 system_prompt=system_prompt,
-                callback=stream_callback
+                callback=stream_callback,
+                session_id=provider_session_id
             )
 
             # AI 응답을 히스토리에 추가
@@ -436,6 +530,12 @@ async def handle_message(websocket, message):
                 history_handler.add_assistant_message(result["message"])
 
             # 최종 결과 전송
+            new_session_id = result.get("session_id")
+            if retention_enabled and new_session_id:
+                provider_sessions[provider] = new_session_id
+            elif not retention_enabled:
+                provider_sessions.pop(provider, None)
+
             await websocket.send(json.dumps({
                 "action": "chat_complete",
                 "data": {**result, "provider_used": provider}
@@ -464,6 +564,7 @@ async def handle_message(websocket, message):
 async def websocket_handler(websocket):
     """WebSocket 연결 핸들러"""
     connected_clients.add(websocket)
+    initialize_client_state(websocket)
     client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
     logger.info(f"Client connected: {client_ip} (Total: {len(connected_clients)})")
 
@@ -488,7 +589,8 @@ async def websocket_handler(websocket):
     except websockets.exceptions.ConnectionClosed:
         logger.info(f"Client disconnected: {client_ip}")
     finally:
-        connected_clients.remove(websocket)
+        connected_clients.discard(websocket)
+        remove_client_sessions(websocket)
         logger.info(f"Total connected clients: {len(connected_clients)}")
 
 
