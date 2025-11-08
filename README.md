@@ -1,6 +1,6 @@
 # 📖 Persona Chat - 멀티 캐릭터 대화 시스템
 
-Claude Code를 활용한 웹 기반 멀티 캐릭터 대화 및 서사 관리 시스템입니다.
+Claude Code와 Droid CLI, GEMINI CLI를 활용한 웹 기반 멀티 캐릭터 대화 및 서사 관리 시스템입니다.
 
 ## 주요 기능
 
