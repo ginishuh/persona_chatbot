@@ -14,9 +14,9 @@ services:
       - ./web:/app/web          # 개발 중 웹 파일 수정 반영
       - ./persona_data:/app/persona_data  # 프리셋/워크스페이스 공유
       - ./chatbot_workspace:/app/chatbot_workspace  # CLAUDE 지침/작업 폴더 공유
-      - ${FACTORY_AUTH_DIR:-${HOME}/.factory}:/home/node/.factory     # Droid 커스텀 모델/인증 정보
-      - ${CLAUDE_AUTH_DIR:-${HOME}/.claude}:/home/node/.claude       # Claude OAuth 인증 정보 (선택)
-      - ${GEMINI_AUTH_DIR:-${HOME}/.config/gemini}:/home/node/.config/gemini # Gemini OAuth 인증 정보 (선택)
+      - ${FACTORY_AUTH_DIR?set FACTORY_AUTH_DIR}:/home/node/.factory     # Droid 커스텀 모델/인증 정보
+      - ${CLAUDE_AUTH_DIR?set CLAUDE_AUTH_DIR}:/home/node/.claude       # Claude OAuth 인증 정보 (선택)
+      - ${GEMINI_AUTH_DIR?set GEMINI_AUTH_DIR}:/home/node/.config/gemini # Gemini OAuth 인증 정보 (선택)
     environment:
       - PYTHONUNBUFFERED=1
       - CLAUDE_PATH=claude

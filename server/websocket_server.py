@@ -37,6 +37,9 @@ LOGIN_REQUIRED = bool(LOGIN_PASSWORD)
 JWT_SECRET = os.getenv("APP_JWT_SECRET", "")
 JWT_ALGORITHM = os.getenv("APP_JWT_ALGORITHM", "HS256")
 JWT_TTL_SECONDS = int(os.getenv("APP_JWT_TTL", "604800"))
+LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("APP_LOGIN_MAX_ATTEMPTS", "5"))
+LOGIN_RATE_LIMIT_WINDOW = timedelta(minutes=int(os.getenv("APP_LOGIN_LOCK_MINUTES", "15")))
+TOKEN_EXPIRED_GRACE = timedelta(minutes=int(os.getenv("APP_JWT_GRACE_MINUTES", "60")))
 
 if LOGIN_REQUIRED and not JWT_SECRET:
     raise RuntimeError("APP_JWT_SECRET must be set when APP_LOGIN_PASSWORD is enabled")
@@ -53,6 +56,7 @@ mode_handler = ModeHandler(project_root=str(project_root))
 
 # 연결된 클라이언트들
 connected_clients = set()
+login_attempts = {}
 
 def issue_token():
     """JWT 발급"""
@@ -100,16 +104,48 @@ async def handle_login_action(websocket, data):
         }))
         return
 
+    client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
+    now = datetime.utcnow()
+    attempts = login_attempts.setdefault(client_ip, [])
+    attempts[:] = [(ts, success) for ts, success in attempts if now - ts < LOGIN_RATE_LIMIT_WINDOW]
+    recent_failures = sum(1 for ts, success in attempts if not success)
+
+    if recent_failures >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
+        await websocket.send(json.dumps({
+            "action": "login",
+            "data": {"success": False, "error": "로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.", "code": "rate_limited"}
+        }))
+        return
+
+    def record_attempt(success: bool):
+        attempts.append((datetime.utcnow(), success))
+
     token = data.get("token")
     password = data.get("password", "")
 
     if token:
         payload, error = verify_token(token)
         if error:
+            if error == "token_expired":
+                try:
+                    unverified = jwt.decode(token, options={"verify_signature": False, "verify_exp": False})
+                    exp = datetime.fromtimestamp(unverified.get("exp"))
+                    if datetime.utcnow() - exp < TOKEN_EXPIRED_GRACE:
+                        new_token, expires_at = issue_token()
+                        await websocket.send(json.dumps({
+                            "action": "login",
+                            "data": {"success": True, "token": new_token, "expires_at": expires_at, "renewed": True}
+                        }))
+                        record_attempt(True)
+                        return
+                except Exception:
+                    pass
+
             await websocket.send(json.dumps({
                 "action": "login",
                 "data": {"success": False, "error": "토큰이 유효하지 않습니다.", "code": error}
             }))
+            record_attempt(False)
             return
 
         new_token, expires_at = issue_token()
@@ -117,6 +153,7 @@ async def handle_login_action(websocket, data):
             "action": "login",
             "data": {"success": True, "token": new_token, "expires_at": expires_at, "renewed": True}
         }))
+        record_attempt(True)
         return
 
     if password and password == LOGIN_PASSWORD:
@@ -125,12 +162,14 @@ async def handle_login_action(websocket, data):
             "action": "login",
             "data": {"success": True, "token": issued, "expires_at": expires_at, "renewed": False}
         }))
+        record_attempt(True)
         return
 
     await websocket.send(json.dumps({
         "action": "login",
         "data": {"success": False, "error": "비밀번호가 일치하지 않습니다.", "code": "invalid_password"}
     }))
+    record_attempt(False)
 
 
 async def handle_message(websocket, message):

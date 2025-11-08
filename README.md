@@ -713,14 +713,14 @@ docker compose down
   - Gemini CLI: `npm install -g @google/gemini-cli`
 - **docker-compose.yml**: Dockerfile.full 기반 WebSocket/HTTP 통합 서비스
   - 포트: 8765 (WebSocket), 9000 (HTTP) – 기본은 127.0.0.1 바인딩이므로 외부 노출이 필요하면 프록시/포트를 조정하세요
-  - 볼륨 마운트: `./STORIES`, `./server`, `./web`, `./persona_data`, `./chatbot_workspace`, `${HOME}/.factory:/home/node/.factory`, `${HOME}/.claude:/home/node/.claude`, `${HOME}/.config/gemini:/home/node/.config/gemini`
+  - 볼륨 마운트: `./STORIES`, `./server`, `./web`, `./persona_data`, `./chatbot_workspace`, `${FACTORY_AUTH_DIR}:/home/node/.factory`, `${CLAUDE_AUTH_DIR}:/home/node/.claude`, `${GEMINI_AUTH_DIR}:/home/node/.config/gemini`
   - 환경 변수:
     - `PYTHONUNBUFFERED=1`
     - `CLAUDE_PATH=claude`, `DROID_PATH=droid`, `GEMINI_PATH=gemini`
     - `FACTORY_API_KEY` (선택)
     - `DROID_SKIP_PERMISSIONS_UNSAFE=1`
     - `APP_LOGIN_PASSWORD`, `APP_JWT_SECRET`, `APP_JWT_TTL`, `APP_PUBLIC_WS_URL`
-    - `FACTORY_AUTH_DIR`, `CLAUDE_AUTH_DIR`, `GEMINI_AUTH_DIR` (호스트 인증 폴더 위치)
+    - `FACTORY_AUTH_DIR`, `CLAUDE_AUTH_DIR`, `GEMINI_AUTH_DIR` (호스트 인증 폴더 절대 경로 – Windows/WSL의 경우 `/mnt/c/...` 형태로 지정)
   - 컨테이너 사용자: `${UID:-1000}:${GID:-1000}` (파일 권한 문제 방지), `stdin_open`/`tty` 활성화
 
 ### 주의사항
@@ -729,6 +729,10 @@ docker compose down
 - **Gemini**: OAuth 인증만 지원 (`gemini auth login` 후 `~/.config/gemini` 공유 필요 시 직접 추가)
 - **Droid**: `FACTORY_API_KEY` 환경 변수 또는 `~/.factory/config.json` 커스텀 모델 설정 마운트 필수
 - **간단 로그인(선택)**: `.env`의 `APP_LOGIN_PASSWORD`에 값을 지정하면 접속 시 비밀번호 입력 모달이 표시됩니다. JWT 서명 키(`APP_JWT_SECRET`)와 만료 시간(`APP_JWT_TTL`, 초 단위)을 함께 설정하면 브라우저가 토큰을 저장하고 만료 1분 전에 자동 갱신해 세션을 유지합니다. 비밀번호를 비워두면 인증 없이 사용 가능합니다.
+- **보안 참고사항**:
+  - 이 로그인 기능은 기본적인 접근 제어를 위한 것으로, 토큰이 `sessionStorage`에 저장되므로 XSS 공격에 취약할 수 있습니다.
+  - 실 서비스 환경에서는 HTTPS/WSS 프록시와 추가 인증(예: HTTP Basic Auth, OAuth)을 권장합니다.
+  - 기본 포트는 127.0.0.1에만 바인딩되므로 외부에서 접근하려면 프록시나 포트 포워딩으로 공개해야 합니다.
 - 컨테이너는 `chatbot_workspace/CLAUDE.md`를 읽어서 성인 콘텐츠 지침 적용
 - 사용하지 않는 AI CLI는 설치하지 않아도 됨 (최소 1개 이상 필요)
 

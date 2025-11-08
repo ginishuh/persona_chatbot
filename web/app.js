@@ -80,6 +80,8 @@ const AUTH_EXP_KEY = 'persona_auth_exp';
 let authToken = '';
 let authTokenExpiresAt = '';
 let tokenRefreshTimeout = null;
+let refreshRetryCount = 0;
+const MAX_REFRESH_RETRIES = 3;
 try {
     authToken = sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
     authTokenExpiresAt = sessionStorage.getItem(AUTH_EXP_KEY) || '';
@@ -120,6 +122,7 @@ function setAuthToken(token, expiresAt) {
 }
 
 function clearAuthToken() {
+    refreshRetryCount = 0;
     setAuthToken('', '');
 }
 
@@ -251,9 +254,17 @@ function attemptTokenRefresh() {
         return;
     }
     if (!ws || ws.readyState !== WebSocket.OPEN) {
+        if (refreshRetryCount >= MAX_REFRESH_RETRIES) {
+            log('토큰 갱신 실패: 서버에 연결할 수 없습니다.', 'error');
+            clearAuthToken();
+            showLoginModal();
+            return;
+        }
+        refreshRetryCount++;
         tokenRefreshTimeout = setTimeout(attemptTokenRefresh, 5000);
         return;
     }
+    refreshRetryCount = 0;
     sendMessage({ action: 'login' });
 }
 
@@ -342,6 +353,7 @@ function handleMessage(msg) {
                 authRequired = false;
                 isAuthenticated = true;
                 hideLoginModal();
+                refreshRetryCount = 0;
                 if (data.token) {
                     setAuthToken(data.token, data.expires_at);
                 }
