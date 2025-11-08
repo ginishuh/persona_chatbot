@@ -358,7 +358,11 @@ async def websocket_handler(websocket):
         # 환영 메시지
         await websocket.send(json.dumps({
             "action": "connected",
-            "data": {"success": True, "message": "Connected to Persona Chat WebSocket Server"}
+            "data": {
+                "success": True,
+                "message": "Connected to Persona Chat WebSocket Server",
+                "login_required": LOGIN_REQUIRED
+            }
         }))
 
         if LOGIN_REQUIRED:

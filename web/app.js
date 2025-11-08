@@ -81,9 +81,6 @@ function connect() {
     ws.onopen = () => {
         updateStatus('connected', '연결됨');
         log('WebSocket 연결 성공', 'success');
-        isAuthenticated = true;
-        hideLoginModal();
-        initializeAppData();
     };
 
     ws.onmessage = (event) => {
@@ -192,6 +189,16 @@ function handleMessage(msg) {
     switch (action) {
         case 'connected':
             log('서버 연결 완료', 'success');
+            if (data && data.login_required) {
+                authRequired = true;
+                isAuthenticated = false;
+                showLoginModal();
+            } else {
+                authRequired = false;
+                isAuthenticated = true;
+                hideLoginModal();
+                initializeAppData();
+            }
             break;
 
         case 'auth_required':
