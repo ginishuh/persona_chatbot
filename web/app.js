@@ -579,36 +579,25 @@ function handleChatComplete(response) {
 
 function parseMultiCharacterResponse(text) {
     const messages = [];
-    const lines = text.split('\n');
+    const matches = [...text.matchAll(/\[([^\]]+)\]:?/g)];
 
-    let currentChar = null;
-    let currentText = [];
-
-    for (const line of lines) {
-        const match = line.match(/^\[(.+?)\]:?\s*(.*)$/);  // 콜론 옵션으로 변경
-        if (match) {
-            // 이전 캐릭터 메시지 저장
-            if (currentChar && currentText.length > 0) {
-                messages.push({
-                    character: currentChar,
-                    text: currentText.join('\n').trim()
-                });
-            }
-            // 새 캐릭터 시작
-            currentChar = match[1];
-            currentText = [match[2]];
-        } else if (currentChar) {
-            // 현재 캐릭터의 메시지 계속
-            currentText.push(line);
-        }
+    if (matches.length === 0) {
+        return messages;
     }
 
-    // 마지막 캐릭터 메시지 저장
-    if (currentChar && currentText.length > 0) {
-        messages.push({
-            character: currentChar,
-            text: currentText.join('\n').trim()
-        });
+    for (let i = 0; i < matches.length; i++) {
+        const match = matches[i];
+        const character = match[1].trim();
+        const start = match.index + match[0].length;
+        const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+        const content = text.slice(start, end).trim();
+
+        if (character && content) {
+            messages.push({
+                character,
+                text: content
+            });
+        }
     }
 
     return messages;
