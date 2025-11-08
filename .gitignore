@@ -27,3 +27,4 @@ Thumbs.db
 
 # User data (별도 git 레포로 관리)
 persona_data/
+.env
