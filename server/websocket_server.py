@@ -39,8 +39,7 @@ JWT_ALGORITHM = os.getenv("APP_JWT_ALGORITHM", "HS256")
 JWT_TTL_SECONDS = int(os.getenv("APP_JWT_TTL", "604800"))
 
 if LOGIN_REQUIRED and not JWT_SECRET:
-    JWT_SECRET = secrets.token_hex(32)
-    logger.warning("APP_JWT_SECRET not set; generated ephemeral secret. Tokens reset on restart.")
+    raise RuntimeError("APP_JWT_SECRET must be set when APP_LOGIN_PASSWORD is enabled")
 
 file_handler = FileHandler()
 git_handler = GitHandler()
@@ -103,7 +102,7 @@ async def handle_login_action(websocket, data):
     password = data.get("password", "")
 
     if token:
-        _, error = verify_token(token)
+        payload, error = verify_token(token)
         if error:
             await websocket.send(json.dumps({
                 "action": "login",
@@ -111,9 +110,10 @@ async def handle_login_action(websocket, data):
             }))
             return
 
+        new_token = issue_token()
         await websocket.send(json.dumps({
             "action": "login",
-            "data": {"success": True, "token": token}
+            "data": {"success": True, "token": new_token, "renewed": True}
         }))
         return
 
@@ -121,7 +121,7 @@ async def handle_login_action(websocket, data):
         issued = issue_token()
         await websocket.send(json.dumps({
             "action": "login",
-            "data": {"success": True, "token": issued}
+            "data": {"success": True, "token": issued, "renewed": False}
         }))
         return
 
@@ -458,9 +458,27 @@ def run_http_server():
     web_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
     os.chdir(web_dir)
 
+    app_config = {
+        "ws_url": os.getenv("APP_PUBLIC_WS_URL", ""),
+        "ws_port": int(os.getenv("WS_PORT", "8765")),
+        "login_required": LOGIN_REQUIRED
+    }
+
     class CustomHandler(SimpleHTTPRequestHandler):
         def log_message(self, format, *args):
             logger.info(f"HTTP: {format % args}")
+
+        def do_GET(self):
+            if self.path == "/app-config.json":
+                payload = json.dumps(app_config).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            return super().do_GET()
 
     with TCPServer(("0.0.0.0", 9000), CustomHandler) as httpd:
         logger.info("HTTP server started on port 9000")

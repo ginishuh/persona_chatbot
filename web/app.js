@@ -1,5 +1,10 @@
 // WebSocket 연결
 let ws = null;
+let appConfig = {
+    ws_url: '',
+    ws_port: 8765,
+    login_required: false
+};
 
 // DOM 요소
 const statusIndicator = document.getElementById('statusIndicator');
@@ -78,6 +83,16 @@ try {
     authToken = '';
 }
 
+function buildWebSocketUrl() {
+    if (appConfig.ws_url) {
+        return appConfig.ws_url;
+    }
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const host = window.location.hostname;
+    const port = appConfig.ws_port || 8765;
+    return `${protocol}://${host}:${port}`;
+}
+
 function setAuthToken(token) {
     authToken = token || '';
     try {
@@ -97,8 +112,24 @@ function clearAuthToken() {
 
 // ===== WebSocket 연결 =====
 
+async function loadAppConfig() {
+    try {
+        const response = await fetch('/app-config.json', { cache: 'no-store' });
+        if (!response.ok) {
+            throw new Error(`status ${response.status}`);
+        }
+        const config = await response.json();
+        appConfig = {
+            ...appConfig,
+            ...config
+        };
+    } catch (error) {
+        log('앱 설정을 불러오지 못해 기본값을 사용합니다.', 'error');
+    }
+}
+
 function connect() {
-    const wsUrl = `ws://${window.location.hostname}:8765`;
+    const wsUrl = buildWebSocketUrl();
     log(`연결 시도: ${wsUrl}`);
 
     ws = new WebSocket(wsUrl);
@@ -1637,7 +1668,8 @@ deleteStoryBtn.addEventListener('click', () => {
 
 // ===== 초기화 =====
 
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
+    await loadAppConfig();
     connect();
 
     // 주기적 상태 확인 (10초마다)

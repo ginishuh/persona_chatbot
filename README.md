@@ -719,6 +719,7 @@ docker compose down
     - `CLAUDE_PATH=claude`, `DROID_PATH=droid`, `GEMINI_PATH=gemini`
     - `FACTORY_API_KEY` (선택)
     - `DROID_SKIP_PERMISSIONS_UNSAFE=1`
+    - `APP_LOGIN_PASSWORD`, `APP_JWT_SECRET`, `APP_JWT_TTL`, `APP_PUBLIC_WS_URL`
   - 컨테이너 사용자: `${UID:-1000}:${GID:-1000}` (파일 권한 문제 방지), `stdin_open`/`tty` 활성화
 
 ### 주의사항
