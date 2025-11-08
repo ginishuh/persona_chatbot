@@ -380,8 +380,8 @@ claude --print --verbose --output-format stream-json --system-prompt "..."
 ```
 
 **중요 참고사항:**
-- 매 메시지마다 새로운 프로세스 시작 (세션 유지 안 됨)
-- 대신 히스토리를 System Prompt에 포함하여 맥락 유지
+- 기본적으로 메시지마다 새로운 프로세스를 시작하지만, 세션 유지 토글을 ON으로 두면 CLI가 반환한 `session_id`를 재사용해 내부 상태를 이어갈 수 있습니다 (Claude/Droid 지원).
+- 어떤 경우든 슬라이더에서 지정한 히스토리 텍스트를 System Prompt에 포함해 맥락을 보완합니다.
 
 ### 5. 멀티 캐릭터 파싱 (`web/app.js`)
 
