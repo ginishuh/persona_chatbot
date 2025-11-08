@@ -57,14 +57,16 @@ connected_clients = set()
 def issue_token():
     """JWT 발급"""
     if not JWT_SECRET:
-        return None
+        return None, None
     now = datetime.utcnow()
+    exp = now + timedelta(seconds=JWT_TTL_SECONDS)
     payload = {
         "sub": "persona_chat_user",
         "iat": now,
-        "exp": now + timedelta(seconds=JWT_TTL_SECONDS)
+        "exp": exp
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return token, exp.isoformat() + "Z"
 
 
 def verify_token(token):
@@ -110,18 +112,18 @@ async def handle_login_action(websocket, data):
             }))
             return
 
-        new_token = issue_token()
+        new_token, expires_at = issue_token()
         await websocket.send(json.dumps({
             "action": "login",
-            "data": {"success": True, "token": new_token, "renewed": True}
+            "data": {"success": True, "token": new_token, "expires_at": expires_at, "renewed": True}
         }))
         return
 
     if password and password == LOGIN_PASSWORD:
-        issued = issue_token()
+        issued, expires_at = issue_token()
         await websocket.send(json.dumps({
             "action": "login",
-            "data": {"success": True, "token": issued, "renewed": False}
+            "data": {"success": True, "token": issued, "expires_at": expires_at, "renewed": False}
         }))
         return
 

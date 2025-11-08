@@ -76,11 +76,16 @@ let authRequired = false;
 let isAuthenticated = false;
 
 const AUTH_TOKEN_KEY = 'persona_auth_token';
+const AUTH_EXP_KEY = 'persona_auth_exp';
 let authToken = '';
+let authTokenExpiresAt = '';
+let tokenRefreshTimeout = null;
 try {
     authToken = sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
+    authTokenExpiresAt = sessionStorage.getItem(AUTH_EXP_KEY) || '';
 } catch (error) {
     authToken = '';
+    authTokenExpiresAt = '';
 }
 
 function buildWebSocketUrl() {
@@ -93,21 +98,29 @@ function buildWebSocketUrl() {
     return `${protocol}://${host}:${port}`;
 }
 
-function setAuthToken(token) {
+function setAuthToken(token, expiresAt) {
     authToken = token || '';
+    authTokenExpiresAt = expiresAt || '';
     try {
         if (authToken) {
             sessionStorage.setItem(AUTH_TOKEN_KEY, authToken);
+            if (authTokenExpiresAt) {
+                sessionStorage.setItem(AUTH_EXP_KEY, authTokenExpiresAt);
+            } else {
+                sessionStorage.removeItem(AUTH_EXP_KEY);
+            }
         } else {
             sessionStorage.removeItem(AUTH_TOKEN_KEY);
+            sessionStorage.removeItem(AUTH_EXP_KEY);
         }
     } catch (error) {
         // ignore storage errors
     }
+    scheduleTokenRefresh();
 }
 
 function clearAuthToken() {
-    setAuthToken('');
+    setAuthToken('', '');
 }
 
 // ===== WebSocket 연결 =====
@@ -154,6 +167,8 @@ function connect() {
         authRequired = false;
         isAuthenticated = false;
         hideLoginModal();
+        clearTimeout(tokenRefreshTimeout);
+        tokenRefreshTimeout = null;
         setTimeout(connect, 5000);
     };
 }
@@ -205,6 +220,41 @@ function initializeAppData() {
     loadStoryList();
     checkGitStatus();
     checkModeStatus();
+}
+
+function scheduleTokenRefresh() {
+    if (tokenRefreshTimeout) {
+        clearTimeout(tokenRefreshTimeout);
+        tokenRefreshTimeout = null;
+    }
+    if (!authToken || !authTokenExpiresAt) {
+        return;
+    }
+    const expiresAt = new Date(authTokenExpiresAt).getTime();
+    if (Number.isNaN(expiresAt)) {
+        return;
+    }
+    const now = Date.now();
+    const safetyMs = 60 * 1000; // 60초 전에 갱신
+    const delay = Math.max(expiresAt - now - safetyMs, 0);
+    if (delay <= 0) {
+        attemptTokenRefresh();
+        return;
+    }
+    tokenRefreshTimeout = setTimeout(() => {
+        attemptTokenRefresh();
+    }, delay);
+}
+
+function attemptTokenRefresh() {
+    if (!authToken || !authTokenExpiresAt) {
+        return;
+    }
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        tokenRefreshTimeout = setTimeout(attemptTokenRefresh, 5000);
+        return;
+    }
+    sendMessage({ action: 'login' });
 }
 
 function showLoginModal() {
@@ -293,7 +343,7 @@ function handleMessage(msg) {
                 isAuthenticated = true;
                 hideLoginModal();
                 if (data.token) {
-                    setAuthToken(data.token);
+                    setAuthToken(data.token, data.expires_at);
                 }
                 log('로그인 성공', 'success');
                 initializeAppData();
