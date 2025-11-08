@@ -16,6 +16,7 @@
                 <button id="gitSyncBtn" class="btn btn-sm" title="Git 동기화">🔄 동기화</button>
                 <button id="clearHistoryBtn" class="btn btn-sm btn-warning">🗑️ 대화 초기화</button>
                 <button id="resetSessionsBtn" class="btn btn-sm" title="AI 세션 리셋">♻️ 세션</button>
+                <span id="sessionStatusBadge" class="session-status-badge" title="세션 유지 상태">OFF</span>
                 <div class="token-info" id="tokenInfo" title="토큰 사용량">
                     <span id="tokenText">토큰: - / 200K</span>
                 </div>
@@ -142,7 +143,7 @@
                         <!-- 세션 유지 -->
                         <div class="context-section">
                             <label>♻️ 세션 유지</label>
-                            <label class="checkbox-label">
+                            <label class="checkbox-label" title="OFF로 전환 시 즉시 모든 세션이 초기화됩니다.">
                                 <input type="checkbox" id="sessionRetentionToggle">
                                 <span>Claude/Droid 대화 기억 (기본 꺼짐)</span>
                             </label>

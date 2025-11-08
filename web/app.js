@@ -61,6 +61,7 @@ const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 const resetSessionsBtn = document.getElementById('resetSessionsBtn');
 const tokenText = document.getElementById('tokenText');
 const sessionRetentionToggle = document.getElementById('sessionRetentionToggle');
+const sessionStatusBadge = document.getElementById('sessionStatusBadge');
 
 // 서사 패널 요소
 const narrativeContent = document.getElementById('narrativeContent');
@@ -89,6 +90,7 @@ let refreshRetryCount = 0;
 const MAX_REFRESH_RETRIES = 3;
 const HISTORY_LIMIT_DEFAULT = 30;
 let currentHistoryLimit = HISTORY_LIMIT_DEFAULT;
+let sessionSettingsLoaded = false;
 try {
     authToken = sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
     authTokenExpiresAt = sessionStorage.getItem(AUTH_EXP_KEY) || '';
@@ -309,12 +311,20 @@ setupHistoryControls();
 function applySessionRetentionUI(enabled) {
     if (sessionRetentionToggle) {
         sessionRetentionToggle.checked = !!enabled;
+        sessionRetentionToggle.disabled = false;
+        sessionRetentionToggle.parentElement?.classList.remove('disabled');
+    }
+    if (sessionStatusBadge) {
+        const isOn = !!enabled;
+        sessionStatusBadge.textContent = isOn ? 'ON' : 'OFF';
+        sessionStatusBadge.classList.toggle('on', isOn);
     }
 }
 
 function setupSessionRetentionControls() {
     if (!sessionRetentionToggle) return;
     sessionRetentionToggle.addEventListener('change', () => {
+        if (!sessionSettingsLoaded) return;
         sendMessage({
             action: 'set_session_retention',
             enabled: sessionRetentionToggle.checked
@@ -515,11 +525,13 @@ function handleMessage(msg) {
         case 'get_session_settings':
             if (data.success) {
                 applySessionRetentionUI(data.retention_enabled);
+                sessionSettingsLoaded = true;
             }
             break;
 
         case 'set_session_retention':
             if (data.success) {
+                sessionSettingsLoaded = true;
                 applySessionRetentionUI(data.retention_enabled);
                 const stateText = data.retention_enabled ? 'ON' : 'OFF';
                 log(`세션 유지가 ${stateText} 상태로 설정되었습니다.`, 'success');
@@ -1262,6 +1274,12 @@ if (resetSessionsBtn) {
             sendMessage({ action: 'reset_sessions' });
         }
     });
+}
+
+if (sessionRetentionToggle) {
+    sessionRetentionToggle.checked = false;
+    sessionRetentionToggle.disabled = true;
+    sessionRetentionToggle.parentElement?.classList.add('disabled');
 }
 
 // ===== 서사 관리 =====
