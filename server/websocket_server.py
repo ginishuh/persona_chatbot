@@ -37,6 +37,7 @@ LOGIN_REQUIRED = bool(LOGIN_PASSWORD)
 JWT_SECRET = os.getenv("APP_JWT_SECRET", "")
 JWT_ALGORITHM = os.getenv("APP_JWT_ALGORITHM", "HS256")
 JWT_TTL_SECONDS = int(os.getenv("APP_JWT_TTL", "604800"))
+BIND_HOST = os.getenv("APP_BIND_HOST", "127.0.0.1")
 LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("APP_LOGIN_MAX_ATTEMPTS", "5"))
 LOGIN_RATE_LIMIT_WINDOW = timedelta(minutes=int(os.getenv("APP_LOGIN_LOCK_MINUTES", "15")))
 TOKEN_EXPIRED_GRACE = timedelta(minutes=int(os.getenv("APP_JWT_GRACE_MINUTES", "60")))
@@ -624,7 +625,7 @@ def run_http_server():
             return super().do_GET()
 
     http_port = int(os.getenv("HTTP_PORT", "9000"))
-    with TCPServer(("127.0.0.1", http_port), CustomHandler) as httpd:
+    with TCPServer((BIND_HOST, http_port), CustomHandler) as httpd:
         logger.info(f"HTTP server started on port {http_port}")
         httpd.serve_forever()
 
@@ -639,7 +640,7 @@ async def main():
 
     # WebSocket 서버 시작
     ws_port = int(os.getenv("WS_PORT", "8765"))
-    async with websockets.serve(websocket_handler, "127.0.0.1", ws_port):
+    async with websockets.serve(websocket_handler, BIND_HOST, ws_port):
         logger.info(f"WebSocket server started on port {ws_port}")
         logger.info("Server is ready!")
         await asyncio.Future()  # 계속 실행

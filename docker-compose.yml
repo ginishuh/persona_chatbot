@@ -6,8 +6,8 @@ services:
     user: "${UID:-1000}:${GID:-1000}"
     container_name: persona_chatbot_server
     ports:
-      - "${WS_PORT:-8765}:8765"  # WebSocket (기본값: 8765)
-      - "${HTTP_PORT:-9000}:9000"  # HTTP (기본값: 9000)
+      - "127.0.0.1:${WS_PORT:-8765}:8765"  # WebSocket (로컬 전용)
+      - "127.0.0.1:${HTTP_PORT:-9000}:9000"  # HTTP (로컬 전용)
     volumes:
       - ./STORIES:/app/STORIES  # 서사 파일 마운트
       - ./server:/app/server    # 개발 중 코드 수정 반영
@@ -27,6 +27,7 @@ services:
       - APP_LOGIN_PASSWORD=${APP_LOGIN_PASSWORD:-}
       - APP_JWT_SECRET=${APP_JWT_SECRET:-}
       - APP_JWT_TTL=${APP_JWT_TTL:-604800}
+      - APP_BIND_HOST=${APP_BIND_HOST:-0.0.0.0}
       - FACTORY_AUTO_UPDATE=0
     stdin_open: true
     tty: true

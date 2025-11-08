@@ -144,6 +144,7 @@ curl -fsSL https://app.factory.ai/cli | sh
 4. 다른 이름으로 클론했다면 반드시 폴더명을 `persona_data`로 바꿔 주세요. `workspace_handler`가 고정 경로(`persona_data/`)만 참조합니다.
 5. 원격 백업을 원하지 않는다면, 최소한 로컬 Git 레포로 만들어 두고 `.gitignore` 적용 범위를 확인해 민감 정보가 루트 레포에 커밋되지 않도록 합니다.
 6. 헤더의 **🔄 동기화** 버튼은 항상 이 `persona_data` 레포에서 `git add/commit/push`를 수행합니다. 다른 저장소를 푸시하려면 `persona_data/.git/config`의 remote 설정만 바꿔 주면 됩니다.
+- Docker/VPS에서 외부 네트워크를 직접 열고 싶다면 `APP_BIND_HOST=0.0.0.0`으로 바꾸고, 반대로 로컬 전용/Nginx 프록시 뒤에서만 쓰고 싶다면 기본값(`127.0.0.1`)을 유지하세요. Compose는 기본적으로 호스트 루프백(`127.0.0.1`)에만 포트를 노출하므로 안전합니다.
 
 ### 3. 실행
 
