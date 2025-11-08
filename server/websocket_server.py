@@ -2,11 +2,15 @@ import asyncio
 import json
 import logging
 import os
-import websockets
-from pathlib import Path
+import secrets
+from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler
+from pathlib import Path
 from socketserver import TCPServer
 import threading
+
+import jwt
+import websockets
 
 from handlers.file_handler import FileHandler
 from handlers.git_handler import GitHandler
@@ -30,6 +34,13 @@ logger = logging.getLogger(__name__)
 project_root = Path(__file__).parent.parent
 LOGIN_PASSWORD = os.getenv("APP_LOGIN_PASSWORD", "")
 LOGIN_REQUIRED = bool(LOGIN_PASSWORD)
+JWT_SECRET = os.getenv("APP_JWT_SECRET", "")
+JWT_ALGORITHM = os.getenv("APP_JWT_ALGORITHM", "HS256")
+JWT_TTL_SECONDS = int(os.getenv("APP_JWT_TTL", "604800"))
+
+if LOGIN_REQUIRED and not JWT_SECRET:
+    JWT_SECRET = secrets.token_hex(32)
+    logger.warning("APP_JWT_SECRET not set; generated ephemeral secret. Tokens reset on restart.")
 
 file_handler = FileHandler()
 git_handler = GitHandler()
@@ -43,7 +54,81 @@ mode_handler = ModeHandler(project_root=str(project_root))
 
 # 연결된 클라이언트들
 connected_clients = set()
-authenticated_clients = set()
+
+def issue_token():
+    """JWT 발급"""
+    if not JWT_SECRET:
+        return None
+    now = datetime.utcnow()
+    payload = {
+        "sub": "persona_chat_user",
+        "iat": now,
+        "exp": now + timedelta(seconds=JWT_TTL_SECONDS)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def verify_token(token):
+    """JWT 검증: (payload, error_code) 반환"""
+    if not JWT_SECRET:
+        return None, "jwt_disabled"
+    if not token:
+        return None, "missing_token"
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload, None
+    except jwt.ExpiredSignatureError:
+        return None, "token_expired"
+    except jwt.InvalidTokenError:
+        return None, "invalid_token"
+
+
+async def send_auth_required(websocket, reason="missing_token"):
+    await websocket.send(json.dumps({
+        "action": "auth_required",
+        "data": {"required": True, "reason": reason}
+    }))
+
+
+async def handle_login_action(websocket, data):
+    """로그인/토큰 검증 처리"""
+    if not LOGIN_REQUIRED:
+        await websocket.send(json.dumps({
+            "action": "login",
+            "data": {"success": True, "token": None}
+        }))
+        return
+
+    token = data.get("token")
+    password = data.get("password", "")
+
+    if token:
+        _, error = verify_token(token)
+        if error:
+            await websocket.send(json.dumps({
+                "action": "login",
+                "data": {"success": False, "error": "토큰이 유효하지 않습니다.", "code": error}
+            }))
+            return
+
+        await websocket.send(json.dumps({
+            "action": "login",
+            "data": {"success": True, "token": token}
+        }))
+        return
+
+    if password and password == LOGIN_PASSWORD:
+        issued = issue_token()
+        await websocket.send(json.dumps({
+            "action": "login",
+            "data": {"success": True, "token": issued}
+        }))
+        return
+
+    await websocket.send(json.dumps({
+        "action": "login",
+        "data": {"success": False, "error": "비밀번호가 일치하지 않습니다.", "code": "invalid_password"}
+    }))
 
 
 async def handle_message(websocket, message):
@@ -54,27 +139,16 @@ async def handle_message(websocket, message):
 
         logger.info(f"Received action: {action}")
 
-        if LOGIN_REQUIRED and websocket not in authenticated_clients and action != "login":
-            await websocket.send(json.dumps({
-                "action": "auth_required",
-                "data": {"required": True}
-            }))
+        if action == "login":
+            await handle_login_action(websocket, data)
             return
 
-        if action == "login":
-            password = data.get("password", "")
-            if not LOGIN_REQUIRED or password == LOGIN_PASSWORD:
-                authenticated_clients.add(websocket)
-                await websocket.send(json.dumps({
-                    "action": "login",
-                    "data": {"success": True}
-                }))
-            else:
-                await websocket.send(json.dumps({
-                    "action": "login",
-                    "data": {"success": False, "error": "비밀번호가 일치하지 않습니다."}
-                }))
-            return
+        if LOGIN_REQUIRED:
+            token = data.get("token")
+            _, token_error = verify_token(token)
+            if token_error:
+                await send_auth_required(websocket, token_error)
+                return
 
         # 파일 목록 조회
         if action == "list_files":
@@ -349,8 +423,6 @@ async def handle_message(websocket, message):
 async def websocket_handler(websocket):
     """WebSocket 연결 핸들러"""
     connected_clients.add(websocket)
-    if not LOGIN_REQUIRED:
-        authenticated_clients.add(websocket)
     client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
     logger.info(f"Client connected: {client_ip} (Total: {len(connected_clients)})")
 
@@ -366,10 +438,7 @@ async def websocket_handler(websocket):
         }))
 
         if LOGIN_REQUIRED:
-            await websocket.send(json.dumps({
-                "action": "auth_required",
-                "data": {"required": True}
-            }))
+            await send_auth_required(websocket)
 
         # 메시지 수신 루프
         async for message in websocket:
@@ -379,7 +448,6 @@ async def websocket_handler(websocket):
         logger.info(f"Client disconnected: {client_ip}")
     finally:
         connected_clients.remove(websocket)
-        authenticated_clients.discard(websocket)
         logger.info(f"Total connected clients: {len(connected_clients)}")
 
 

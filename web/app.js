@@ -70,6 +70,31 @@ let characterColors = {}; // 캐릭터별 색상 매핑
 let authRequired = false;
 let isAuthenticated = false;
 
+const AUTH_TOKEN_KEY = 'persona_auth_token';
+let authToken = '';
+try {
+    authToken = sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
+} catch (error) {
+    authToken = '';
+}
+
+function setAuthToken(token) {
+    authToken = token || '';
+    try {
+        if (authToken) {
+            sessionStorage.setItem(AUTH_TOKEN_KEY, authToken);
+        } else {
+            sessionStorage.removeItem(AUTH_TOKEN_KEY);
+        }
+    } catch (error) {
+        // ignore storage errors
+    }
+}
+
+function clearAuthToken() {
+    setAuthToken('');
+}
+
 // ===== WebSocket 연결 =====
 
 function connect() {
@@ -124,11 +149,23 @@ function log(message, type = 'info') {
     }
 }
 
+function sendMessage(payload, options = {}) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log('WebSocket 연결이 끊어졌습니다', 'error');
+        return;
+    }
+    const message = { ...payload };
+    if (!options.skipToken && authToken) {
+        message.token = authToken;
+    }
+    ws.send(JSON.stringify(message));
+}
+
 function initializeAppData() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    ws.send(JSON.stringify({ action: 'get_context' }));
-    ws.send(JSON.stringify({ action: 'get_narrative' }));
+    sendMessage({ action: 'get_context' });
+    sendMessage({ action: 'get_narrative' });
 
     loadFileList('world', worldSelect);
     loadFileList('situation', situationSelect);
@@ -164,10 +201,10 @@ function submitLogin() {
         loginError.textContent = '비밀번호를 입력하세요.';
         return;
     }
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'login',
         password
-    }));
+    }, { skipToken: true });
     loginError.textContent = '';
 }
 
@@ -192,7 +229,11 @@ function handleMessage(msg) {
             if (data && data.login_required) {
                 authRequired = true;
                 isAuthenticated = false;
-                showLoginModal();
+                if (authToken) {
+                    sendMessage({ action: 'login' });
+                } else {
+                    showLoginModal();
+                }
             } else {
                 authRequired = false;
                 isAuthenticated = true;
@@ -204,7 +245,14 @@ function handleMessage(msg) {
         case 'auth_required':
             authRequired = true;
             isAuthenticated = false;
-            showLoginModal();
+            if (data && data.reason && data.reason !== 'missing_token') {
+                clearAuthToken();
+            }
+            if (authToken) {
+                sendMessage({ action: 'login' });
+            } else {
+                showLoginModal();
+            }
             log('로그인이 필요합니다', 'warning');
             break;
 
@@ -213,10 +261,15 @@ function handleMessage(msg) {
                 authRequired = false;
                 isAuthenticated = true;
                 hideLoginModal();
+                if (data.token) {
+                    setAuthToken(data.token);
+                }
                 log('로그인 성공', 'success');
                 initializeAppData();
             } else {
                 const errorMsg = data.error || '로그인에 실패했습니다.';
+                clearAuthToken();
+                showLoginModal();
                 loginError.textContent = errorMsg;
                 log(`로그인 실패: ${errorMsg}`, 'error');
             }
@@ -496,10 +549,10 @@ function sendChatMessage() {
         addTypingIndicator();
 
         // 서버로 전송
-        ws.send(JSON.stringify({
+        sendMessage({
             action: 'chat',
             prompt: prompt
-        }));
+        });
 
         const shortPrompt = prompt.length > 50 ? prompt.slice(0, 50) + '...' : prompt;
         log('Claude에게 메시지 전송: ' + shortPrompt);
@@ -655,7 +708,7 @@ function handleChatComplete(response) {
         }
 
         // 서사 업데이트
-        ws.send(JSON.stringify({ action: 'get_narrative' }));
+        sendMessage({ action: 'get_narrative' });
     } else {
         log('채팅 에러: ' + data.error, 'error');
         addChatMessage('system', '에러: ' + data.error);
@@ -871,12 +924,12 @@ function saveNPC(characterDiv) {
     const filename = prompt('저장할 파일명:', name);
     if (!filename) return;
 
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'save_workspace_file',
         file_type: 'npc',
         filename: filename,
         content: desc
-    }));
+    });
 
     // 저장 후 목록 새로고침
     setTimeout(() => {
@@ -889,7 +942,7 @@ function saveNPC(characterDiv) {
 
 // NPC 목록 로드
 function loadNPCList(selectElement) {
-    ws.send(JSON.stringify({ action: 'list_workspace_files', file_type: 'npc' }));
+    sendMessage({ action: 'list_workspace_files', file_type: 'npc' });
     window.pendingNPCSelect = selectElement;
 }
 
@@ -906,7 +959,7 @@ saveContextBtn.addEventListener('click', () => {
         }
     });
 
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'set_context',
         world: worldInput.value.trim(),
         situation: situationInput.value.trim(),
@@ -919,7 +972,7 @@ saveContextBtn.addEventListener('click', () => {
         adult_level: adultLevel.value,
         narrative_separation: narrativeSeparation.checked,
         characters: characters
-    }));
+    });
 });
 
 // 컨텍스트 로드
@@ -954,7 +1007,7 @@ function loadContext(context) {
 
 clearHistoryBtn.addEventListener('click', () => {
     if (confirm('대화 히스토리를 초기화하시겠습니까?')) {
-        ws.send(JSON.stringify({ action: 'clear_history' }));
+        sendMessage({ action: 'clear_history' });
     }
 });
 
@@ -1014,11 +1067,11 @@ saveNarrativeBtn.addEventListener('click', () => {
 
     const markdown = getNarrativeMarkdown();
 
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'save_story',
         filename: filename,
         content: markdown
-    }));
+    });
 });
 
 // ===== 토큰 표시 =====
@@ -1116,7 +1169,7 @@ async function loadFileList(fileType, selectElement) {
     // 응답 처리를 위해 fileType을 저장
     window.pendingFileListType = fileType;
     window.pendingFileListSelect = selectElement;
-    ws.send(JSON.stringify({ action: 'list_workspace_files', file_type: fileType }));
+    sendMessage({ action: 'list_workspace_files', file_type: fileType });
 }
 
 // 실제 파일 목록 업데이트
@@ -1175,12 +1228,12 @@ async function saveFile(fileType, selectElement, contentGetter) {
     if (!filename) return;
 
     const content = contentGetter();
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'save_workspace_file',
         file_type: fileType,
         filename: filename,
         content: content
-    }));
+    });
 
     // 저장 후 목록 새로고침
     setTimeout(() => {
@@ -1191,11 +1244,11 @@ async function saveFile(fileType, selectElement, contentGetter) {
 // 파일 로드
 function loadFile(fileType, filename) {
     window.pendingLoadType = fileType;
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'load_workspace_file',
         file_type: fileType,
         filename: filename
-    }));
+    });
 }
 
 // 파일 삭제
@@ -1210,11 +1263,11 @@ function deleteFile(fileType, selectElement) {
         return;
     }
 
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'delete_workspace_file',
         file_type: fileType,
         filename: filename
-    }));
+    });
 
     // 삭제 후 목록 새로고침
     setTimeout(() => {
@@ -1276,7 +1329,7 @@ deleteMyCharacterBtn.addEventListener('click', () => {
 
 // 프리셋 목록 로드
 function loadPresetList() {
-    ws.send(JSON.stringify({ action: 'list_presets' }));
+    sendMessage({ action: 'list_presets' });
 }
 
 // 프리셋 목록 업데이트
@@ -1325,11 +1378,11 @@ function savePreset() {
         narrative_separation: narrativeSeparation.checked
     };
 
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'save_preset',
         filename: filename,
         preset: preset
-    }));
+    });
 }
 
 // 프리셋 적용
@@ -1377,10 +1430,10 @@ function deletePreset() {
         return;
     }
 
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'delete_preset',
         filename: filename
-    }));
+    });
 }
 
 // 프리셋 이벤트 리스너
@@ -1393,10 +1446,10 @@ loadPresetBtn.addEventListener('click', () => {
         return;
     }
 
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'load_preset',
         filename: filename
-    }));
+    });
 });
 
 deletePresetBtn.addEventListener('click', deletePreset);
@@ -1405,7 +1458,7 @@ deletePresetBtn.addEventListener('click', deletePreset);
 
 // Git 상태 확인
 function checkGitStatus() {
-    ws.send(JSON.stringify({ action: 'git_check_status' }));
+    sendMessage({ action: 'git_check_status' });
 }
 
 // Git 상태 처리
@@ -1434,7 +1487,7 @@ function handleGitStatus(data) {
 // Git 동기화 버튼 클릭
 gitSyncBtn.addEventListener('click', () => {
     // 현재 상태 확인 후 처리
-    ws.send(JSON.stringify({ action: 'git_check_status' }));
+    sendMessage({ action: 'git_check_status' });
 
     // 잠시 후 실제 처리 (상태 확인 결과를 기다림)
     setTimeout(() => {
@@ -1443,11 +1496,11 @@ gitSyncBtn.addEventListener('click', () => {
         if (btnText.includes('초기화')) {
             // Git 초기화
             if (confirm('persona_data를 Git 레포지토리로 초기화하시겠습니까?')) {
-                ws.send(JSON.stringify({ action: 'git_init' }));
+                sendMessage({ action: 'git_init' });
             }
         } else {
             // Git 동기화
-            ws.send(JSON.stringify({ action: 'git_sync' }));
+            sendMessage({ action: 'git_sync' });
         }
     }, 100);
 });
@@ -1456,7 +1509,7 @@ gitSyncBtn.addEventListener('click', () => {
 
 // 모드 상태 확인
 function checkModeStatus() {
-    ws.send(JSON.stringify({ action: 'mode_check' }));
+    sendMessage({ action: 'mode_check' });
 }
 
 // 모드 상태 처리
@@ -1491,7 +1544,7 @@ function handleModeStatus(data) {
 // 모드 전환 버튼 클릭
 modeSwitchBtn.addEventListener('click', () => {
     // 현재 모드 확인
-    ws.send(JSON.stringify({ action: 'mode_check' }));
+    sendMessage({ action: 'mode_check' });
 
     // 잠시 후 실제 처리
     setTimeout(() => {
@@ -1500,12 +1553,12 @@ modeSwitchBtn.addEventListener('click', () => {
         if (btnText.includes('챗봇')) {
             // 챗봇 → 코딩
             if (confirm('에이전트 지침을 복구하시겠습니까?\n(CLAUDE.md 파일 복원)')) {
-                ws.send(JSON.stringify({ action: 'mode_switch_coding' }));
+                sendMessage({ action: 'mode_switch_coding' });
             }
         } else if (btnText.includes('코딩')) {
             // 코딩 → 챗봇
             if (confirm('챗봇 전용 모드로 전환하시겠습니까?\n(CLAUDE.md 파일 비활성화)')) {
-                ws.send(JSON.stringify({ action: 'mode_switch_chatbot' }));
+                sendMessage({ action: 'mode_switch_chatbot' });
             }
         } else {
             alert('모드를 확인할 수 없습니다');
@@ -1517,7 +1570,7 @@ modeSwitchBtn.addEventListener('click', () => {
 
 // 서사 목록 로드
 function loadStoryList() {
-    ws.send(JSON.stringify({ action: 'list_stories' }));
+    sendMessage({ action: 'list_stories' });
 }
 
 // 서사 목록 업데이트
@@ -1558,10 +1611,10 @@ loadStoryBtn.addEventListener('click', () => {
         return;
     }
 
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'load_story',
         filename: filename
-    }));
+    });
 });
 
 // 서사 삭제 버튼
@@ -1576,10 +1629,10 @@ deleteStoryBtn.addEventListener('click', () => {
         return;
     }
 
-    ws.send(JSON.stringify({
+    sendMessage({
         action: 'delete_story',
         filename: filename
-    }));
+    });
 });
 
 // ===== 초기화 =====

@@ -726,7 +726,7 @@ docker compose down
 - **Claude**: 호스트에서 `claude auth login` 완료 후 필요 시 `docker-compose.yml`에 `~/.claude` 볼륨을 직접 추가
 - **Gemini**: OAuth 인증만 지원 (`gemini auth login` 후 `~/.config/gemini` 공유 필요 시 직접 추가)
 - **Droid**: `FACTORY_API_KEY` 환경 변수 또는 `~/.factory/config.json` 커스텀 모델 설정 마운트 필수
-- **간단 로그인(선택)**: `.env`의 `APP_LOGIN_PASSWORD`에 값을 지정하면 접속 시 비밀번호 입력 모달이 표시되며, 공란이면 인증 없이 바로 사용할 수 있습니다.
+- **간단 로그인(선택)**: `.env`의 `APP_LOGIN_PASSWORD`에 값을 지정하면 접속 시 비밀번호 입력 모달이 표시됩니다. JWT 서명 키(`APP_JWT_SECRET`)와 만료 시간(`APP_JWT_TTL`, 초 단위)을 함께 설정하면 브라우저가 토큰을 저장해 새로고침 시 자동 로그인됩니다. 비밀번호를 비워두면 인증 없이 사용 가능합니다.
 - 컨테이너는 `chatbot_workspace/CLAUDE.md`를 읽어서 성인 콘텐츠 지침 적용
 - 사용하지 않는 AI CLI는 설치하지 않아도 됨 (최소 1개 이상 필요)
 
