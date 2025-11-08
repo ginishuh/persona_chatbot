@@ -707,11 +707,11 @@ docker compose down
 
 ### Docker 구성
 
-- **Dockerfile.test**: Node.js 22 + Python 3.11 + 3개 AI CLI (수동 빌드용)
+- **Dockerfile.full**: Node.js 22 + Python 3.11 + 3개 AI CLI (수동 빌드용)
   - Claude Code CLI: `npm install -g @anthropic-ai/claude-code`
   - Droid CLI: `curl -fsSL https://app.factory.ai/cli | sh`
   - Gemini CLI: `npm install -g @google/gemini-cli`
-- **docker-compose.yml**: Dockerfile.test 기반 WebSocket/HTTP 통합 서비스
+- **docker-compose.yml**: Dockerfile.full 기반 WebSocket/HTTP 통합 서비스
   - 포트: 8765 (WebSocket), 9000 (HTTP) – 기본은 127.0.0.1 바인딩이므로 외부 노출이 필요하면 프록시/포트를 조정하세요
   - 볼륨 마운트: `./STORIES`, `./server`, `./web`, `./persona_data`, `./chatbot_workspace`, `${HOME}/.factory:/home/node/.factory`, `${HOME}/.claude:/home/node/.claude`, `${HOME}/.config/gemini:/home/node/.config/gemini`
   - 환경 변수:

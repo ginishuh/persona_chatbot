@@ -2,7 +2,7 @@ services:
   persona-chatbot:
     build:
       context: .
-      dockerfile: Dockerfile.test
+      dockerfile: Dockerfile.full
     user: "${UID:-1000}:${GID:-1000}"
     container_name: persona_chatbot_server
     ports:
