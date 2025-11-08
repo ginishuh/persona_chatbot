@@ -480,8 +480,9 @@ def run_http_server():
                 return
             return super().do_GET()
 
-    with TCPServer(("0.0.0.0", 9000), CustomHandler) as httpd:
-        logger.info("HTTP server started on port 9000")
+    http_port = int(os.getenv("HTTP_PORT", "9000"))
+    with TCPServer(("127.0.0.1", http_port), CustomHandler) as httpd:
+        logger.info(f"HTTP server started on port {http_port}")
         httpd.serve_forever()
 
 
@@ -494,8 +495,9 @@ async def main():
     http_thread.start()
 
     # WebSocket 서버 시작
-    async with websockets.serve(websocket_handler, "0.0.0.0", 8765):
-        logger.info("WebSocket server started on port 8765")
+    ws_port = int(os.getenv("WS_PORT", "8765"))
+    async with websockets.serve(websocket_handler, "127.0.0.1", ws_port):
+        logger.info(f"WebSocket server started on port {ws_port}")
         logger.info("Server is ready!")
         await asyncio.Future()  # 계속 실행
 
