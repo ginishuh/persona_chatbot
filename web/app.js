@@ -1290,9 +1290,9 @@ userIsNarrator.addEventListener('change', () => {
     }
 });
 
-// 캐릭터 추가 버튼은 설정 모달의 참여자 관리로 이동
+// 캐릭터 추가: 빠른 편집 모달로 바로 열기(설정 화면 열지 않음)
 addCharacterBtn.addEventListener('click', () => {
-    openSettingsParticipants();
+    openParticipantEditor(-1);
 });
 
 function addCharacterInput(name = '', gender = '', description = '', age = '') {
