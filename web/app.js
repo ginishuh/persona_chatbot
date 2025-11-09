@@ -237,14 +237,13 @@ function updateModelOptions(provider) {
         modelSelect.appendChild(opt);
     };
     if (provider === 'gemini') {
-        add('auto (CLI 기본)', '');
         add('gemini-2.5-flash', 'gemini-2.5-flash');
-        add('gemini-1.5-flash-8b', 'gemini-1.5-flash-8b');
-        add('gemini-1.5-pro', 'gemini-1.5-pro');
+        add('gemini-2.5-pro', 'gemini-2.5-pro');
     } else if (provider === 'claude') {
-        add('기본 (CLI 설정)', '');
-        add('Sonnet 4.5', 'sonnet-4.5');
-        add('Haiku 4.5', 'haiku-4.5');
+        add('기본(권장)', '');
+        // Anthropic CLI는 alias를 지원: sonnet | haiku | opus
+        add('Sonnet (alias: sonnet)', 'sonnet');
+        add('Haiku (alias: haiku)', 'haiku');
     } else if (provider === 'droid') {
         add('서버 기본(커스텀)', '');
     }
