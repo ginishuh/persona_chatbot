@@ -1325,27 +1325,18 @@ addCharacterBtn.addEventListener('click', () => {
     addCharacterInput();
 });
 
-function addCharacterInput(name = '', description = '') {
+function addCharacterInput(name = '', gender = '', description = '') {
     const characterDiv = document.createElement('div');
     characterDiv.className = 'character-item';
 
     const header = document.createElement('div');
     header.className = 'character-item-header';
 
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.className = 'character-name-input';
-    nameInput.placeholder = '이름';
-    nameInput.value = name;
-    nameInput.style.flex = '0 1 100px';
-    nameInput.style.minWidth = '60px';
-
     // NPC 파일 관리 버튼들
     const fileControls = document.createElement('div');
     fileControls.style.display = 'flex';
     fileControls.style.gap = '0.25rem';
     fileControls.style.alignItems = 'center';
-    fileControls.style.flex = '1';
     fileControls.style.justifyContent = 'flex-end';
 
     const npcSelect = document.createElement('select');
@@ -1354,7 +1345,7 @@ function addCharacterInput(name = '', description = '') {
     npcSelect.style.padding = '0.2rem 0.3rem';
     npcSelect.style.minWidth = '70px';
     npcSelect.style.maxWidth = '100px';
-    npcSelect.innerHTML = '<option value="">📂</option>';
+    npcSelect.innerHTML = '<option value="">💿</option>';
 
     const saveNPCBtn = document.createElement('button');
     saveNPCBtn.className = 'btn btn-sm';
@@ -1374,7 +1365,6 @@ function addCharacterInput(name = '', description = '') {
     fileControls.appendChild(saveNPCBtn);
     fileControls.appendChild(removeBtn);
 
-    header.appendChild(nameInput);
     header.appendChild(fileControls);
 
     // NPC 선택 시 로드
@@ -1385,12 +1375,40 @@ function addCharacterInput(name = '', description = '') {
         }
     };
 
+    // 이름/성별 필드
+    const nameGenderRow = document.createElement('div');
+    nameGenderRow.style.display = 'flex';
+    nameGenderRow.style.gap = '0.5rem';
+    nameGenderRow.style.marginBottom = '0.5rem';
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'character-name-input character-name-field';
+    nameInput.placeholder = '이름';
+    nameInput.value = name;
+    nameInput.style.flex = '2';
+
+    const genderSelect = document.createElement('select');
+    genderSelect.className = 'character-gender-input character-gender-field';
+    genderSelect.style.flex = '1';
+    genderSelect.innerHTML = `
+        <option value="">성별</option>
+        <option value="남성">남성</option>
+        <option value="여성">여성</option>
+        <option value="기타">기타</option>
+    `;
+    genderSelect.value = gender;
+
+    nameGenderRow.appendChild(nameInput);
+    nameGenderRow.appendChild(genderSelect);
+
     const descTextarea = document.createElement('textarea');
     descTextarea.className = 'character-description-input';
-    descTextarea.placeholder = '캐릭터 설명 (성격, 말투, 배경 등)';
+    descTextarea.placeholder = '성격, 말투, 배경, 외모 등...';
     descTextarea.value = description;
 
     characterDiv.appendChild(header);
+    characterDiv.appendChild(nameGenderRow);
     characterDiv.appendChild(descTextarea);
     charactersList.appendChild(characterDiv);
 
@@ -1447,18 +1465,34 @@ saveContextBtn.addEventListener('click', () => {
     const characterItems = charactersList.querySelectorAll('.character-item');
 
     characterItems.forEach(item => {
-        const name = item.querySelector('input').value.trim();
+        const name = item.querySelector('.character-name-input').value.trim();
+        const gender = item.querySelector('.character-gender-input').value.trim();
         const description = item.querySelector('textarea').value.trim();
         if (name && description) {
-            characters.push({ name, description });
+            characters.push({ name, gender, description });
         }
     });
+
+    // 사용자 캐릭터 정보 수집
+    const userName = document.getElementById('userCharacterName').value.trim();
+    const userGender = document.getElementById('userCharacterGender').value.trim();
+    const userDesc = userCharacterInput.value.trim();
+
+    // 사용자 캐릭터 정보를 하나의 문자열로 결합
+    let userCharacterData = '';
+    if (userName) {
+        userCharacterData = `이름: ${userName}`;
+        if (userGender) userCharacterData += `, 성별: ${userGender}`;
+        if (userDesc) userCharacterData += `\n${userDesc}`;
+    } else if (userDesc) {
+        userCharacterData = userDesc;
+    }
 
     sendMessage({
         action: 'set_context',
         world: worldInput.value.trim(),
         situation: situationInput.value.trim(),
-        user_character: userCharacterInput.value.trim(),
+        user_character: userCharacterData,
         narrator_enabled: narratorEnabled.checked,
         narrator_mode: narratorMode.value,
         narrator_description: narratorDescription.value.trim(),
@@ -1475,7 +1509,14 @@ saveContextBtn.addEventListener('click', () => {
 function loadContext(context) {
     worldInput.value = context.world || '';
     situationInput.value = context.situation || '';
-    userCharacterInput.value = context.user_character || '';
+
+    // 사용자 캐릭터 정보 파싱
+    const userChar = context.user_character || '';
+    userCharacterInput.value = userChar;
+    // 이름/성별 필드는 비워둠 (향후 개선 시 파싱 가능)
+    document.getElementById('userCharacterName').value = '';
+    document.getElementById('userCharacterGender').value = '';
+
     narratorEnabled.checked = context.narrator_enabled || false;
     narratorMode.value = context.narrator_mode || 'moderate';
     narratorDescription.value = context.narrator_description || '';
@@ -1493,7 +1534,7 @@ function loadContext(context) {
     charactersList.innerHTML = '';
     if (context.characters && context.characters.length > 0) {
         context.characters.forEach(char => {
-            addCharacterInput(char.name, char.description);
+            addCharacterInput(char.name, char.gender || '', char.description);
         });
     }
     // 빈 상태로 시작 (사용자가 직접 추가)
@@ -2230,6 +2271,8 @@ if (injectStoryBtn) {
 
 const hamburgerBtn = document.getElementById('hamburgerBtn');
 const narrativeMenuBtn = document.getElementById('narrativeMenuBtn');
+const moreMenuBtn = document.getElementById('moreMenuBtn');
+const moreMenuDropdown = document.getElementById('moreMenuDropdown');
 const mobileOverlay = document.getElementById('mobileOverlay');
 const leftPanel = document.querySelector('.left-panel');
 const rightPanel = document.querySelector('.right-panel');
@@ -2259,6 +2302,96 @@ if (narrativeMenuBtn) {
         }
     });
 }
+
+// 더보기 메뉴 토글
+if (moreMenuBtn) {
+    moreMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleMoreMenu();
+    });
+}
+
+function toggleMoreMenu() {
+    const isVisible = moreMenuDropdown.classList.contains('visible');
+    if (isVisible) {
+        closeMoreMenu();
+    } else {
+        openMoreMenu();
+    }
+}
+
+function openMoreMenu() {
+    closeMoreMenu(); // 먼저 닫기
+    moreMenuDropdown.classList.remove('hidden');
+    moreMenuDropdown.classList.add('visible');
+    moreMenuBtn.classList.add('active');
+
+    // 토큰 정보, 연결 상태, 세션 정보 동기화
+    syncMoreMenuStatus();
+}
+
+function closeMoreMenu() {
+    moreMenuDropdown.classList.remove('visible');
+    moreMenuDropdown.classList.add('hidden');
+    moreMenuBtn.classList.remove('active');
+}
+
+function syncMoreMenuStatus() {
+    // 토큰 정보
+    const tokenInfo = document.getElementById('tokenInfo');
+    const moreTokenInfo = document.getElementById('moreTokenInfo');
+    if (tokenInfo && moreTokenInfo) {
+        moreTokenInfo.textContent = tokenInfo.textContent;
+    }
+
+    // 연결 상태
+    const statusIndicator = document.getElementById('statusIndicator');
+    const moreStatusIndicator = document.getElementById('moreStatusIndicator');
+    const statusText = document.getElementById('statusText');
+    const moreStatusText = document.getElementById('moreStatusText');
+    if (statusIndicator && moreStatusIndicator) {
+        moreStatusIndicator.className = statusIndicator.className;
+    }
+    if (statusText && moreStatusText) {
+        moreStatusText.textContent = statusText.textContent;
+    }
+
+    // 세션 상태
+    const sessionBadge = document.getElementById('sessionBadge');
+    const moreSessionBadgeText = document.getElementById('moreSessionBadgeText');
+    if (sessionBadge && moreSessionBadgeText) {
+        moreSessionBadgeText.textContent = sessionBadge.textContent.replace('세션: ', '');
+        moreSessionBadgeText.className = sessionBadge.className;
+    }
+}
+
+// 더보기 메뉴 아이템 클릭 이벤트
+document.getElementById('moreModeSwitchBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    document.getElementById('modeSwitchBtn')?.click();
+});
+
+document.getElementById('moreGitSyncBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    document.getElementById('gitSyncBtn')?.click();
+});
+
+document.getElementById('moreClearHistoryBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    document.getElementById('clearHistoryBtn')?.click();
+});
+
+document.getElementById('moreResetSessionsBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    document.getElementById('resetSessionsBtn')?.click();
+});
+
+// 문서 전체 클릭 시 더보기 메뉴 닫기
+document.addEventListener('click', (e) => {
+    if (moreMenuDropdown && !moreMenuDropdown.contains(e.target) && e.target !== moreMenuBtn) {
+        closeMoreMenu();
+    }
+});
 
 function openMobilePanel(panel) {
     closeMobilePanel(); // 먼저 기존 패널 닫기

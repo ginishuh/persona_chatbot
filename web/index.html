@@ -11,6 +11,24 @@
 </head>
 <body>
     <div class="mobile-overlay" id="mobileOverlay"></div>
+
+    <!-- 모바일 더보기 메뉴 -->
+    <div id="moreMenuDropdown" class="more-menu-dropdown hidden">
+        <button class="more-menu-item" id="moreModeSwitchBtn">💬 모드 전환</button>
+        <button class="more-menu-item" id="moreGitSyncBtn">🔄 Git 동기화</button>
+        <button class="more-menu-item" id="moreClearHistoryBtn">🗑️ 대화 초기화</button>
+        <button class="more-menu-item" id="moreResetSessionsBtn">♻️ 세션 리셋</button>
+        <div class="more-menu-divider"></div>
+        <div class="more-menu-item-static" id="moreTokenInfo">토큰: - / 200K</div>
+        <div class="more-menu-item-static" id="moreConnectionStatus">
+            <span class="status-indicator" id="moreStatusIndicator"></span>
+            <span id="moreStatusText">연결 중...</span>
+        </div>
+        <div class="more-menu-item-static" id="moreSessionBadge">
+            <span>세션: </span><span id="moreSessionBadgeText">OFF</span>
+        </div>
+    </div>
+
     <div class="container">
         <!-- Header -->
         <header>
@@ -21,10 +39,13 @@
             </button>
             <div class="brand">
                 <img src="src/logo3.png" alt="Chorus AI 로고" class="brand-logo" />
-                <h1>📖 Persona Chat</h1>
+                <h1>Persona Chat</h1>
             </div>
             <button id="narrativeMenuBtn" class="narrative-menu-btn" aria-label="서사기록" title="서사기록">
                 📜
+            </button>
+            <button id="moreMenuBtn" class="more-menu-btn" aria-label="더보기" title="더보기">
+                ⋮
             </button>
             <div class="header-actions">
                 <button id="modeSwitchBtn" class="btn btn-sm" title="코딩/챗봇 모드 전환">💬 모드</button>
@@ -96,7 +117,16 @@
                                 <button id="saveMyCharacterBtn" class="btn btn-sm" title="저장">💾</button>
                                 <button id="deleteMyCharacterBtn" class="btn btn-sm btn-remove" title="삭제">🗑️</button>
                             </div>
-                            <textarea id="userCharacterInput" placeholder="당신의 캐릭터 설정 (이름, 성격, 배경 등)..." rows="3"></textarea>
+                            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                <input type="text" id="userCharacterName" class="character-name-field" placeholder="이름" />
+                                <select id="userCharacterGender" class="character-gender-field">
+                                    <option value="">성별</option>
+                                    <option value="남성">남성</option>
+                                    <option value="여성">여성</option>
+                                    <option value="기타">기타</option>
+                                </select>
+                            </div>
+                            <textarea id="userCharacterInput" placeholder="성격, 배경, 외모 등..." rows="3"></textarea>
                         </div>
                         <div class="context-section">
                             <label>👥 NPC 캐릭터들</label>
@@ -227,15 +257,17 @@
                     <h2>📜 서사 기록</h2>
                 </div>
                 <div class="narrative-controls">
-                    <div style="display: flex; gap: 0.5rem; padding: 0.75rem 1rem; border-bottom: 2px solid #e8ecef; align-items: center;">
-                        <select id="storySelect" class="select-input" style="flex: 1; min-width: 120px; margin-bottom: 0;" title="저장된 서사">
+                    <div style="padding: 0.75rem 1rem; border-bottom: 2px solid #e8ecef;">
+                        <select id="storySelect" class="select-input" style="width: 100%; margin-bottom: 0.75rem;" title="저장된 서사">
                             <option value="">저장된 서사...</option>
                         </select>
-                        <button id="loadStoryBtn" class="btn btn-sm" title="서사 불러오기">📂</button>
-                        <button id="resumeStoryBtn" class="btn btn-sm" title="이 서사에서 이어하기">▶</button>
-                        <button id="injectStoryBtn" class="btn btn-sm" title="이 서사를 컨텍스트에 주입">➡</button>
-                        <button id="deleteStoryBtn" class="btn btn-sm btn-remove" title="서사 삭제">🗑️</button>
-                        <button id="saveNarrativeBtn" class="btn btn-sm" title="서사 저장">💾</button>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button id="loadStoryBtn" class="btn btn-sm" title="서사 불러오기">💿</button>
+                            <button id="resumeStoryBtn" class="btn btn-sm" title="이 서사에서 이어하기">▶</button>
+                            <button id="injectStoryBtn" class="btn btn-sm" title="이 서사를 컨텍스트에 주입">➡</button>
+                            <button id="deleteStoryBtn" class="btn btn-sm btn-remove" title="서사 삭제">🗑️</button>
+                            <button id="saveNarrativeBtn" class="btn btn-sm" title="서사 저장">💾</button>
+                        </div>
                     </div>
                 </div>
 

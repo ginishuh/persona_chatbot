@@ -82,6 +82,85 @@ header {
     transform: scale(0.9);
 }
 
+/* 더보기 메뉴 버튼 */
+.more-menu-btn {
+    display: none;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    font-weight: bold;
+    padding: 0.5rem;
+    cursor: pointer;
+    z-index: 1001;
+    transition: transform 0.2s;
+    color: #475569;
+}
+
+.more-menu-btn:hover {
+    transform: scale(1.1);
+}
+
+.more-menu-btn.active {
+    background: #e2e8f0;
+    border-radius: 6px;
+}
+
+/* 더보기 메뉴 드롭다운 */
+.more-menu-dropdown {
+    display: none;
+    position: fixed;
+    top: 60px;
+    right: 10px;
+    background: #ffffff;
+    border: 2px solid #e8ecef;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    z-index: 1002;
+    min-width: 200px;
+    padding: 0.5rem;
+}
+
+.more-menu-dropdown.hidden {
+    display: none;
+}
+
+.more-menu-dropdown.visible {
+    display: block;
+}
+
+.more-menu-item {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #2c3e50;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.more-menu-item:hover {
+    background: #f1f5f9;
+}
+
+.more-menu-item-static {
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.more-menu-divider {
+    height: 1px;
+    background: #e8ecef;
+    margin: 0.5rem 0;
+}
+
 /* 브랜드 영역 */
 header .brand {
     display: flex;
@@ -479,6 +558,36 @@ header h1 {
     box-shadow: 0 0 0 3px rgba(92, 135, 255, 0.1);
 }
 
+/* 캐릭터 이름/성별 필드 */
+.character-name-field,
+.character-gender-field {
+    background: #ffffff;
+    color: #2c3e50;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.6rem;
+    font-family: inherit;
+    font-size: 0.9rem;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.character-name-field {
+    flex: 2;
+}
+
+.character-gender-field {
+    flex: 1;
+    min-width: 100px;
+    cursor: pointer;
+}
+
+.character-name-field:focus,
+.character-gender-field:focus {
+    border-color: #5c87ff;
+    box-shadow: 0 0 0 3px rgba(92, 135, 255, 0.1);
+}
+
 /* Chat Messages */
 .chat-messages {
     flex: 1;
@@ -865,6 +974,11 @@ footer {
         display: block;
     }
 
+    /* 더보기 메뉴 버튼 표시 */
+    .more-menu-btn {
+        display: block;
+    }
+
     /* 헤더 레이아웃 조정 */
     header {
         padding: 0.75rem 1rem;
@@ -878,7 +992,7 @@ footer {
         height: 32px;
     }
 
-    /* 헤더 액션 버튼들 숨기기 (햄버거 메뉴로 이동) */
+    /* 헤더 액션 버튼들 숨기기 (더보기 메뉴로 이동) */
     .header-actions {
         display: none;
     }
