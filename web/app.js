@@ -554,7 +554,19 @@ function handleMessage(msg) {
                 if (authToken) {
                     sendMessage({ action: 'login' });
                 } else {
-                    showLoginModal();
+                    // 자동 로그인 시도
+                    try {
+                        const auto = localStorage.getItem(LOGIN_AUTOLOGIN_KEY) === '1';
+                        const user = localStorage.getItem(LOGIN_USER_KEY) || '';
+                        const pw = localStorage.getItem(LOGIN_SAVED_PW_KEY) || '';
+                        if (auto && user && pw) {
+                            sendMessage({ action: 'login', username: user, password: pw }, { skipToken: true });
+                        } else {
+                            showLoginModal();
+                        }
+                    } catch (_) {
+                        showLoginModal();
+                    }
                 }
             } else {
                 authRequired = false;
