@@ -27,6 +27,8 @@ header {
     background: #ffffff;
     border-bottom: 2px solid #e8ecef;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    position: relative;
+    z-index: 1000;
 }
 
 /* 햄버거 메뉴 */
@@ -982,6 +984,12 @@ footer {
     /* 헤더 레이아웃 조정 */
     header {
         padding: 0.75rem 1rem;
+    }
+
+    /* 브랜드 영역 중앙 정렬 */
+    header .brand {
+        flex: 1;
+        justify-content: center;
     }
 
     header .brand h1 {
