@@ -473,6 +473,28 @@ function attemptTokenRefresh() {
     }
 }
 
+// 오류 코드 → 사용자 메시지 매핑
+function mapAuthError(code) {
+    switch (code) {
+        case 'invalid_username':
+            return '아이디가 일치하지 않습니다.';
+        case 'invalid_password':
+            return '비밀번호가 일치하지 않습니다.';
+        case 'rate_limited':
+            return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.';
+        case 'missing_token':
+        case 'token_expired':
+            return '세션이 만료되었습니다. 다시 로그인하세요.';
+        case 'invalid_token':
+        case 'invalid_token_type':
+            return '인증 정보가 유효하지 않습니다. 다시 로그인하세요.';
+        case 'jwt_disabled':
+            return '서버가 로그인 없이 동작 중입니다. 페이지를 새로 고침하세요.';
+        default:
+            return '';
+    }
+}
+
 function showLoginModal() {
     if (!loginModal) return;
     loginModal.classList.remove('hidden');
@@ -588,7 +610,10 @@ function handleMessage(msg) {
                 clearAuthToken();
                 setRefreshToken('', '');
                 showLoginModal();
-                log('로그인이 필요합니다', 'warning');
+                const reason = (data && data.reason) ? String(data.reason) : '';
+                const msg = mapAuthError(reason) || '로그인이 필요합니다';
+                if (loginError) loginError.textContent = msg;
+                log(msg, 'warning');
             }
             break;
 
@@ -630,7 +655,7 @@ function handleMessage(msg) {
                 }
                 initializeAppData();
             } else {
-                const errorMsg = data.error || '로그인에 실패했습니다.';
+                const errorMsg = mapAuthError(data.code) || data.error || '로그인에 실패했습니다.';
                 clearAuthToken();
                 setRefreshToken('', '');
                 showLoginModal();
