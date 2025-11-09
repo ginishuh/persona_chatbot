@@ -516,6 +516,12 @@ function handleMessage(msg) {
                     setRefreshToken(data.refresh_token, data.refresh_expires_at);
                 }
                 log('로그인 성공', 'success');
+                // 직전 사용자 액션이 있었다면 우선 재전송
+                if (lastRequest) {
+                    const payload = { ...lastRequest };
+                    sendMessage(payload, { skipRetry: true });
+                    lastRequest = null;
+                }
                 initializeAppData();
             } else {
                 const errorMsg = data.error || '로그인에 실패했습니다.';
