@@ -1332,7 +1332,7 @@ function addCharacterInput(name = '', gender = '', description = '') {
     npcSelect.className = 'npc-select select-input';
     npcSelect.style.minWidth = '70px';
     npcSelect.style.maxWidth = '100px';
-    npcSelect.innerHTML = '<option value="">💿</option>';
+    npcSelect.innerHTML = '<option value="">📤</option>';
 
     const saveNPCBtn = document.createElement('button');
     saveNPCBtn.className = 'btn btn-sm';
