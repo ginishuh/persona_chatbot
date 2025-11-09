@@ -4,13 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Persona Chat - 멀티 캐릭터 대화</title>
+    <meta name="theme-color" content="#252526">
+    <link rel="icon" href="src/logo3.png?v=2" type="image/png" sizes="any">
+    <link rel="apple-touch-icon" href="src/logo3.png?v=2">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header>
-            <h1>📖 Persona Chat</h1>
+            <div class="brand">
+                <img src="src/logo3.png" alt="Chorus AI 로고" class="brand-logo" />
+                <h1>📖 Persona Chat</h1>
+            </div>
             <div class="header-actions">
                 <button id="modeSwitchBtn" class="btn btn-sm" title="코딩/챗봇 모드 전환">💬 모드</button>
                 <button id="gitSyncBtn" class="btn btn-sm" title="Git 동기화">🔄 동기화</button>
@@ -238,6 +244,7 @@
 
     <div id="loginModal" class="login-modal hidden">
         <div class="login-modal-content">
+            <img src="src/logo3.png" alt="Chorus AI 로고" class="login-logo" />
             <h2>🔒 로그인 필요</h2>
             <p class="login-description">.env에 설정한 아이디/비밀번호를 입력하세요.</p>
             <input type="text" id="loginUsername" placeholder="아이디" autocomplete="username" />

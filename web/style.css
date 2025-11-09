@@ -28,6 +28,19 @@ header {
     border-bottom: 1px solid #3e3e42;
 }
 
+/* 브랜드 영역 */
+header .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+header .brand-logo {
+    height: 40px;
+    width: auto;
+    display: block;
+}
+
 header h1 {
     font-size: 1.5rem;
     font-weight: 600;
@@ -719,6 +732,11 @@ footer {
     .center-panel {
         min-width: unset;
     }
+
+    /* 모바일에서는 헤더 로고를 약간 축소 */
+    header .brand-logo {
+        height: 32px;
+    }
 }
 
 /* 파일 미리보기 */
@@ -765,6 +783,13 @@ footer {
     box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.08);
     text-align: center;
+}
+
+.login-logo {
+    height: 72px;
+    width: auto;
+    margin-bottom: 0.5rem;
+    display: inline-block;
 }
 
 .login-modal-content input {

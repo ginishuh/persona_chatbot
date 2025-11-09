@@ -1,0 +1,18 @@
+<!--
+  간단한 벡터 파비콘 (Chorus AI의 C 모노그램 느낌)
+  - 크기: 64x64 (벡터라 어떤 크기든 선명)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <style>
+      .ring { fill: none; stroke: #10cbbf; stroke-width: 8; stroke-linecap: round; }
+      .inner { stroke-width: 4.5; opacity: .95; }
+      .inner2 { stroke-width: 3; opacity: .85; }
+    </style>
+  </defs>
+  <!-- 큰 C 아크 -->
+  <path class="ring" d="M48 16a22 22 0 1 0 0 32"/>
+  <!-- 내부 얇은 아크들로 리듬감 추가 -->
+  <path class="ring inner" d="M44 20a18 18 0 1 0 0 24"/>
+  <path class="ring inner2" d="M41 23a15 15 0 1 0 0 18"/>
+</svg>
