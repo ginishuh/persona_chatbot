@@ -28,6 +28,7 @@ const narratorMode = document.getElementById('narratorMode');
 const narratorDescription = document.getElementById('narratorDescription');
 const charactersList = document.getElementById('charactersList');
 const addCharacterBtn = document.getElementById('addCharacterBtn');
+const applyCharactersBtn = document.getElementById('applyCharactersBtn');
 const aiProvider = document.getElementById('aiProvider');
 const modelSelect = document.getElementById('modelSelect');
 const adultLevel = document.getElementById('adultLevel');
@@ -1492,6 +1493,55 @@ saveContextBtn.addEventListener('click', () => {
     });
     setTimeout(() => { if (saveContextBtn) saveContextBtn.disabled = false; }, 5000);
 });
+
+// 캐릭터 적용 (왼쪽 패널용)
+if (applyCharactersBtn) {
+    applyCharactersBtn.addEventListener('click', () => {
+        applyCharactersBtn.disabled = true;
+        const characters = [];
+        const characterItems = charactersList.querySelectorAll('.character-item');
+
+        characterItems.forEach(item => {
+            const name = item.querySelector('.character-name-input').value.trim();
+            const gender = item.querySelector('.character-gender-input').value.trim();
+            const description = item.querySelector('textarea').value.trim();
+            if (name && description) {
+                characters.push({ name, gender, description });
+            }
+        });
+
+        // 사용자 캐릭터 정보 수집
+        const userName = document.getElementById('userCharacterName').value.trim();
+        const userGender = document.getElementById('userCharacterGender').value.trim();
+        const userDesc = userCharacterInput.value.trim();
+
+        // 사용자 캐릭터 정보를 하나의 문자열로 결합
+        let userCharacterData = '';
+        if (userName) {
+            userCharacterData = `이름: ${userName}`;
+            if (userGender) userCharacterData += `, 성별: ${userGender}`;
+            if (userDesc) userCharacterData += `\n${userDesc}`;
+        } else if (userDesc) {
+            userCharacterData = userDesc;
+        }
+
+        sendMessage({
+            action: 'set_context',
+            world: worldInput.value.trim(),
+            situation: situationInput.value.trim(),
+            user_character: userCharacterData,
+            narrator_enabled: narratorEnabled.checked,
+            narrator_mode: narratorMode.value,
+            narrator_description: narratorDescription.value.trim(),
+            user_is_narrator: userIsNarrator.checked,
+            ai_provider: aiProvider.value,
+            adult_level: adultLevel.value,
+            narrative_separation: narrativeSeparation.checked,
+            characters: characters
+        });
+        setTimeout(() => { applyCharactersBtn.disabled = false; }, 5000);
+    });
+}
 
 // 컨텍스트 로드
 function loadContext(context) {
