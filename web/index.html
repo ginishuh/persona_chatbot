@@ -12,6 +12,143 @@
 <body>
     <div class="mobile-overlay" id="mobileOverlay"></div>
 
+    <!-- 설정 모달 -->
+    <div id="settingsModal" class="settings-modal hidden">
+        <div class="settings-modal-overlay"></div>
+        <div class="settings-modal-content">
+            <div class="settings-modal-header">
+                <h2>⚙️ 설정</h2>
+                <button id="closeSettingsBtn" class="btn-icon" title="닫기">✕</button>
+            </div>
+            <div class="settings-modal-body">
+                <!-- 세계관/배경 -->
+                <div class="context-section">
+                    <label>🌍 세계관/배경</label>
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <select id="worldSelect" class="select-input" style="flex: 1;">
+                            <option value="">새 세계관...</option>
+                        </select>
+                        <button id="saveWorldBtn" class="btn btn-sm" title="세계관 저장">💾</button>
+                        <button id="deleteWorldBtn" class="btn btn-sm btn-remove" title="세계관 삭제">🗑️</button>
+                    </div>
+                    <textarea id="worldInput" placeholder="세계관, 시대적 배경 등..." rows="3"></textarea>
+                </div>
+
+                <!-- 현재 상황 -->
+                <div class="context-section">
+                    <label>📍 현재 상황</label>
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <select id="situationSelect" class="select-input" style="flex: 1;">
+                            <option value="">새 상황...</option>
+                        </select>
+                        <button id="saveSituationBtn" class="btn btn-sm" title="상황 저장">💾</button>
+                        <button id="deleteSituationBtn" class="btn btn-sm btn-remove" title="상황 삭제">🗑️</button>
+                    </div>
+                    <textarea id="situationInput" placeholder="현재 벌어지고 있는 상황..." rows="3"></textarea>
+                </div>
+
+                <!-- 진행자 설정 -->
+                <div class="context-section">
+                    <label>🎭 진행자 모드</label>
+                    <div style="margin-bottom: 0.5rem;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="narratorEnabled" />
+                            <span>AI 진행자</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="userIsNarrator" />
+                            <span>내가 진행자</span>
+                        </label>
+                    </div>
+                    <div id="narratorSettings" style="display: none;">
+                        <select id="narratorMode" class="select-input">
+                            <option value="active">적극적</option>
+                            <option value="moderate" selected>보통</option>
+                            <option value="passive">소극적</option>
+                        </select>
+                        <textarea id="narratorDescription" placeholder="진행자 성향..." rows="2"></textarea>
+                    </div>
+                </div>
+
+                <!-- AI 제공자 선택 -->
+                <div class="context-section">
+                    <label>🤖 AI 제공자</label>
+                    <select id="aiProvider" class="select-input">
+                        <option value="claude">Claude (Anthropic)</option>
+                        <option value="droid">Droid (Factory.ai)</option>
+                        <option value="gemini">Gemini (Google)</option>
+                    </select>
+                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem; align-items:center;">
+                        <label style="min-width: 60px;">모델</label>
+                        <select id="modelSelect" class="select-input" style="flex:1; min-width: 180px;"></select>
+                    </div>
+                    <p class="hint">기본 AI 제공자를 선택합니다</p>
+                </div>
+
+                <!-- 맥락 길이 -->
+                <div class="context-section">
+                    <label>🧠 맥락 길이</label>
+                    <div class="slider-row">
+                        <input type="range" id="historyLengthSlider" min="5" max="60" step="5" value="30">
+                        <span id="historyLengthValue" class="slider-value">30턴</span>
+                    </div>
+                    <label class="checkbox-label slider-checkbox">
+                        <input type="checkbox" id="historyUnlimitedToggle">
+                        <span>무제한</span>
+                    </label>
+                    <p class="hint">최근 N턴만 모델에 전달합니다. 무제한은 토큰 소모가 커질 수 있습니다.</p>
+                </div>
+
+                <!-- 세션 유지 -->
+                <div class="context-section">
+                    <label>♻️ 세션 유지</label>
+                    <label class="checkbox-label" title="OFF로 전환 시 즉시 모든 세션이 초기화됩니다.">
+                        <input type="checkbox" id="sessionRetentionToggle">
+                        <span>Claude/Droid 대화 기억 (기본 꺼짐)</span>
+                    </label>
+                    <p class="hint">ON 시 모델 내부 세션을 이어서 사용합니다. 모델 전환 시 자동으로 새 세션이 시작됩니다.</p>
+                </div>
+
+                <!-- 성인 콘텐츠 수위 -->
+                <div class="context-section">
+                    <label>🔞 성인 콘텐츠 수위</label>
+                    <select id="adultLevel" class="select-input">
+                        <option value="explicit">명시적 표현 (기본)</option>
+                        <option value="enhanced">묘사/효과음/신음 강화</option>
+                        <option value="extreme">최고 수위 (욕설, 더티토크)</option>
+                    </select>
+                </div>
+
+                <!-- 대화/서술/효과음 분리 -->
+                <div class="context-section">
+                    <label>📝 표현 분리</label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="narrativeSeparation" />
+                        <span>대화/서술/효과음 분리</span>
+                    </label>
+                    <p class="hint">활성화 시: [캐릭터] 대사, *효과음*, 서술(태그없음)</p>
+                </div>
+
+                <!-- 프리셋 관리 -->
+                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e8ecef;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📦 전체 프리셋</label>
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <select id="presetSelect" class="select-input" style="flex: 1;">
+                            <option value="">프리셋 선택...</option>
+                        </select>
+                        <button id="loadPresetBtn" class="btn btn-sm" title="프리셋 불러오기">📂</button>
+                        <button id="deletePresetBtn" class="btn btn-sm btn-remove" title="프리셋 삭제">🗑️</button>
+                    </div>
+                    <button id="savePresetBtn" class="btn btn-primary" style="width: 100%;">💾 프리셋으로 저장</button>
+                    <p class="hint" style="margin-top: 0.5rem;">프리셋: 현재 모든 설정을 하나의 파일로 저장/복원</p>
+                </div>
+            </div>
+            <div class="settings-modal-footer">
+                <button id="saveContextBtn" class="btn btn-primary" style="width: 100%;">💾 설정 적용</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 모바일 더보기 메뉴 -->
     <div id="moreMenuDropdown" class="more-menu-dropdown hidden">
         <button class="more-menu-item" id="moreGitSyncBtn">🔄 Git 동기화</button>
@@ -49,6 +186,7 @@
                 ⋮
             </button>
             <div class="header-actions">
+                <button id="settingsBtn" class="btn btn-sm" title="설정">⚙️ 설정</button>
                 <button id="gitSyncBtn" class="btn btn-sm" title="Git 동기화">🔄 동기화</button>
                 <button id="clearHistoryBtn" class="btn btn-sm btn-warning">🗑️ 대화 초기화</button>
                 <button id="resetSessionsBtn" class="btn btn-sm" title="AI 세션 리셋">♻️ 세션</button>
@@ -65,176 +203,39 @@
 
         <!-- Main 3-Column Layout -->
         <div class="main-content">
-            <!-- Left Panel: Context Settings -->
+            <!-- Left Panel: Characters -->
             <aside class="left-panel">
                 <div class="panel-header">
-                    <h2>⚙️ 설정</h2>
-                    <button id="toggleContextBtn" class="btn-icon" title="접기/펼치기">▼</button>
-                </div>
-
-                <!-- Tabs -->
-                <div class="tabs">
-                    <button class="tab-button" data-tab="basic">기본설정</button>
-                    <button class="tab-button active" data-tab="characters">캐릭터</button>
-                    <button class="tab-button" data-tab="modes">모드</button>
+                    <h2>👥 캐릭터</h2>
                 </div>
 
                 <div id="contextContent" class="panel-content">
-                    <!-- 기본설정 탭 -->
-                    <div class="tab-content" id="tab-basic">
-                        <div class="context-section">
-                            <label>🌍 세계관/배경</label>
-                            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-                                <select id="worldSelect" class="select-input" style="flex: 1;">
-                                    <option value="">새 세계관...</option>
-                                </select>
-                                <button id="saveWorldBtn" class="btn btn-sm" title="세계관 저장">💾</button>
-                                <button id="deleteWorldBtn" class="btn btn-sm btn-remove" title="세계관 삭제">🗑️</button>
-                            </div>
-                            <textarea id="worldInput" placeholder="세계관, 시대적 배경 등..." rows="3"></textarea>
-                        </div>
-                        <div class="context-section">
-                            <label>📍 현재 상황</label>
-                            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-                                <select id="situationSelect" class="select-input" style="flex: 1;">
-                                    <option value="">새 상황...</option>
-                                </select>
-                                <button id="saveSituationBtn" class="btn btn-sm" title="상황 저장">💾</button>
-                                <button id="deleteSituationBtn" class="btn btn-sm btn-remove" title="상황 삭제">🗑️</button>
-                            </div>
-                            <textarea id="situationInput" placeholder="현재 벌어지고 있는 상황..." rows="3"></textarea>
-                        </div>
-                    </div>
-
-                    <!-- 캐릭터 탭 -->
-                    <div class="tab-content active" id="tab-characters">
-                        <div class="context-section">
-                            <label>🙋 나의 캐릭터</label>
-                            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-                                <select id="myCharacterSelect" class="select-input" style="flex: 1;">
-                                    <option value="">선택...</option>
-                                </select>
-                                <button id="saveMyCharacterBtn" class="btn btn-sm" title="저장">💾</button>
-                                <button id="deleteMyCharacterBtn" class="btn btn-sm btn-remove" title="삭제">🗑️</button>
-                            </div>
-                            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-                                <input type="text" id="userCharacterName" class="character-name-field" placeholder="이름" />
-                                <select id="userCharacterGender" class="character-gender-field">
-                                    <option value="">성별</option>
-                                    <option value="남성">남성</option>
-                                    <option value="여성">여성</option>
-                                    <option value="기타">기타</option>
-                                </select>
-                            </div>
-                            <textarea id="userCharacterInput" placeholder="성격, 배경, 외모 등..." rows="3"></textarea>
-                        </div>
-                        <div class="context-section">
-                            <label>👥 NPC 캐릭터들</label>
-                            <div id="charactersList"></div>
-                            <button id="addCharacterBtn" class="btn btn-sm">+ 캐릭터 추가</button>
-                        </div>
-                    </div>
-
-                    <!-- 모드 탭 -->
-                    <div class="tab-content" id="tab-modes">
-                        <!-- 진행자 설정 -->
-                        <div class="context-section">
-                            <label>🎭 진행자 모드</label>
-                            <div style="margin-bottom: 0.5rem;">
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="narratorEnabled" />
-                                    <span>AI 진행자</span>
-                                </label>
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="userIsNarrator" />
-                                    <span>내가 진행자</span>
-                                </label>
-                            </div>
-                            <div id="narratorSettings" style="display: none;">
-                                <select id="narratorMode" class="select-input">
-                                    <option value="active">적극적</option>
-                                    <option value="moderate" selected>보통</option>
-                                    <option value="passive">소극적</option>
-                                </select>
-                                <textarea id="narratorDescription" placeholder="진행자 성향..." rows="2"></textarea>
-                            </div>
-                        </div>
-
-                        <!-- AI 제공자 선택 -->
-                        <div class="context-section">
-                            <label>🤖 AI 제공자</label>
-                            <select id="aiProvider" class="select-input">
-                                <option value="claude">Claude (Anthropic)</option>
-                                <option value="droid">Droid (Factory.ai)</option>
-                                <option value="gemini">Gemini (Google)</option>
-                            </select>
-                            <div style="display:flex; gap:0.5rem; margin-top:0.5rem; align-items:center;">
-                                <label style="min-width: 60px;">모델</label>
-                                <select id="modelSelect" class="select-input" style="flex:1; min-width: 180px;"></select>
-                            </div>
-                            <p class="hint">기본 AI 제공자를 선택합니다</p>
-                        </div>
-
-                        <!-- 맥락 길이 -->
-                        <div class="context-section">
-                            <label>🧠 맥락 길이</label>
-                            <div class="slider-row">
-                                <input type="range" id="historyLengthSlider" min="5" max="60" step="5" value="30">
-                                <span id="historyLengthValue" class="slider-value">30턴</span>
-                            </div>
-                            <label class="checkbox-label slider-checkbox">
-                                <input type="checkbox" id="historyUnlimitedToggle">
-                                <span>무제한</span>
-                            </label>
-                            <p class="hint">최근 N턴만 모델에 전달합니다. 무제한은 토큰 소모가 커질 수 있습니다.</p>
-                        </div>
-
-                        <!-- 세션 유지 -->
-                        <div class="context-section">
-                            <label>♻️ 세션 유지</label>
-                            <label class="checkbox-label" title="OFF로 전환 시 즉시 모든 세션이 초기화됩니다.">
-                                <input type="checkbox" id="sessionRetentionToggle">
-                                <span>Claude/Droid 대화 기억 (기본 꺼짐)</span>
-                            </label>
-                            <p class="hint">ON 시 모델 내부 세션을 이어서 사용합니다. 모델 전환 시 자동으로 새 세션이 시작됩니다.</p>
-                        </div>
-
-                        <!-- 성인 콘텐츠 수위 -->
-                        <div class="context-section">
-                            <label>🔞 성인 콘텐츠 수위</label>
-                            <select id="adultLevel" class="select-input">
-                                <option value="explicit">명시적 표현 (기본)</option>
-                                <option value="enhanced">묘사/효과음/신음 강화</option>
-                                <option value="extreme">최고 수위 (욕설, 더티토크)</option>
-                            </select>
-                        </div>
-
-                        <!-- 대화/서술/효과음 분리 -->
-                        <div class="context-section">
-                            <label>📝 표현 분리</label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="narrativeSeparation" />
-                                <span>대화/서술/효과음 분리</span>
-                            </label>
-                            <p class="hint">활성화 시: [캐릭터] 대사, *효과음*, 서술(태그없음)</p>
-                        </div>
-                    </div>
-
-                    <!-- 프리셋 관리 -->
-                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #3e3e42;">
-                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📦 전체 프리셋</label>
+                    <!-- 캐릭터 섹션 -->
+                    <div class="context-section">
+                        <label>🙋 나의 캐릭터</label>
                         <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-                            <select id="presetSelect" class="select-input" style="flex: 1;">
-                                <option value="">프리셋 선택...</option>
+                            <select id="myCharacterSelect" class="select-input" style="flex: 1;">
+                                <option value="">선택...</option>
                             </select>
-                            <button id="loadPresetBtn" class="btn btn-sm" title="프리셋 불러오기">📂</button>
-                            <button id="deletePresetBtn" class="btn btn-sm btn-remove" title="프리셋 삭제">🗑️</button>
+                            <button id="saveMyCharacterBtn" class="btn btn-sm" title="저장">💾</button>
+                            <button id="deleteMyCharacterBtn" class="btn btn-sm btn-remove" title="삭제">🗑️</button>
                         </div>
-                        <button id="savePresetBtn" class="btn btn-primary" style="width: 100%;">💾 프리셋으로 저장</button>
-                        <p class="hint" style="margin-top: 0.5rem;">프리셋: 현재 모든 설정을 하나의 파일로 저장/복원</p>
+                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <input type="text" id="userCharacterName" class="character-name-field" placeholder="이름" />
+                            <select id="userCharacterGender" class="character-gender-field">
+                                <option value="">성별</option>
+                                <option value="남성">남성</option>
+                                <option value="여성">여성</option>
+                                <option value="기타">기타</option>
+                            </select>
+                        </div>
+                        <textarea id="userCharacterInput" placeholder="성격, 배경, 외모 등..." rows="3"></textarea>
                     </div>
-
-                    <button id="saveContextBtn" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">💾 설정 적용</button>
+                    <div class="context-section">
+                        <label>👥 NPC 캐릭터들</label>
+                        <div id="charactersList"></div>
+                        <button id="addCharacterBtn" class="btn btn-sm">+ 캐릭터 추가</button>
+                    </div>
                 </div>
             </aside>
 

@@ -17,7 +17,6 @@ const chatInput = document.getElementById('chatInput');
 const sendChatBtn = document.getElementById('sendChatBtn');
 
 // 컨텍스트 패널 요소
-const toggleContextBtn = document.getElementById('toggleContextBtn');
 const contextContent = document.getElementById('contextContent');
 const worldInput = document.getElementById('worldInput');
 const situationInput = document.getElementById('situationInput');
@@ -1289,17 +1288,6 @@ function addCharacterMessage(characterName, text) {
 
 // ===== 컨텍스트 관리 =====
 
-// 컨텍스트 패널 토글
-toggleContextBtn.addEventListener('click', () => {
-    if (contextContent.style.display === 'none') {
-        contextContent.style.display = 'block';
-        toggleContextBtn.textContent = '▼';
-    } else {
-        contextContent.style.display = 'none';
-        toggleContextBtn.textContent = '▶';
-    }
-});
-
 // 진행자 활성화 토글
 narratorEnabled.addEventListener('change', () => {
     if (narratorEnabled.checked) {
@@ -1673,21 +1661,33 @@ chatInput.addEventListener('keydown', (e) => {
 
 // ===== 탭 전환 =====
 
-// 탭 버튼들
-document.querySelectorAll('.tab-button').forEach(button => {
-    button.addEventListener('click', () => {
-        const tabName = button.dataset.tab;
+// ===== 설정 모달 =====
 
-        // 모든 탭 버튼 비활성화
-        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-        // 모든 탭 컨텐츠 숨기기
-        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+const settingsModal = document.getElementById('settingsModal');
+const settingsBtn = document.getElementById('settingsBtn');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+const settingsModalOverlay = document.querySelector('.settings-modal-overlay');
 
-        // 클릭한 탭 활성화
-        button.classList.add('active');
-        document.getElementById(`tab-${tabName}`).classList.add('active');
+// 설정 모달 열기
+if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+        settingsModal.classList.remove('hidden');
     });
-});
+}
+
+// 설정 모달 닫기
+if (closeSettingsBtn) {
+    closeSettingsBtn.addEventListener('click', () => {
+        settingsModal.classList.add('hidden');
+    });
+}
+
+// 오버레이 클릭 시 모달 닫기
+if (settingsModalOverlay) {
+    settingsModalOverlay.addEventListener('click', () => {
+        settingsModal.classList.add('hidden');
+    });
+}
 
 // ===== 파일 관리 =====
 
