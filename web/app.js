@@ -1363,22 +1363,26 @@ function addCharacterInput(name = '', gender = '', description = '') {
         }
     };
 
-    // 이름/성별 필드
-    const nameGenderRow = document.createElement('div');
-    nameGenderRow.style.display = 'flex';
-    nameGenderRow.style.gap = '0.5rem';
-    nameGenderRow.style.marginBottom = '0.5rem';
+    // 이름 필드
+    const nameRow = document.createElement('div');
+    nameRow.style.marginBottom = '0.5rem';
 
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.className = 'character-name-input character-name-field';
     nameInput.placeholder = '이름';
     nameInput.value = name;
-    nameInput.style.flex = '2';
+    nameInput.style.width = '100%';
+
+    nameRow.appendChild(nameInput);
+
+    // 성별 필드
+    const genderRow = document.createElement('div');
+    genderRow.style.marginBottom = '0.5rem';
 
     const genderSelect = document.createElement('select');
     genderSelect.className = 'character-gender-input character-gender-field';
-    genderSelect.style.flex = '1';
+    genderSelect.style.width = '100%';
     genderSelect.innerHTML = `
         <option value="">성별</option>
         <option value="남성">남성</option>
@@ -1387,8 +1391,7 @@ function addCharacterInput(name = '', gender = '', description = '') {
     `;
     genderSelect.value = gender;
 
-    nameGenderRow.appendChild(nameInput);
-    nameGenderRow.appendChild(genderSelect);
+    genderRow.appendChild(genderSelect);
 
     const descTextarea = document.createElement('textarea');
     descTextarea.className = 'character-description-input';
@@ -1396,7 +1399,8 @@ function addCharacterInput(name = '', gender = '', description = '') {
     descTextarea.value = description;
 
     characterDiv.appendChild(header);
-    characterDiv.appendChild(nameGenderRow);
+    characterDiv.appendChild(nameRow);
+    characterDiv.appendChild(genderRow);
     characterDiv.appendChild(descTextarea);
     charactersList.appendChild(characterDiv);
 
