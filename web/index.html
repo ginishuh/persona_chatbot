@@ -327,24 +327,55 @@
                 <button id="ceCloseBtn" class="btn-icon" title="닫기">✕</button>
             </div>
             <div class="settings-modal-body">
-                <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
-                    <input id="ceName" type="text" class="input" placeholder="이름" style="flex:1;" />
-                    <select id="ceGender" class="select-input" style="width: 120px;">
-                        <option value="">성별</option>
-                        <option value="남성">남성</option>
-                        <option value="여성">여성</option>
-                        <option value="기타">기타</option>
-                    </select>
-                    <input id="ceAge" type="text" class="input" placeholder="나이" style="width:100px;" />
+                <!-- 기본 정보 -->
+                <div style="display:grid; grid-template-columns: 1fr 120px 100px; gap:0.75rem; margin-bottom:0.5rem; align-items:start;">
+                    <div>
+                        <label for="ceName" class="field-label">이름</label>
+                        <input id="ceName" type="text" class="input" placeholder="예) 브론" />
+                    </div>
+                    <div>
+                        <label for="ceGender" class="field-label">성별</label>
+                        <select id="ceGender" class="select-input">
+                            <option value="">선택</option>
+                            <option value="남성">남성</option>
+                            <option value="여성">여성</option>
+                            <option value="기타">기타</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="ceAge" class="field-label">나이</label>
+                        <input id="ceAge" type="text" class="input" placeholder="예) 34 또는 20대" />
+                    </div>
                 </div>
-                <textarea id="ceSummary" rows="4" placeholder="예) 무뚝뚝한 대장장이. 말수 적고 실용적이며 고객에게 솔직하다." style="width:100%;"></textarea>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:0.5rem;">
-                    <textarea id="ceTraits" rows="2" placeholder="예) 투박한 말투, 단문, 정직"></textarea>
-                    <textarea id="ceGoals" rows="2" placeholder="예) 의뢰 검 수리, 제련 기술 향상"></textarea>
-                    <textarea id="ceBoundaries" rows="2" placeholder="예) 비밀 의뢰 금지, 뇌물 수수 금지"></textarea>
-                    <textarea id="ceExamples" rows="2" placeholder="예) 뭘 맡기러 왔나?\n이건 이틀이면 된다."></textarea>
+
+                <div style="margin-bottom:0.5rem;">
+                    <label for="ceSummary" class="field-label">요약(설명)</label>
+                    <textarea id="ceSummary" rows="4" placeholder="예) 무뚝뚝한 대장장이. 말수 적고 실용적이며 고객에게 솔직하다." style="width:100%;"></textarea>
                 </div>
-                <input id="ceTags" type="text" class="input" placeholder="예) 도시, 상인, 중립" style="width:100%; margin-top:0.5rem;" />
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-top:0.5rem;">
+                    <div>
+                        <label for="ceTraits" class="field-label">성격/말투</label>
+                        <textarea id="ceTraits" rows="2" placeholder="예) 투박한 말투, 단문, 정직"></textarea>
+                    </div>
+                    <div>
+                        <label for="ceGoals" class="field-label">목표</label>
+                        <textarea id="ceGoals" rows="2" placeholder="예) 의뢰 검 수리, 제련 기술 향상"></textarea>
+                    </div>
+                    <div>
+                        <label for="ceBoundaries" class="field-label">금지선</label>
+                        <textarea id="ceBoundaries" rows="2" placeholder="예) 비밀 의뢰 금지, 뇌물 수수 금지"></textarea>
+                    </div>
+                    <div>
+                        <label for="ceExamples" class="field-label">예시 대사</label>
+                        <textarea id="ceExamples" rows="2" placeholder="예) 뭘 맡기러 왔나?&#10;예) 이건 이틀이면 된다."></textarea>
+                    </div>
+                </div>
+
+                <div style="margin-top:0.5rem;">
+                    <label for="ceTags" class="field-label">태그</label>
+                    <input id="ceTags" type="text" class="input" placeholder="예) 도시, 상인, 중립" style="width:100%;" />
+                </div>
             </div>
             <div class="settings-modal-footer" style="display:flex; gap:0.5rem; align-items:center;">
                 <select id="ceTemplateSelect" class="select-input" style="flex:1; min-width:160px;">
