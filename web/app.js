@@ -2135,19 +2135,20 @@ document.getElementById('ceTemplateSelect')?.addEventListener('change', (e) => {
     }
 });
 
-// ===== 참여자 관리 (설정 모달) =====
+// ===== 참여자 관리 (전용 모달) =====
 
-function openSettingsParticipants() {
-    const modal = document.getElementById('settingsModal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        // 템플릿 목록 갱신
-        loadCharTemplateList(document.getElementById('pmTemplateSelect'));
-        // 참여자 목록 렌더
-        renderParticipantsManagerList();
-        // 섹션으로 스크롤
-        setTimeout(() => document.getElementById('participantsManagerSection')?.scrollIntoView({ behavior: 'smooth' }), 50);
-    }
+function openParticipantsModal() {
+    const modal = document.getElementById('participantsModal');
+    if (!modal) return;
+    // 템플릿 목록 갱신 및 참여자 목록 렌더
+    loadCharTemplateList(document.getElementById('pmTemplateSelect'));
+    renderParticipantsManagerList();
+    modal.classList.remove('hidden');
+}
+
+function closeParticipantsModal() {
+    const modal = document.getElementById('participantsModal');
+    if (modal) modal.classList.add('hidden');
 }
 
 function renderParticipantsLeftPanel() {
@@ -2245,6 +2246,39 @@ function openParticipantEditor(index) {
 }
 
 // 설정 모달: 참여자 추가/템플릿 추가
+document.getElementById('participantsBtn')?.addEventListener('click', openParticipantsModal);
+document.getElementById('pmCloseBtn')?.addEventListener('click', closeParticipantsModal);
+document.getElementById('pmApplyBtn')?.addEventListener('click', () => {
+    // participants 를 서버 컨텍스트에 즉시 적용
+    const userName = document.getElementById('userCharacterName').value.trim();
+    const userGender = document.getElementById('userCharacterGender').value.trim();
+    const userDesc = userCharacterInput.value.trim();
+    const userAge = (userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '');
+    let userCharacterData = '';
+    if (userName) {
+        userCharacterData = `이름: ${userName}`;
+        if (userGender) userCharacterData += `, 성별: ${userGender}`;
+        if (userAge) userCharacterData += `, 나이: ${userAge}`;
+        if (userDesc) userCharacterData += `\n${userDesc}`;
+    } else if (userDesc) {
+        userCharacterData = userDesc;
+    }
+    sendMessage({
+        action: 'set_context',
+        world: worldInput.value.trim(),
+        situation: situationInput.value.trim(),
+        user_character: userCharacterData,
+        narrator_enabled: narratorEnabled.checked,
+        narrator_mode: narratorMode.value,
+        narrator_description: narratorDescription.value.trim(),
+        user_is_narrator: userIsNarrator.checked,
+        ai_provider: aiProvider.value,
+        adult_level: adultLevel.value,
+        narrative_separation: narrativeSeparation.checked,
+        characters: Array.isArray(participants) ? participants : []
+    });
+});
+
 document.getElementById('pmAddNewBtn')?.addEventListener('click', () => openParticipantEditor(-1));
 document.getElementById('pmAddFromTemplateBtn')?.addEventListener('click', () => {
     const sel = document.getElementById('pmTemplateSelect');
@@ -2783,6 +2817,7 @@ window.addEventListener('load', async () => {
     document.getElementById('characterEditorModal')?.classList.add('hidden');
     document.getElementById('moreMenuDropdown')?.classList.add('hidden');
     document.getElementById('mobileOverlay')?.classList.remove('active');
+    document.getElementById('participantsModal')?.classList.add('hidden');
     connect();
 
     // 주기적 상태 확인 (10초마다)
