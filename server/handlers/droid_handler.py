@@ -341,6 +341,19 @@ class DroidHandler:
                     logger.warning(f"Droid produced empty response (style={style}); trying next style if available")
                     continue
 
+                # 후처리: 멀티 캐릭터 태그([이름]:) 앞에 줄바꿈 보정
+                def _format_speaker_lines(text: str) -> str:
+                    try:
+                        import re
+                        # [이름]: 패턴 앞에 줄바꿈 삽입(문서 시작 제외)
+                        text = re.sub(r"(?<!^)\s*(\[[^\[\]]{1,20}\]:)", r"\n\1", text)
+                        # 중복 개행 축소
+                        text = re.sub(r"\n{3,}", "\n\n", text)
+                        return text.lstrip("\n")
+                    except Exception:
+                        return text
+
+                assistant_message = _format_speaker_lines(assistant_message)
                 return True, assistant_message, None
 
             # 모든 스타일이 실패
