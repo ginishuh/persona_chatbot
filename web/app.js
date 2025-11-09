@@ -91,6 +91,7 @@ let characterColors = {}; // 캐릭터별 색상 매핑
 let authRequired = false;
 let isAuthenticated = false;
 let currentProvider = 'claude'; // 최근 전송에 사용한 프로바이더
+let participants = []; // 현재 대화 참여자 목록
 
 const AUTH_TOKEN_KEY = 'persona_auth_token';
 const AUTH_EXP_KEY = 'persona_auth_exp';
@@ -1289,9 +1290,9 @@ userIsNarrator.addEventListener('change', () => {
     }
 });
 
-// 캐릭터 추가
+// 캐릭터 추가 버튼은 설정 모달의 참여자 관리로 이동
 addCharacterBtn.addEventListener('click', () => {
-    addCharacterInput();
+    openSettingsParticipants();
 });
 
 function addCharacterInput(name = '', gender = '', description = '', age = '') {
@@ -1485,13 +1486,7 @@ function collectCharacterFromItem(item) {
 // 컨텍스트 저장
 saveContextBtn.addEventListener('click', () => {
     if (saveContextBtn) saveContextBtn.disabled = true;
-    const characters = [];
-    const characterItems = charactersList.querySelectorAll('.character-item');
-
-    characterItems.forEach(item => {
-        const c = collectCharacterFromItem(item);
-        if (c) characters.push(c);
-    });
+    const characters = Array.isArray(participants) ? participants : [];
 
     // 사용자 캐릭터 정보 수집
     const userName = document.getElementById('userCharacterName').value.trim();
@@ -1531,13 +1526,7 @@ saveContextBtn.addEventListener('click', () => {
 if (applyCharactersBtn) {
     applyCharactersBtn.addEventListener('click', () => {
         applyCharactersBtn.disabled = true;
-        const characters = [];
-        const characterItems = charactersList.querySelectorAll('.character-item');
-
-        characterItems.forEach(item => {
-            const c = collectCharacterFromItem(item);
-            if (c) characters.push(c);
-        });
+        const characters = Array.isArray(participants) ? participants : [];
 
         // 사용자 캐릭터 정보 수집
         const userName = document.getElementById('userCharacterName').value.trim();
@@ -1599,15 +1588,10 @@ function loadContext(context) {
         narratorSettings.style.display = 'block';
     }
 
-    // 캐릭터 로드
-    charactersList.innerHTML = '';
-    if (context.characters && context.characters.length > 0) {
-        context.characters.forEach(char => {
-            // description 안에 성별/나이 병기가 있을 수 있으므로 우선 그대로 채움
-            addCharacterInput(char.name, char.gender || '', char.description, char.age || '');
-        });
-    }
-    // 빈 상태로 시작 (사용자가 직접 추가)
+    // 참여자 로드 및 렌더링
+    participants = Array.isArray(context.characters) ? [...context.characters] : [];
+    renderParticipantsLeftPanel();
+    renderParticipantsManagerList();
 }
 
 // ===== 히스토리 초기화 =====
@@ -1848,7 +1832,21 @@ function handleFileLoad(data) {
         // 템플릿(JSON) 로드 → 모달 또는 캐릭터 아이템에 반영
         try {
             const obj = JSON.parse(content || '{}');
-            if (window.pendingTemplateModal) {
+            if (window.pendingAddFromTemplate) {
+                const name = obj.name || '';
+                const gender = obj.gender || '';
+                const age = (obj.age !== undefined && obj.age !== null) ? String(obj.age) : '';
+                const summary = obj.summary || obj.description || '';
+                const traits = obj.traits || '';
+                const goals = obj.goals || '';
+                const boundaries = obj.boundaries || '';
+                const examples = Array.isArray(obj.examples) ? obj.examples : [];
+                const tags = Array.isArray(obj.tags) ? obj.tags.join(', ') : '';
+                const desc = composeDescription(summary, gender, age, traits, goals, boundaries, examples, tags);
+                participants.push({ name, gender, age, description: desc });
+                renderParticipantsLeftPanel();
+                renderParticipantsManagerList();
+            } else if (window.pendingTemplateModal) {
                 const ceName = document.getElementById('ceName');
                 const ceGender = document.getElementById('ceGender');
                 const ceAge = document.getElementById('ceAge');
@@ -1883,6 +1881,7 @@ function handleFileLoad(data) {
         }
         window.pendingTemplateItem = null;
         window.pendingTemplateModal = false;
+        window.pendingAddFromTemplate = false;
     } else if (window.pendingLoadType === 'my_profile') {
         try {
             const obj = JSON.parse(content || '{}');
@@ -2136,6 +2135,126 @@ document.getElementById('ceTemplateSelect')?.addEventListener('change', (e) => {
     }
 });
 
+// ===== 참여자 관리 (설정 모달) =====
+
+function openSettingsParticipants() {
+    const modal = document.getElementById('settingsModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        // 템플릿 목록 갱신
+        loadCharTemplateList(document.getElementById('pmTemplateSelect'));
+        // 참여자 목록 렌더
+        renderParticipantsManagerList();
+        // 섹션으로 스크롤
+        setTimeout(() => document.getElementById('participantsManagerSection')?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
+}
+
+function renderParticipantsLeftPanel() {
+    charactersList.innerHTML = '';
+    if (!Array.isArray(participants) || participants.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'placeholder';
+        p.textContent = '현재 참여자가 없습니다. “참여자 추가”를 눌러 추가하세요.';
+        charactersList.appendChild(p);
+        return;
+    }
+    participants.forEach((c, idx) => {
+        const row = document.createElement('div');
+        row.className = 'character-chip';
+        row.style.padding = '6px 8px';
+        row.style.marginBottom = '6px';
+        row.style.border = '1px solid #e8ecef';
+        row.style.borderRadius = '8px';
+        row.style.background = '#fff';
+        const nm = c.name || '이름 없음';
+        const gd = c.gender || '-';
+        const ag = c.age || '-';
+        const snip = (c.description || '').slice(0, 40).replace(/\n/g, ' ');
+        row.textContent = `${nm} · ${gd} · ${ag} — ${snip}`;
+        charactersList.appendChild(row);
+    });
+}
+
+function renderParticipantsManagerList() {
+    const wrap = document.getElementById('participantsManagerList');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!Array.isArray(participants) || participants.length === 0) {
+        wrap.innerHTML = '<p class="placeholder">참여자가 없습니다.</p>';
+        return;
+    }
+    participants.forEach((c, idx) => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '0.5rem';
+        row.style.margin = '4px 0';
+        const info = document.createElement('div');
+        info.style.flex = '1';
+        info.textContent = `${c.name || '이름 없음'} · ${c.gender || '-'} · ${c.age || '-'} — ${(c.description||'').slice(0,40).replace(/\n/g,' ')}`;
+        const edit = document.createElement('button');
+        edit.className = 'btn btn-sm';
+        edit.textContent = '✏️ 편집';
+        edit.onclick = () => openParticipantEditor(idx);
+        const del = document.createElement('button');
+        del.className = 'btn btn-sm btn-remove';
+        del.textContent = '🗑️';
+        del.onclick = () => { participants.splice(idx,1); renderParticipantsLeftPanel(); renderParticipantsManagerList(); };
+        row.appendChild(info);
+        row.appendChild(edit);
+        row.appendChild(del);
+        wrap.appendChild(row);
+    });
+}
+
+function openParticipantEditor(index) {
+    // 채우고 모달 오픈
+    const c = (index != null && index >=0) ? participants[index] : { name:'', gender:'', age:'', description:'', traits:'', goals:'', boundaries:'', examples:[], tags:[] };
+    const modal = document.getElementById('characterEditorModal');
+    document.getElementById('ceName').value = c.name || '';
+    document.getElementById('ceGender').value = c.gender || '';
+    document.getElementById('ceAge').value = c.age || '';
+    document.getElementById('ceSummary').value = c.description || '';
+    document.getElementById('ceTraits').value = c.traits || '';
+    document.getElementById('ceGoals').value = c.goals || '';
+    document.getElementById('ceBoundaries').value = c.boundaries || '';
+    document.getElementById('ceExamples').value = Array.isArray(c.examples)? c.examples.join('\n'): '';
+    document.getElementById('ceTags').value = Array.isArray(c.tags)? c.tags.join(', '): (c.tags || '');
+    loadCharTemplateList(document.getElementById('ceTemplateSelect'));
+    modal.classList.remove('hidden');
+    // 저장 핸들러 재바인딩
+    const saveBtn = document.getElementById('ceSaveBtn');
+    saveBtn.onclick = () => {
+        const name = document.getElementById('ceName').value.trim();
+        const gender = document.getElementById('ceGender').value.trim();
+        const age = document.getElementById('ceAge').value.trim();
+        const summary = document.getElementById('ceSummary').value.trim();
+        const traits = document.getElementById('ceTraits').value.trim();
+        const goals = document.getElementById('ceGoals').value.trim();
+        const boundaries = document.getElementById('ceBoundaries').value.trim();
+        const examples = document.getElementById('ceExamples').value.split('\n').map(s=>s.trim()).filter(Boolean);
+        const tags = document.getElementById('ceTags').value.split(',').map(s=>s.trim()).filter(Boolean);
+        const desc = composeDescription(summary, gender, age, traits, goals, boundaries, examples, tags.join(', '));
+        const obj = { name, gender, age, description: desc };
+        if (index != null && index >= 0) participants[index] = obj; else participants.push(obj);
+        renderParticipantsLeftPanel();
+        renderParticipantsManagerList();
+        closeCharacterEditor();
+    };
+}
+
+// 설정 모달: 참여자 추가/템플릿 추가
+document.getElementById('pmAddNewBtn')?.addEventListener('click', () => openParticipantEditor(-1));
+document.getElementById('pmAddFromTemplateBtn')?.addEventListener('click', () => {
+    const sel = document.getElementById('pmTemplateSelect');
+    if (sel && sel.value) {
+        window.pendingLoadType = 'char_template';
+        window.pendingAddFromTemplate = true;
+        sendMessage({ action: 'load_workspace_file', file_type: 'char_template', filename: sel.value });
+    }
+});
+
 // ===== 프리셋 관리 =====
 
 // 프리셋 목록 로드
@@ -2165,15 +2284,8 @@ function savePreset() {
     const filename = prompt('프리셋 이름을 입력하세요:');
     if (!filename) return;
 
-    // 현재 모든 캐릭터 수집
-    const characters = [];
-    document.querySelectorAll('.character-item').forEach(item => {
-        const name = item.querySelector('.character-name-input').value;
-        const description = item.querySelector('.character-description-input').value;
-        if (name) {
-            characters.push({ name, description });
-        }
-    });
+    // 현재 참여자 수집
+    const characters = Array.isArray(participants) ? participants : [];
 
     // 전체 설정 데이터
     const preset = {
@@ -2203,13 +2315,10 @@ function applyPreset(preset) {
     situationInput.value = preset.situation || '';
     userCharacterInput.value = preset.user_character || '';
 
-    // 캐릭터 초기화 및 로드
-    charactersList.innerHTML = '';
-    if (preset.characters && preset.characters.length > 0) {
-        preset.characters.forEach(char => {
-            addCharacterInput(char.name, char.description);
-        });
-    }
+    // 참여자 초기화 및 로드
+    participants = Array.isArray(preset.characters) ? [...preset.characters] : [];
+    renderParticipantsLeftPanel();
+    renderParticipantsManagerList();
 
     // 진행자 설정
     narratorEnabled.checked = preset.narrator_enabled || false;

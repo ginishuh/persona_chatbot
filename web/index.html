@@ -20,7 +20,7 @@
                 <h2>⚙️ 설정</h2>
                 <button id="closeSettingsBtn" class="btn-icon" title="닫기">✕</button>
             </div>
-            <div class="settings-modal-body">
+                <div class="settings-modal-body">
                 <!-- 세계관/배경 -->
                 <div class="context-section">
                     <label>🌍 세계관/배경</label>
@@ -235,9 +235,9 @@
                         <textarea id="userCharacterInput" placeholder="성격, 배경, 외모 등..." rows="3"></textarea>
                     </div>
                     <div class="context-section">
-                        <label>👥 NPC 캐릭터들</label>
+                        <label>👥 현재 참여자</label>
                         <div id="charactersList"></div>
-                        <button id="addCharacterBtn" class="btn btn-sm">+ 캐릭터 추가</button>
+                        <button id="addCharacterBtn" class="btn btn-sm">+ 참여자 추가</button>
                     </div>
 
                     <!-- 캐릭터 설정 적용 -->
@@ -356,3 +356,15 @@
     <script src="app.js"></script>
 </body>
 </html>
+                <!-- 참여자 관리 -->
+                <div class="context-section" id="participantsManagerSection">
+                    <label>👥 참여자 관리</label>
+                    <div id="participantsManagerList" style="margin-bottom:0.5rem;"></div>
+                    <div style="display:flex; gap:0.5rem; align-items:center;">
+                        <button id="pmAddNewBtn" class="btn btn-sm">+ 새 참여자</button>
+                        <select id="pmTemplateSelect" class="select-input" style="flex:1; min-width:160px;">
+                            <option value="">템플릿에서 추가...</option>
+                        </select>
+                        <button id="pmAddFromTemplateBtn" class="btn btn-sm">추가</button>
+                    </div>
+                </div>
