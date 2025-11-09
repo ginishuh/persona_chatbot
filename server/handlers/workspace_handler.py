@@ -354,18 +354,6 @@ class WorkspaceHandler:
             ahead = 0
             behind = 0
             if upstream:
-                # 최신 원격 상태 반영
-                try:
-                    proc_fetch = await asyncio.create_subprocess_exec(
-                        'git', 'fetch', '--all',
-                        cwd=str(self.workspace_path),
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    await proc_fetch.communicate()
-                except Exception:
-                    pass
-
                 try:
                     # @{u}...HEAD 형태: left(behind), right(ahead)
                     proc_ab = await asyncio.create_subprocess_exec(
@@ -374,7 +362,7 @@ class WorkspaceHandler:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
-                    ab_out, ab_err = await proc_ab.communicate()
+                    ab_out, ab_err = await asyncio.wait_for(proc_ab.communicate(), timeout=2.0)
                     if proc_ab.returncode == 0:
                         parts = (ab_out or b'').decode().strip().split()
                         if len(parts) >= 2:
@@ -515,21 +503,17 @@ class WorkspaceHandler:
                 )
                 u_out, _ = await proc_u.communicate()
                 if proc_u.returncode == 0:
-                    # 업스트림 존재 → 최신화 및 리베이스 pull
-                    proc_fetch2 = await asyncio.create_subprocess_exec(
-                        'git', 'fetch', '--all',
-                        cwd=str(self.workspace_path),
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    await proc_fetch2.communicate()
+                    # 업스트림 존재 → 리베이스 pull (네트워크 호출은 사용자 동작에서만 수행)
                     proc_pull = await asyncio.create_subprocess_exec(
                         'git', 'pull', '--rebase',
                         cwd=str(self.workspace_path),
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
-                    pull_out, pull_err = await proc_pull.communicate()
+                    try:
+                        pull_out, pull_err = await asyncio.wait_for(proc_pull.communicate(), timeout=20.0)
+                    except asyncio.TimeoutError:
+                        return {"success": False, "error": "git pull --rebase 타임아웃"}
                     if proc_pull.returncode != 0:
                         return {
                             "success": False,
