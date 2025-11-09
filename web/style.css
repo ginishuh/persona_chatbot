@@ -62,6 +62,26 @@ header {
     transform: rotate(-45deg) translate(6px, -6px);
 }
 
+/* 서사기록 메뉴 버튼 */
+.narrative-menu-btn {
+    display: none;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    padding: 0.5rem;
+    cursor: pointer;
+    z-index: 1000;
+    transition: transform 0.2s;
+}
+
+.narrative-menu-btn:hover {
+    transform: scale(1.1);
+}
+
+.narrative-menu-btn.active {
+    transform: scale(0.9);
+}
+
 /* 브랜드 영역 */
 header .brand {
     display: flex;
@@ -182,6 +202,15 @@ header h1 {
     font-size: 1rem;
     font-weight: 600;
     color: #2c3e50;
+}
+
+/* 서사기록 헤더 스타일 */
+.narrative-header {
+    padding: 0.75rem 1rem;
+}
+
+.narrative-controls {
+    background: #ffffff;
 }
 
 .btn-icon {
@@ -831,6 +860,11 @@ footer {
         display: flex;
     }
 
+    /* 서사기록 메뉴 버튼 표시 */
+    .narrative-menu-btn {
+        display: block;
+    }
+
     /* 헤더 레이아웃 조정 */
     header {
         padding: 0.75rem 1rem;
@@ -847,6 +881,12 @@ footer {
     /* 헤더 액션 버튼들 숨기기 (햄버거 메뉴로 이동) */
     .header-actions {
         display: none;
+    }
+
+    /* 서사 컨트롤 버튼들 작게 */
+    .narrative-controls .btn-sm {
+        font-size: 0.7rem;
+        padding: 0.25rem 0.4rem;
     }
 
     /* 좌측/우측 패널을 오버레이로 표시 */

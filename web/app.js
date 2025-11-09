@@ -2229,6 +2229,7 @@ if (injectStoryBtn) {
 // ===== 햄버거 메뉴 (모바일) =====
 
 const hamburgerBtn = document.getElementById('hamburgerBtn');
+const narrativeMenuBtn = document.getElementById('narrativeMenuBtn');
 const mobileOverlay = document.getElementById('mobileOverlay');
 const leftPanel = document.querySelector('.left-panel');
 const rightPanel = document.querySelector('.right-panel');
@@ -2247,23 +2248,37 @@ if (hamburgerBtn) {
     });
 }
 
+if (narrativeMenuBtn) {
+    narrativeMenuBtn.addEventListener('click', () => {
+        if (currentMobilePanel === 'right') {
+            // 이미 우측 패널이 열려 있으면 닫기
+            closeMobilePanel();
+        } else {
+            // 우측 패널 열기
+            openMobilePanel('right');
+        }
+    });
+}
+
 function openMobilePanel(panel) {
     closeMobilePanel(); // 먼저 기존 패널 닫기
 
     if (panel === 'left' && leftPanel) {
         leftPanel.classList.add('mobile-visible');
         currentMobilePanel = 'left';
+        if (hamburgerBtn) {
+            hamburgerBtn.classList.add('active');
+        }
     } else if (panel === 'right' && rightPanel) {
         rightPanel.classList.add('mobile-visible');
         currentMobilePanel = 'right';
+        if (narrativeMenuBtn) {
+            narrativeMenuBtn.classList.add('active');
+        }
     }
 
     if (mobileOverlay) {
         mobileOverlay.classList.add('active');
-    }
-
-    if (hamburgerBtn) {
-        hamburgerBtn.classList.add('active');
     }
 }
 
@@ -2279,6 +2294,9 @@ function closeMobilePanel() {
     }
     if (hamburgerBtn) {
         hamburgerBtn.classList.remove('active');
+    }
+    if (narrativeMenuBtn) {
+        narrativeMenuBtn.classList.remove('active');
     }
     currentMobilePanel = null;
 }

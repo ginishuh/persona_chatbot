@@ -23,6 +23,9 @@
                 <img src="src/logo3.png" alt="Chorus AI 로고" class="brand-logo" />
                 <h1>📖 Persona Chat</h1>
             </div>
+            <button id="narrativeMenuBtn" class="narrative-menu-btn" aria-label="서사기록" title="서사기록">
+                📜
+            </button>
             <div class="header-actions">
                 <button id="modeSwitchBtn" class="btn btn-sm" title="코딩/챗봇 모드 전환">💬 모드</button>
                 <button id="gitSyncBtn" class="btn btn-sm" title="Git 동기화">🔄 동기화</button>
@@ -220,10 +223,12 @@
 
             <!-- Right Panel: Narrative -->
             <aside class="right-panel">
-                <div class="panel-header">
+                <div class="panel-header narrative-header">
                     <h2>📜 서사 기록</h2>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <select id="storySelect" class="select-input" style="min-width: 150px;" title="저장된 서사">
+                </div>
+                <div class="narrative-controls">
+                    <div style="display: flex; gap: 0.5rem; padding: 0.75rem 1rem; border-bottom: 2px solid #e8ecef; align-items: center;">
+                        <select id="storySelect" class="select-input" style="flex: 1; min-width: 120px; margin-bottom: 0;" title="저장된 서사">
                             <option value="">저장된 서사...</option>
                         </select>
                         <button id="loadStoryBtn" class="btn btn-sm" title="서사 불러오기">📂</button>
