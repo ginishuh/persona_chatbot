@@ -557,6 +557,7 @@ function handleMessage(msg) {
         case 'set_context':
             if (data.success) {
                 log('컨텍스트 저장 완료', 'success');
+                if (saveContextBtn) saveContextBtn.disabled = false;
             }
             break;
 
@@ -1276,6 +1277,8 @@ function loadNPCList(selectElement) {
 
 // 컨텍스트 저장
 saveContextBtn.addEventListener('click', () => {
+    log('설정 적용 요청 전송...', 'info');
+    if (saveContextBtn) saveContextBtn.disabled = true;
     const characters = [];
     const characterItems = charactersList.querySelectorAll('.character-item');
 
@@ -1301,6 +1304,7 @@ saveContextBtn.addEventListener('click', () => {
         narrative_separation: narrativeSeparation.checked,
         characters: characters
     });
+    setTimeout(() => { if (saveContextBtn) saveContextBtn.disabled = false; }, 5000);
 });
 
 // 컨텍스트 로드
