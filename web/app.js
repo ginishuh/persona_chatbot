@@ -1329,8 +1329,6 @@ function addCharacterInput(name = '', gender = '', description = '') {
 
     const npcSelect = document.createElement('select');
     npcSelect.className = 'npc-select select-input';
-    npcSelect.style.fontSize = '0.7rem';
-    npcSelect.style.padding = '0.2rem 0.3rem';
     npcSelect.style.minWidth = '70px';
     npcSelect.style.maxWidth = '100px';
     npcSelect.innerHTML = '<option value="">💿</option>';
@@ -1339,14 +1337,12 @@ function addCharacterInput(name = '', gender = '', description = '') {
     saveNPCBtn.className = 'btn btn-sm';
     saveNPCBtn.textContent = '💾';
     saveNPCBtn.title = 'NPC 저장';
-    saveNPCBtn.style.padding = '0.2rem 0.3rem';
     saveNPCBtn.onclick = () => saveNPC(characterDiv);
 
     const removeBtn = document.createElement('button');
-    removeBtn.className = 'btn-remove';
+    removeBtn.className = 'btn btn-sm';
     removeBtn.textContent = '❌';
     removeBtn.title = '제거';
-    removeBtn.style.padding = '0.2rem 0.3rem';
     removeBtn.onclick = () => characterDiv.remove();
 
     fileControls.appendChild(npcSelect);
