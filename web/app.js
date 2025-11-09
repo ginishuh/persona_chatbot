@@ -2210,6 +2210,8 @@ function renderParticipantsManagerList() {
 }
 
 function openParticipantEditor(index) {
+    // 참여자 모달이 열려 있으면 닫고(오버레이 제거) 편집 모달을 연다
+    closeParticipantsModal();
     // 채우고 모달 오픈
     const c = (index != null && index >=0) ? participants[index] : { name:'', gender:'', age:'', description:'', traits:'', goals:'', boundaries:'', examples:[], tags:[] };
     const modal = document.getElementById('characterEditorModal');
@@ -2248,6 +2250,7 @@ function openParticipantEditor(index) {
 // 설정 모달: 참여자 추가/템플릿 추가
 document.getElementById('participantsBtn')?.addEventListener('click', openParticipantsModal);
 document.getElementById('pmCloseBtn')?.addEventListener('click', closeParticipantsModal);
+document.querySelector('#participantsModal .settings-modal-overlay')?.addEventListener('click', closeParticipantsModal);
 document.getElementById('pmApplyBtn')?.addEventListener('click', () => {
     // participants 를 서버 컨텍스트에 즉시 적용
     const userName = document.getElementById('userCharacterName').value.trim();
