@@ -2778,6 +2778,11 @@ if (mobileOverlay) {
 
 window.addEventListener('load', async () => {
     await loadAppConfig();
+    // UI 초기 상태 강제 정리 (헤더 가려짐 방지)
+    document.getElementById('settingsModal')?.classList.add('hidden');
+    document.getElementById('characterEditorModal')?.classList.add('hidden');
+    document.getElementById('moreMenuDropdown')?.classList.add('hidden');
+    document.getElementById('mobileOverlay')?.classList.remove('active');
     connect();
 
     // 주기적 상태 확인 (10초마다)
