@@ -2381,6 +2381,38 @@ document.getElementById('moreResetSessionsBtn')?.addEventListener('click', () =>
     document.getElementById('resetSessionsBtn')?.click();
 });
 
+// 로그아웃 버튼
+document.getElementById('logoutBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    handleLogout();
+});
+
+function handleLogout() {
+    if (confirm('로그아웃하시겠습니까?')) {
+        // WebSocket 연결 끊기
+        if (ws) {
+            ws.close();
+        }
+
+        // 로그인 상태 초기화
+        localStorage.removeItem('savedUsername');
+        localStorage.removeItem('savedPassword');
+        localStorage.removeItem('rememberMe');
+        localStorage.removeItem('autoLogin');
+
+        // 로그인 모달 표시
+        const loginModal = document.getElementById('loginModal');
+        if (loginModal) {
+            loginModal.classList.remove('hidden');
+        }
+
+        // 페이지 새로고침
+        setTimeout(() => {
+            location.reload();
+        }, 500);
+    }
+}
+
 // 문서 전체 클릭 시 더보기 메뉴 닫기
 document.addEventListener('click', (e) => {
     if (moreMenuDropdown && !moreMenuDropdown.contains(e.target) && e.target !== moreMenuBtn) {

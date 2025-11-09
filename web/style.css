@@ -163,6 +163,15 @@ header {
     margin: 0.5rem 0;
 }
 
+.logout-btn {
+    color: #ef4444 !important;
+    font-weight: 600;
+}
+
+.logout-btn:hover {
+    background: #fef2f2 !important;
+}
+
 /* 브랜드 영역 */
 header .brand {
     display: flex;
