@@ -56,5 +56,5 @@
 
 ## Security & Configuration Tips
 - Do not commit secrets. Copy `.env.example` to `.env` for Docker workflows; local run uses ports hardcoded in `websocket_server.py`.
-- Mode switching: `server/handlers/mode_handler.py` can rename `AGENTS.md`/`CLAUDE.md` to `*.bak` in “chatbot” mode. Make edits and commits in “coding” mode.
+- Mode switching: UI control has been removed. The backend helper `server/handlers/mode_handler.py` still exists for scripted or manual use (renames `AGENTS.md`/`CLAUDE.md` to `*.bak`). Prefer doing edits/commits in “coding” mode if you use it manually.
  - For container push, prefer SSH credentials mounted read-only (e.g., `~/.ssh:/home/node/.ssh:ro`). Host-push mode avoids credentials inside the container entirely.
