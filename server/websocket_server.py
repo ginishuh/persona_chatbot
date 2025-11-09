@@ -572,12 +572,23 @@ async def handle_message(websocket, message):
                 handler = claude_handler
 
             # 단일 시도 (폴백 없음)
-            result = await handler.send_message(
-                prompt,
-                system_prompt=system_prompt,
-                callback=stream_callback,
-                session_id=provider_session_id
-            )
+            # 선택 모델 (현재는 Gemini에서 사용)
+            model = data.get("model")
+            if provider == "gemini":
+                result = await gemini_handler.send_message(
+                    prompt,
+                    system_prompt=system_prompt,
+                    callback=stream_callback,
+                    session_id=provider_session_id,
+                    model=model
+                )
+            else:
+                result = await handler.send_message(
+                    prompt,
+                    system_prompt=system_prompt,
+                    callback=stream_callback,
+                    session_id=provider_session_id
+                )
 
             # AI 응답을 히스토리에 추가
             if result.get("success") and result.get("message"):

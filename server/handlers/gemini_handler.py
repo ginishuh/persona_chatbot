@@ -14,11 +14,12 @@ class GeminiHandler:
         # 환경 변수 또는 기본값 사용
         self.gemini_path = gemini_path or os.getenv("GEMINI_PATH", "gemini")
         self.process = None
+        self.default_model = os.getenv("GEMINI_MODEL", "")  # 예: gemini-2.5-flash
         # 챗봇 전용 작업 디렉토리
         self.chatbot_workspace = Path(__file__).parent.parent.parent / "chatbot_workspace"
         self.chatbot_workspace.mkdir(exist_ok=True)
 
-    async def start(self, system_prompt=None):
+    async def start(self, system_prompt=None, model: str | None = None):
         """Gemini 프로세스 시작"""
         if self.process is not None:
             logger.warning("Gemini process already running")
@@ -29,6 +30,11 @@ class GeminiHandler:
                 self.gemini_path,
                 "--output-format", "stream-json"
             ]
+
+            # 모델 지정 (환경변수 또는 호출 파라미터)
+            use_model = model or (self.default_model or None)
+            if use_model:
+                args.extend(["--model", use_model])
 
             # System prompt와 프롬프트를 stdin으로 전달
 
@@ -60,7 +66,7 @@ class GeminiHandler:
         finally:
             self.process = None
 
-    async def send_message(self, prompt, system_prompt=None, callback=None, session_id=None):
+    async def send_message(self, prompt, system_prompt=None, callback=None, session_id=None, model: str | None = None):
         """
         Gemini에 메시지 전송 및 스트리밍 응답 수신
 
@@ -74,7 +80,7 @@ class GeminiHandler:
             최종 결과 딕셔너리
         """
         if self.process is None:
-            await self.start()
+            await self.start(model=model)
 
         try:
             # System prompt를 프롬프트 앞에 추가

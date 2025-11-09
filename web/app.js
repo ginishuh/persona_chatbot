@@ -66,6 +66,7 @@ const sessionStatusBadge = document.getElementById('sessionStatusBadge');
 // 서사 패널 요소
 const narrativeContent = document.getElementById('narrativeContent');
 const saveNarrativeBtn = document.getElementById('saveNarrativeBtn');
+const injectStoryBtn = document.getElementById('injectStoryBtn');
 const storySelect = document.getElementById('storySelect');
 const loadStoryBtn = document.getElementById('loadStoryBtn');
 const deleteStoryBtn = document.getElementById('deleteStoryBtn');
@@ -2012,6 +2013,21 @@ deleteStoryBtn.addEventListener('click', () => {
         filename: filename
     });
 });
+
+// 서사 → 컨텍스트 주입 버튼
+if (injectStoryBtn) {
+    injectStoryBtn.addEventListener('click', () => {
+        const text = narrativeContent.innerText || '';
+        if (!text.trim()) {
+            alert('주입할 서사가 없습니다. 먼저 서사를 불러오세요.');
+            return;
+        }
+        // 기존 세계관에 서사를 덧붙임
+        const sep = worldInput.value.trim() ? '\n\n---\n\n' : '';
+        worldInput.value = worldInput.value + sep + text.trim();
+        log('서사를 세계관에 주입했습니다. 좌측의 "설정 적용"을 눌러 반영하세요.', 'success');
+    });
+}
 
 // ===== 초기화 =====
 
