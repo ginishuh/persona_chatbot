@@ -75,8 +75,12 @@ const resumeStoryBtn = document.getElementById('resumeStoryBtn');
 
 // 로그인 요소
 const loginModal = document.getElementById('loginModal');
+const loginUsernameInput = document.getElementById('loginUsername');
 const loginPasswordInput = document.getElementById('loginPassword');
+const rememberIdCheckbox = document.getElementById('rememberId');
+const autoLoginCheckbox = document.getElementById('autoLogin');
 const loginButton = document.getElementById('loginButton');
+const autoLoginButton = document.getElementById('autoLoginButton');
 const loginError = document.getElementById('loginError');
 
 let currentAssistantMessage = null;
@@ -110,6 +114,10 @@ const MAX_REFRESH_RETRIES = 3;
 const HISTORY_LIMIT_DEFAULT = 30;
 let currentHistoryLimit = HISTORY_LIMIT_DEFAULT;
 let sessionSettingsLoaded = false;
+// 로그인 저장 키
+const LOGIN_USER_KEY = 'persona_login_user';
+const LOGIN_AUTOLOGIN_KEY = 'persona_login_auto';
+const LOGIN_SAVED_PW_KEY = 'persona_login_pw';
 try {
     authToken = sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
     authTokenExpiresAt = sessionStorage.getItem(AUTH_EXP_KEY) || '';
@@ -468,11 +476,19 @@ function attemptTokenRefresh() {
 function showLoginModal() {
     if (!loginModal) return;
     loginModal.classList.remove('hidden');
-    loginPasswordInput.value = '';
+    // 아이디/체크박스 초기화
+    try {
+        const savedUser = localStorage.getItem(LOGIN_USER_KEY) || '';
+        if (loginUsernameInput) loginUsernameInput.value = savedUser;
+        const auto = localStorage.getItem(LOGIN_AUTOLOGIN_KEY) === '1';
+        if (rememberIdCheckbox) rememberIdCheckbox.checked = !!savedUser;
+        if (autoLoginCheckbox) autoLoginCheckbox.checked = auto;
+    } catch (_) {}
+    if (loginPasswordInput) loginPasswordInput.value = '';
     loginError.textContent = '';
     chatInput.disabled = true;
     sendChatBtn.disabled = true;
-    setTimeout(() => loginPasswordInput.focus(), 100);
+    setTimeout(() => (loginUsernameInput?.value ? loginPasswordInput?.focus() : loginUsernameInput?.focus()), 100);
 }
 
 function hideLoginModal() {
@@ -485,6 +501,7 @@ function hideLoginModal() {
 
 function submitLogin() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const username = (loginUsernameInput?.value || '').trim();
     const password = loginPasswordInput.value.trim();
     if (!password) {
         loginError.textContent = '비밀번호를 입력하세요.';
@@ -492,6 +509,7 @@ function submitLogin() {
     }
     sendMessage({
         action: 'login',
+        username,
         password
     }, { skipToken: true });
     loginError.textContent = '';
@@ -504,6 +522,21 @@ if (loginPasswordInput) {
     loginPasswordInput.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
             submitLogin();
+        }
+    });
+}
+if (autoLoginButton) {
+    autoLoginButton.addEventListener('click', () => {
+        try {
+            const user = loginUsernameInput?.value || localStorage.getItem(LOGIN_USER_KEY) || '';
+            const pw = localStorage.getItem(LOGIN_SAVED_PW_KEY) || '';
+            if (!user || !pw) {
+                alert('저장된 아이디/비밀번호가 없습니다. 먼저 로그인 후 자동 로그인을 설정하세요.');
+                return;
+            }
+            sendMessage({ action: 'login', username: user, password: pw }, { skipToken: true });
+        } catch (e) {
+            console.error(e);
         }
     });
 }
@@ -560,6 +593,23 @@ function handleMessage(msg) {
                     setRefreshToken(data.refresh_token, data.refresh_expires_at);
                 }
                 log('로그인 성공', 'success');
+                // 아이디/자동로그인 저장
+                try {
+                    const user = (loginUsernameInput?.value || '').trim();
+                    if (rememberIdCheckbox?.checked && user) {
+                        localStorage.setItem(LOGIN_USER_KEY, user);
+                    } else {
+                        localStorage.removeItem(LOGIN_USER_KEY);
+                    }
+                    if (autoLoginCheckbox?.checked) {
+                        localStorage.setItem(LOGIN_AUTOLOGIN_KEY, '1');
+                        const pw = (loginPasswordInput?.value || '').trim();
+                        if (pw) localStorage.setItem(LOGIN_SAVED_PW_KEY, pw);
+                    } else {
+                        localStorage.removeItem(LOGIN_AUTOLOGIN_KEY);
+                        localStorage.removeItem(LOGIN_SAVED_PW_KEY);
+                    }
+                } catch (_) {}
                 // 직전 사용자 액션이 있었다면 우선 재전송
                 if (lastRequest) {
                     const payload = { ...lastRequest };

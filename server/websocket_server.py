@@ -40,6 +40,7 @@ JWT_ALGORITHM = os.getenv("APP_JWT_ALGORITHM", "HS256")
 ACCESS_TTL_SECONDS = int(os.getenv("APP_ACCESS_TTL", os.getenv("APP_JWT_TTL", "604800")))
 REFRESH_TTL_SECONDS = int(os.getenv("APP_REFRESH_TTL", "2592000"))  # 30일
 BIND_HOST = os.getenv("APP_BIND_HOST", "127.0.0.1")
+LOGIN_USERNAME = os.getenv("APP_LOGIN_USERNAME", "")
 LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("APP_LOGIN_MAX_ATTEMPTS", "5"))
 LOGIN_RATE_LIMIT_WINDOW = timedelta(minutes=int(os.getenv("APP_LOGIN_LOCK_MINUTES", "15")))
 TOKEN_EXPIRED_GRACE = timedelta(minutes=int(os.getenv("APP_JWT_GRACE_MINUTES", "60")))
@@ -217,6 +218,7 @@ async def handle_login_action(websocket, data):
         attempts.append((datetime.utcnow(), success))
 
     token = data.get("token")
+    username = data.get("username", "")
     password = data.get("password", "")
 
     if token:
@@ -253,6 +255,16 @@ async def handle_login_action(websocket, data):
         }))
         record_attempt(True)
         return
+
+    # 사용자명 검사(설정된 경우)
+    if LOGIN_USERNAME:
+        if not username or username != LOGIN_USERNAME:
+            await websocket.send(json.dumps({
+                "action": "login",
+                "data": {"success": False, "error": "아이디가 일치하지 않습니다.", "code": "invalid_username"}
+            }))
+            record_attempt(False)
+            return
 
     if password and password == LOGIN_PASSWORD:
         issued, expires_at = issue_access_token()
