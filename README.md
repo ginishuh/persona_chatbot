@@ -297,6 +297,102 @@ docker compose down
 
 접속: http://localhost:9000
 
+### Docker/Git 동기화 가이드 (중요)
+
+웹 UI의 "🔄 동기화" 버튼은 `persona_data/` 디렉토리에서 `git add/commit/push`를 수행합니다. 컨테이너 내부 사용자(`node`, UID 1000)에는 전역 Git 사용자 설정이 없으므로, 다음을 참고해 주세요.
+
+#### 1) "Author identity unknown" 오류 해결
+
+증상:
+
+```
+Author identity unknown
+Please tell me who you are.
+```
+
+원인: 컨테이너 내부에 전역 Git 사용자 정보가 없어 커밋 작성자 정보를 알 수 없습니다.
+
+해결(레포 로컬 설정 권장):
+
+```bash
+# 호스트에서 실행 (권장)
+git -C persona_data config user.name "YOUR_NAME"
+git -C persona_data config user.email "you@example.com"
+
+# 또는 컨테이너 안에서 실행
+docker compose exec persona-chatbot bash -lc \
+  'git -C /app/persona_data config user.name "YOUR_NAME" && \
+   git -C /app/persona_data config user.email "you@example.com"'
+```
+
+참고: 컨테이너에 `git config --global`을 넣어도 됩니다만, 이미지/컨테이너 재생성 시 유실될 수 있으므로 레포 **로컬 설정**을 추천합니다.
+
+#### 2) 원격 푸시 설정(선택)
+
+`persona_data`를 프라이빗 원격 저장소로 백업하려면 아래 중 하나를 선택하세요.
+
+- HTTPS + PAT(권장):
+  ```bash
+  # 1) 원격이 HTTPS인지 확인/변경
+  git -C persona_data remote set-url origin https://github.com/<USER>/<REPO>.git
+
+  # 2) 최초 푸시 시 사용자명/PAT 입력(토큰은 GitHub Settings → Developer settings → PAT 생성)
+  git -C persona_data push -u origin master
+
+  # 선택) 자격 증명 저장(개발 PC 한정, 보안 주의)
+  git -C persona_data config credential.helper store
+  ```
+
+- SSH 키 사용:
+  ```bash
+  # 원격을 SSH로 설정
+  git -C persona_data remote set-url origin git@github.com:<USER>/<REPO>.git
+
+  # 컨테이너에 SSH 키를 마운트(예시)
+  # docker-compose.yml 의 volumes 아래 추가 (호스트 경로는 환경에 맞게 수정)
+  #   - ~/.ssh:/home/node/.ssh:ro
+  ```
+
+#### 2.5) 호스트 푸시 모드(보안 선호)
+
+컨테이너에서 `git push`를 수행하지 않고, UI의 동기화 버튼은 커밋과 함께
+호스트에 "푸시 요청" 트리거 파일을 남기고, 실제 푸시는 호스트에서 수행하는 모드입니다.
+
+장점: 컨테이너에 PAT/SSH 자격증명을 저장하지 않아도 되며, 호스트의 Git 설정을 그대로 활용합니다.
+
+사용법:
+
+1) Compose 환경변수 설정(컨테이너 푸시 비활성화)
+
+docker-compose.yml의 `environment` 블록에 추가:
+
+```
+  - APP_GIT_SYNC_MODE=host
+```
+
+2) 호스트 워처 실행(별도 터미널)
+
+```
+chmod +x scripts/host_git_sync_*.sh
+# REPO_DIR는 생략 가능(기본은 현재 저장소 기준 ../persona_data)
+REPO_DIR="$(pwd)/persona_data" ./scripts/host_git_sync_watch.sh
+```
+
+동작: 컨테이너는 `persona_data/.sync/push_*.json` 파일을 생성하고,
+호스트 워처는 이를 감지하여 `git -C persona_data pull --rebase && git -C persona_data push`를 실행합니다.
+
+팁: systemd --user 유닛으로 등록하면 백그라운드에서 영속 실행할 수 있습니다.
+
+#### 3) 권한/소유권 이슈(특히 STORIES)
+
+`STORIES/` 디렉토리가 `root:root` 소유이고 권한이 `755`인 경우, 호스트에서 서버를 실행하면 쓰기 실패가 날 수 있습니다. 다음 명령으로 소유권을 현재 사용자로 변경하세요.
+
+```bash
+sudo chown -R $(id -u):$(id -g) STORIES
+```
+
+Docker를 사용하는 경우에도 호스트 디렉토리의 소유자가 현재 사용자(UID/GID)와 일치하는지 확인하는 것이 안전합니다. 본 프로젝트의 Compose는 컨테이너를 `${UID}:${GID}`로 실행하므로, 호스트와 UID/GID가 맞으면 권한 이슈가 줄어듭니다.
+
 ### 환경 변수 설정 (.env)
 
 ```bash

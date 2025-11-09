@@ -282,9 +282,18 @@ class WorkspaceHandler:
     # ===== Git 관리 (persona_data 폴더) =====
 
     async def git_check_status(self):
-        """Git 레포 상태 확인"""
+        """Git 레포 상태 확인(로컬 변경/원격 앞섬/뒤처짐 포함)
+
+        반환:
+            - is_repo: bool
+            - has_changes: bool (워킹트리 변경)
+            - ahead: int (원격보다 앞선 커밋 수)
+            - behind: int (원격보다 뒤처진 커밋 수)
+            - branch: 현재 브랜치명(없으면 None)
+            - upstream: 추적 브랜치(없으면 None)
+            - status: `git status --porcelain` 출력
+        """
         try:
-            # .git 디렉토리가 있는지 확인
             git_dir = self.workspace_path / ".git"
             is_repo = git_dir.exists()
 
@@ -295,30 +304,95 @@ class WorkspaceHandler:
                     "message": "Git 레포지토리가 아닙니다"
                 }
 
-            # git status 실행
+            # 로컬 변경 확인
             proc = await asyncio.create_subprocess_exec(
                 'git', 'status', '--porcelain',
                 cwd=str(self.workspace_path),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, stderr = await proc.communicate()
-
+            st_stdout, st_stderr = await proc.communicate()
             if proc.returncode != 0:
                 return {
                     "success": False,
                     "is_repo": True,
-                    "error": stderr.decode()
+                    "error": (st_stderr or st_stdout).decode()
                 }
+            status_text = (st_stdout or b'').decode()
+            has_changes = len(status_text.strip()) > 0
 
-            # 변경사항이 있는지 확인
-            has_changes = len(stdout.decode().strip()) > 0
+            # 현재 브랜치
+            branch = None
+            try:
+                proc_b = await asyncio.create_subprocess_exec(
+                    'git', 'rev-parse', '--abbrev-ref', 'HEAD',
+                    cwd=str(self.workspace_path),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                b_out, _ = await proc_b.communicate()
+                branch = (b_out or b'').decode().strip() or None
+            except Exception:
+                branch = None
+
+            # 업스트림(추적 브랜치)
+            upstream = None
+            try:
+                proc_u = await asyncio.create_subprocess_exec(
+                    'git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}',
+                    cwd=str(self.workspace_path),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                u_out, u_err = await proc_u.communicate()
+                if proc_u.returncode == 0:
+                    upstream = (u_out or b'').decode().strip() or None
+            except Exception:
+                upstream = None
+
+            # ahead/behind 계산 (업스트림이 있을 때)
+            ahead = 0
+            behind = 0
+            if upstream:
+                # 최신 원격 상태 반영
+                try:
+                    proc_fetch = await asyncio.create_subprocess_exec(
+                        'git', 'fetch', '--all',
+                        cwd=str(self.workspace_path),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    await proc_fetch.communicate()
+                except Exception:
+                    pass
+
+                try:
+                    # @{u}...HEAD 형태: left(behind), right(ahead)
+                    proc_ab = await asyncio.create_subprocess_exec(
+                        'git', 'rev-list', '--left-right', '--count', '@{u}...HEAD',
+                        cwd=str(self.workspace_path),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    ab_out, ab_err = await proc_ab.communicate()
+                    if proc_ab.returncode == 0:
+                        parts = (ab_out or b'').decode().strip().split()
+                        if len(parts) >= 2:
+                            behind = int(parts[0])
+                            ahead = int(parts[1])
+                except Exception:
+                    ahead = 0
+                    behind = 0
 
             return {
                 "success": True,
                 "is_repo": True,
                 "has_changes": has_changes,
-                "status": stdout.decode()
+                "ahead": ahead,
+                "behind": behind,
+                "branch": branch,
+                "upstream": upstream,
+                "status": status_text
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -354,6 +428,8 @@ class WorkspaceHandler:
     async def git_sync(self, commit_message=None):
         """Git 자동 동기화 (add + commit + push)"""
         try:
+            push_mode = os.getenv("APP_GIT_SYNC_MODE", "container").lower()  # container | host
+            disable_push = os.getenv("APP_DISABLE_GIT_PUSH", "0") in ("1", "true", "yes")
             # 기본 커밋 메시지
             if not commit_message:
                 from datetime import datetime
@@ -366,11 +442,16 @@ class WorkspaceHandler:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            await proc.communicate()
+            add_stdout, add_stderr = await proc.communicate()
 
             if proc.returncode != 0:
-                return {"success": False, "error": "git add 실패"}
+                # add 실패 사유를 그대로 노출해 진단 용이성 향상
+                return {
+                    "success": False,
+                    "error": f"git add 실패: {(add_stderr or add_stdout).decode().strip()}"
+                }
 
+            committed = False  # 커밋 여부 추적
             # git commit
             proc = await asyncio.create_subprocess_exec(
                 'git', 'commit', '-m', commit_message,
@@ -378,18 +459,85 @@ class WorkspaceHandler:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, stderr = await proc.communicate()
+            commit_stdout, commit_stderr = await proc.communicate()
 
-            # 커밋할 내용이 없으면 성공으로 처리
+            # 커밋할 내용이 없는 경우: git은 종료코드 1을 반환하고 메시지는 보통 stdout에 기록됨
             if proc.returncode != 0:
-                stderr_text = stderr.decode()
-                if "nothing to commit" in stderr_text:
-                    return {
-                        "success": True,
-                        "message": "변경사항이 없습니다"
-                    }
+                out = (commit_stdout or b'').decode()
+                err = (commit_stderr or b'').decode()
+                combined = f"{out}\n{err}".lower()
+                if "nothing to commit" in combined or "no changes added to commit" in combined:
+                    # 호스트 모드면 푸시 트리거 생성 후 종료, 컨테이너 모드면 pull/push 진행
+                    if disable_push or push_mode == "host":
+                        await self._write_host_push_trigger(commit_message)
+                        return {
+                            "success": True,
+                            "message": "커밋할 변경 없음 (호스트에 pull/push 위임)",
+                            "warning": "컨테이너 푸시는 비활성화되어 호스트로 위임됩니다."
+                        }
+                    committed = False
                 else:
-                    return {"success": False, "error": stderr_text}
+                    return {
+                        "success": False,
+                        "error": (err or out).strip()
+                    }
+
+            # 커밋된 경우 커밋 SHA 추출 (호스트 위임 시 트리거에 기록)
+            commit_sha = None
+            try:
+                proc_sha = await asyncio.create_subprocess_exec(
+                    'git', 'rev-parse', '--short', 'HEAD',
+                    cwd=str(self.workspace_path),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                sha_out, _ = await proc_sha.communicate()
+                commit_sha = (sha_out or b'').decode().strip() or None
+            except Exception:
+                commit_sha = None
+
+            # 컨테이너에서 푸시 비활성화 또는 호스트 모드면 푸시를 호스트에 위임
+            if disable_push or push_mode == "host":
+                await self._write_host_push_trigger(commit_message, commit_sha)
+                return {
+                    "success": True,
+                    "message": "커밋 완료 (호스트 푸시 트리거 전송)",
+                    "warning": "컨테이너 푸시는 비활성화되어 호스트로 위임됩니다."
+                }
+
+            # 컨테이너 모드: 원격 변경이 있으면 pull --rebase 먼저 수행
+            try:
+                proc_u = await asyncio.create_subprocess_exec(
+                    'git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}',
+                    cwd=str(self.workspace_path),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                u_out, _ = await proc_u.communicate()
+                if proc_u.returncode == 0:
+                    # 업스트림 존재 → 최신화 및 리베이스 pull
+                    proc_fetch2 = await asyncio.create_subprocess_exec(
+                        'git', 'fetch', '--all',
+                        cwd=str(self.workspace_path),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    await proc_fetch2.communicate()
+                    proc_pull = await asyncio.create_subprocess_exec(
+                        'git', 'pull', '--rebase',
+                        cwd=str(self.workspace_path),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    pull_out, pull_err = await proc_pull.communicate()
+                    if proc_pull.returncode != 0:
+                        return {
+                            "success": False,
+                            "error": (pull_err or pull_out).decode().strip() or 'git pull --rebase 실패'
+                        }
+            except Exception:
+                # pull 시도 중 오류는 이후 push 단계에서 재확인되므로 조용히 무시
+                pass
 
             # git push
             proc = await asyncio.create_subprocess_exec(
@@ -398,10 +546,12 @@ class WorkspaceHandler:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, stderr = await proc.communicate()
+            push_stdout, push_stderr = await proc.communicate()
 
             if proc.returncode != 0:
-                stderr_text = stderr.decode()
+                stderr_text = (push_stderr or b'').decode()
+                stdout_text = (push_stdout or b'').decode()
+                combined = f"{stdout_text}\n{stderr_text}"
                 # 원격 레포 설정 안 된 경우
                 if "No configured push destination" in stderr_text or "no upstream" in stderr_text:
                     return {
@@ -409,15 +559,39 @@ class WorkspaceHandler:
                         "message": "커밋 완료 (원격 레포 미설정)",
                         "warning": "원격 레포지토리를 설정하세요: git remote add origin <URL>"
                     }
-                else:
-                    return {"success": False, "error": stderr_text}
+                return {"success": False, "error": combined.strip()}
 
-            return {
-                "success": True,
-                "message": "동기화 완료 (커밋 및 푸시)"
-            }
+            return {"success": True, "message": "동기화 완료 (pull + commit + push)"}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    async def _write_host_push_trigger(self, commit_message: str | None, commit_sha: str | None = None):
+        """호스트 측 푸시를 유도하기 위한 트리거 파일 작성.
+
+        컨테이너와 호스트가 공유하는 `persona_data/.sync/` 디렉토리에
+        JSON 파일을 기록합니다. 호스트 워처가 이를 감지해 `git push`를 수행하게 됩니다.
+        """
+        try:
+            from datetime import datetime
+            sync_dir = self.workspace_path / ".sync"
+            sync_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime('%Y%m%d%H%M%S')
+            trigger_path = sync_dir / f"push_{ts}.json"
+
+            payload = {
+                "action": "push",
+                "timestamp": ts,
+                "commit": commit_sha,
+                "message": commit_message or ""
+            }
+
+            async with aiofiles.open(trigger_path, 'w', encoding='utf-8') as f:
+                await f.write(json.dumps(payload, ensure_ascii=False))
+
+            return str(trigger_path)
+        except Exception:
+            # 트리거 실패는 동작을 막을 정도는 아니므로 조용히 무시
+            return None
 
     async def git_pull(self):
         """Git pull (원격에서 가져오기)"""

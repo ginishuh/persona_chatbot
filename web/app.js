@@ -1744,14 +1744,31 @@ function handleGitStatus(data) {
         // Git 레포가 아님
         gitSyncBtn.textContent = '📦 Git 초기화';
         gitSyncBtn.title = '클릭하여 Git 레포지토리 초기화';
-    } else if (data.has_changes) {
-        // 변경사항 있음
-        gitSyncBtn.textContent = '🔄 동기화 *';
-        gitSyncBtn.title = '변경사항이 있습니다. 클릭하여 동기화';
     } else {
-        // 변경사항 없음
-        gitSyncBtn.textContent = '✓ 동기화';
-        gitSyncBtn.title = '변경사항 없음';
+        // 상세 상태 계산 (로컬/원격)
+        const localChanges = !!data.has_changes;
+        const ahead = Number(data.ahead || 0);
+        const behind = Number(data.behind || 0);
+
+        // 버튼 텍스트/아이콘
+        let text = '✓ 동기화';
+        let title = '변경사항 없음';
+
+        if (localChanges || ahead > 0 || behind > 0) {
+            // 동기화 필요
+            const upArrow = (localChanges || ahead > 0) ? '↑' : '';
+            const downArrow = (behind > 0) ? '↓' : '';
+            text = `🔄 동기화 ${upArrow}${downArrow}`.trim();
+
+            const bits = [];
+            if (localChanges) bits.push('로컬 변경 있음');
+            if (ahead > 0) bits.push(`원격 대비 앞섬 ${ahead}`);
+            if (behind > 0) bits.push(`원격 변경 ${behind}`);
+            title = bits.join(' · ') || '동기화 필요';
+        }
+
+        gitSyncBtn.textContent = text;
+        gitSyncBtn.title = title;
     }
 }
 
