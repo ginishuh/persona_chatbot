@@ -583,12 +583,13 @@ async def handle_message(websocket, message):
                     model=model
                 )
             elif provider == "droid":
+                # 혼선 방지를 위해 서버 기본 모델(DROID_MODEL)만 사용
                 result = await droid_handler.send_message(
                     prompt,
                     system_prompt=system_prompt,
                     callback=stream_callback,
                     session_id=provider_session_id,
-                    model=model
+                    model=None
                 )
             elif provider == "claude":
                 result = await claude_handler.send_message(

@@ -246,13 +246,19 @@ function updateModelOptions(provider) {
         add('Sonnet 4.5', 'sonnet-4.5');
         add('Haiku 4.5', 'haiku-4.5');
     } else if (provider === 'droid') {
-        add('서버 기본', '');
-        add('glm-4.6', 'glm-4.6');
-        add('glm-4', 'glm-4');
+        add('서버 기본(커스텀)', '');
     }
     // 이전 선택 복원
     const found = [...modelSelect.options].some(o => o.value === prev);
     modelSelect.value = found ? prev : '';
+    // Droid는 혼선 방지를 위해 모델 선택 비활성화 (서버 기본 사용)
+    if (provider === 'droid') {
+        modelSelect.disabled = true;
+        modelSelect.title = 'Droid는 서버 기본(DROID_MODEL)만 사용합니다';
+    } else {
+        modelSelect.disabled = false;
+        modelSelect.title = '';
+    }
 }
 
 if (aiProvider) {
