@@ -210,9 +210,9 @@ function connect() {
         console.error('WebSocket error:', error);
     };
 
-    ws.onclose = (event) => {
+    ws.onclose = () => {
         updateStatus('disconnected', '연결 끊김');
-        log(`연결 종료(code=${event?.code || '-'}, reason=${event?.reason || '-'}) - 5초 후 재연결`, 'error');
+        log('연결이 끊어졌습니다. 5초 후 재연결...', 'error');
         authRequired = false;
         isAuthenticated = false;
         hideLoginModal();
@@ -256,14 +256,7 @@ function sendMessage(payload, options = {}) {
     if (!options.skipRetry && RETRY_ACTIONS.has(payload.action)) {
         lastRequest = message;
     }
-    try {
-        const encoded = JSON.stringify(message);
-        ws.send(encoded);
-        log(`전송됨: ${message.action} (state=${ws.readyState}, buf=${ws.bufferedAmount})`, 'info');
-    } catch (err) {
-        console.error('ws.send error:', err);
-        log(`전송 실패: ${message.action} - ${err?.message || err}`, 'error');
-    }
+    ws.send(JSON.stringify(message));
 }
 
 function initializeAppData() {
@@ -1290,7 +1283,6 @@ function loadNPCList(selectElement) {
 
 // 컨텍스트 저장
 saveContextBtn.addEventListener('click', () => {
-    log('설정 적용 요청 전송...', 'info');
     if (saveContextBtn) saveContextBtn.disabled = true;
     const characters = [];
     const characterItems = charactersList.querySelectorAll('.character-item');
