@@ -2226,6 +2226,72 @@ if (injectStoryBtn) {
     });
 }
 
+// ===== 햄버거 메뉴 (모바일) =====
+
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const mobileOverlay = document.getElementById('mobileOverlay');
+const leftPanel = document.querySelector('.left-panel');
+const rightPanel = document.querySelector('.right-panel');
+
+let currentMobilePanel = null; // 'left' or 'right' or null
+
+if (hamburgerBtn) {
+    hamburgerBtn.addEventListener('click', () => {
+        if (currentMobilePanel === 'left') {
+            // 이미 좌측 패널이 열려 있으면 닫기
+            closeMobilePanel();
+        } else {
+            // 좌측 패널 열기
+            openMobilePanel('left');
+        }
+    });
+}
+
+function openMobilePanel(panel) {
+    closeMobilePanel(); // 먼저 기존 패널 닫기
+
+    if (panel === 'left' && leftPanel) {
+        leftPanel.classList.add('mobile-visible');
+        currentMobilePanel = 'left';
+    } else if (panel === 'right' && rightPanel) {
+        rightPanel.classList.add('mobile-visible');
+        currentMobilePanel = 'right';
+    }
+
+    if (mobileOverlay) {
+        mobileOverlay.classList.add('active');
+    }
+
+    if (hamburgerBtn) {
+        hamburgerBtn.classList.add('active');
+    }
+}
+
+function closeMobilePanel() {
+    if (leftPanel) {
+        leftPanel.classList.remove('mobile-visible');
+    }
+    if (rightPanel) {
+        rightPanel.classList.remove('mobile-visible');
+    }
+    if (mobileOverlay) {
+        mobileOverlay.classList.remove('active');
+    }
+    if (hamburgerBtn) {
+        hamburgerBtn.classList.remove('active');
+    }
+    currentMobilePanel = null;
+}
+
+// 오버레이 클릭 시 패널 닫기
+if (mobileOverlay) {
+    mobileOverlay.addEventListener('click', closeMobilePanel);
+}
+
+// 서사 패널을 여는 기능 추가 (필요 시)
+// 예: 서사 버튼 클릭 시 우측 패널 열기
+// 이 기능은 필요에 따라 나중에 추가할 수 있습니다.
+
 // ===== 초기화 =====
 
 window.addEventListener('load', async () => {
