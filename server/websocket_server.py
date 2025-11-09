@@ -36,7 +36,9 @@ LOGIN_PASSWORD = os.getenv("APP_LOGIN_PASSWORD", "")
 LOGIN_REQUIRED = bool(LOGIN_PASSWORD)
 JWT_SECRET = os.getenv("APP_JWT_SECRET", "")
 JWT_ALGORITHM = os.getenv("APP_JWT_ALGORITHM", "HS256")
-JWT_TTL_SECONDS = int(os.getenv("APP_JWT_TTL", "604800"))
+# 기존 APP_JWT_TTL 호환: 설정 시 access TTL로 사용
+ACCESS_TTL_SECONDS = int(os.getenv("APP_ACCESS_TTL", os.getenv("APP_JWT_TTL", "604800")))
+REFRESH_TTL_SECONDS = int(os.getenv("APP_REFRESH_TTL", "2592000"))  # 30일
 BIND_HOST = os.getenv("APP_BIND_HOST", "127.0.0.1")
 LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("APP_LOGIN_MAX_ATTEMPTS", "5"))
 LOGIN_RATE_LIMIT_WINDOW = timedelta(minutes=int(os.getenv("APP_LOGIN_LOCK_MINUTES", "15")))
@@ -86,29 +88,43 @@ def is_session_retention_enabled(websocket):
     settings = client_session_settings.get(websocket, {})
     return settings.get("retention_enabled", False)
 
-def issue_token():
-    """JWT 발급"""
+def _issue_token(ttl_seconds: int, typ: str):
+    """JWT 생성 공통 함수"""
     if not JWT_SECRET:
         return None, None
     now = datetime.utcnow()
-    exp = now + timedelta(seconds=JWT_TTL_SECONDS)
+    exp = now + timedelta(seconds=ttl_seconds)
     payload = {
         "sub": "persona_chat_user",
         "iat": now,
-        "exp": exp
+        "exp": exp,
+        "typ": typ,
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return token, exp.isoformat() + "Z"
 
 
-def verify_token(token):
-    """JWT 검증: (payload, error_code) 반환"""
+def issue_access_token():
+    """Access 토큰 발급"""
+    return _issue_token(ACCESS_TTL_SECONDS, "access")
+
+
+def issue_refresh_token():
+    """Refresh 토큰 발급"""
+    return _issue_token(REFRESH_TTL_SECONDS, "refresh")
+
+
+def verify_token(token, expected_type: str = "access"):
+    """JWT 검증: (payload, error_code) 반환. expected_type: 'access' | 'refresh'"""
     if not JWT_SECRET:
         return None, "jwt_disabled"
     if not token:
         return None, "missing_token"
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        typ = payload.get("typ", "access")
+        if expected_type and typ != expected_type:
+            return None, "invalid_token_type"
         return payload, None
     except jwt.ExpiredSignatureError:
         return None, "token_expired"
@@ -152,14 +168,16 @@ async def handle_login_action(websocket, data):
     password = data.get("password", "")
 
     if token:
-        payload, error = verify_token(token)
+        # Access 토큰으로 재인증/갱신 (웹소켓 keep-alive용)
+        payload, error = verify_token(token, expected_type="access")
         if error:
             if error == "token_expired":
                 try:
                     unverified = jwt.decode(token, options={"verify_signature": False, "verify_exp": False})
                     exp = datetime.fromtimestamp(unverified.get("exp"))
                     if datetime.utcnow() - exp < TOKEN_EXPIRED_GRACE:
-                        new_token, expires_at = issue_token()
+                        new_token, expires_at = issue_access_token()
+                        # refresh 토큰은 회전하지 않음(명시적 refresh에서 회전)
                         await websocket.send(json.dumps({
                             "action": "login",
                             "data": {"success": True, "token": new_token, "expires_at": expires_at, "renewed": True}
@@ -176,7 +194,7 @@ async def handle_login_action(websocket, data):
             record_attempt(False)
             return
 
-        new_token, expires_at = issue_token()
+        new_token, expires_at = issue_access_token()
         await websocket.send(json.dumps({
             "action": "login",
             "data": {"success": True, "token": new_token, "expires_at": expires_at, "renewed": True}
@@ -185,10 +203,11 @@ async def handle_login_action(websocket, data):
         return
 
     if password and password == LOGIN_PASSWORD:
-        issued, expires_at = issue_token()
+        issued, expires_at = issue_access_token()
+        refresh, refresh_exp = issue_refresh_token()
         await websocket.send(json.dumps({
             "action": "login",
-            "data": {"success": True, "token": issued, "expires_at": expires_at, "renewed": False}
+            "data": {"success": True, "token": issued, "expires_at": expires_at, "refresh_token": refresh, "refresh_expires_at": refresh_exp, "renewed": False}
         }))
         record_attempt(True)
         return
@@ -198,6 +217,37 @@ async def handle_login_action(websocket, data):
         "data": {"success": False, "error": "비밀번호가 일치하지 않습니다.", "code": "invalid_password"}
     }))
     record_attempt(False)
+
+
+async def handle_token_refresh_action(websocket, data):
+    """리프레시 토큰으로 액세스 토큰 갱신/회전"""
+    refresh_token = data.get("refresh_token")
+    payload, error = verify_token(refresh_token, expected_type="refresh")
+    if error:
+        await websocket.send(json.dumps({
+            "action": "token_refresh",
+            "data": {"success": False, "error": error}
+        }))
+        return
+
+    new_access, access_exp = issue_access_token()
+    # 선택: refresh 토큰도 회전(보안 강화)
+    rotate = bool(int(os.getenv("APP_REFRESH_ROTATE", "1")))
+    if rotate:
+        new_refresh, refresh_exp = issue_refresh_token()
+    else:
+        new_refresh, refresh_exp = refresh_token, None
+
+    await websocket.send(json.dumps({
+        "action": "token_refresh",
+        "data": {
+            "success": True,
+            "token": new_access,
+            "expires_at": access_exp,
+            "refresh_token": new_refresh,
+            "refresh_expires_at": refresh_exp
+        }
+    }))
 
 
 async def handle_message(websocket, message):
@@ -211,10 +261,13 @@ async def handle_message(websocket, message):
         if action == "login":
             await handle_login_action(websocket, data)
             return
+        if action == "token_refresh":
+            await handle_token_refresh_action(websocket, data)
+            return
 
         if LOGIN_REQUIRED:
             token = data.get("token")
-            _, token_error = verify_token(token)
+            _, token_error = verify_token(token, expected_type="access")
             if token_error:
                 await send_auth_required(websocket, token_error)
                 return
@@ -549,13 +602,13 @@ async def handle_message(websocket, message):
             }))
 
     except json.JSONDecodeError:
-        logger.error("Invalid JSON received")
+        logger.exception("Invalid JSON received")
         await websocket.send(json.dumps({
             "action": "error",
             "data": {"success": False, "error": "Invalid JSON"}
         }))
     except Exception as e:
-        logger.error(f"Error handling message: {e}")
+        logger.exception("Error handling message")
         await websocket.send(json.dumps({
             "action": "error",
             "data": {"success": False, "error": str(e)}

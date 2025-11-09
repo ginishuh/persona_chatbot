@@ -83,10 +83,16 @@ let isAuthenticated = false;
 
 const AUTH_TOKEN_KEY = 'persona_auth_token';
 const AUTH_EXP_KEY = 'persona_auth_exp';
+const REFRESH_TOKEN_KEY = 'persona_refresh_token';
+const REFRESH_EXP_KEY = 'persona_refresh_exp';
 let authToken = '';
 let authTokenExpiresAt = '';
+let refreshToken = '';
+let refreshTokenExpiresAt = '';
 let tokenRefreshTimeout = null;
 let refreshRetryCount = 0;
+let refreshInProgress = false;
+let lastRequest = null; // 재전송용 마지막 요청 저장
 const MAX_REFRESH_RETRIES = 3;
 const HISTORY_LIMIT_DEFAULT = 30;
 let currentHistoryLimit = HISTORY_LIMIT_DEFAULT;
@@ -94,9 +100,13 @@ let sessionSettingsLoaded = false;
 try {
     authToken = sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
     authTokenExpiresAt = sessionStorage.getItem(AUTH_EXP_KEY) || '';
+    refreshToken = sessionStorage.getItem(REFRESH_TOKEN_KEY) || '';
+    refreshTokenExpiresAt = sessionStorage.getItem(REFRESH_EXP_KEY) || '';
 } catch (error) {
     authToken = '';
     authTokenExpiresAt = '';
+    refreshToken = '';
+    refreshTokenExpiresAt = '';
 }
 
 function buildWebSocketUrl() {
@@ -133,6 +143,24 @@ function setAuthToken(token, expiresAt) {
 function clearAuthToken() {
     refreshRetryCount = 0;
     setAuthToken('', '');
+}
+
+function setRefreshToken(token, expiresAt) {
+    refreshToken = token || '';
+    refreshTokenExpiresAt = expiresAt || '';
+    try {
+        if (refreshToken) {
+            sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+            if (refreshTokenExpiresAt) {
+                sessionStorage.setItem(REFRESH_EXP_KEY, refreshTokenExpiresAt);
+            } else {
+                sessionStorage.removeItem(REFRESH_EXP_KEY);
+            }
+        } else {
+            sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+            sessionStorage.removeItem(REFRESH_EXP_KEY);
+        }
+    } catch (_) { /* ignore */ }
 }
 
 // ===== WebSocket 연결 =====
@@ -215,6 +243,9 @@ function sendMessage(payload, options = {}) {
     const message = { ...payload };
     if (!options.skipToken && authToken) {
         message.token = authToken;
+    }
+    if (!options.skipRetry && payload.action !== 'login' && payload.action !== 'token_refresh') {
+        lastRequest = message;
     }
     ws.send(JSON.stringify(message));
 }
@@ -374,7 +405,11 @@ function attemptTokenRefresh() {
         return;
     }
     refreshRetryCount = 0;
-    sendMessage({ action: 'login' });
+    if (refreshToken) {
+        sendMessage({ action: 'token_refresh', refresh_token: refreshToken }, { skipToken: true, skipRetry: true });
+    } else {
+        sendMessage({ action: 'login' });
+    }
 }
 
 function showLoginModal() {
@@ -446,15 +481,17 @@ function handleMessage(msg) {
         case 'auth_required':
             authRequired = true;
             isAuthenticated = false;
-            if (data && data.reason && data.reason !== 'missing_token') {
-                clearAuthToken();
-            }
-            if (authToken) {
-                sendMessage({ action: 'login' });
+            // refresh 토큰으로 자동 갱신 시도
+            if (!refreshInProgress && refreshToken) {
+                refreshInProgress = true;
+                sendMessage({ action: 'token_refresh', refresh_token: refreshToken }, { skipToken: true, skipRetry: true });
+                log('토큰 갱신 시도 중...', 'info');
             } else {
+                clearAuthToken();
+                setRefreshToken('', '');
                 showLoginModal();
+                log('로그인이 필요합니다', 'warning');
             }
-            log('로그인이 필요합니다', 'warning');
             break;
 
         case 'login':
@@ -466,14 +503,39 @@ function handleMessage(msg) {
                 if (data.token) {
                     setAuthToken(data.token, data.expires_at);
                 }
+                if (data.refresh_token) {
+                    setRefreshToken(data.refresh_token, data.refresh_expires_at);
+                }
                 log('로그인 성공', 'success');
                 initializeAppData();
             } else {
                 const errorMsg = data.error || '로그인에 실패했습니다.';
                 clearAuthToken();
+                setRefreshToken('', '');
                 showLoginModal();
                 loginError.textContent = errorMsg;
                 log(`로그인 실패: ${errorMsg}`, 'error');
+            }
+            break;
+
+        case 'token_refresh':
+            refreshInProgress = false;
+            if (data.success) {
+                if (data.token) setAuthToken(data.token, data.expires_at);
+                if (data.refresh_token) setRefreshToken(data.refresh_token, data.refresh_expires_at);
+                log('토큰 갱신 완료', 'success');
+                if (lastRequest) {
+                    const payload = { ...lastRequest };
+                    sendMessage(payload, { skipRetry: true });
+                    lastRequest = null;
+                } else {
+                    initializeAppData();
+                }
+            } else {
+                clearAuthToken();
+                setRefreshToken('', '');
+                showLoginModal();
+                log(`토큰 갱신 실패: ${data.error || '오류'}`, 'error');
             }
             break;
 
