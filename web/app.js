@@ -56,7 +56,7 @@ const loadPresetBtn = document.getElementById('loadPresetBtn');
 const deletePresetBtn = document.getElementById('deletePresetBtn');
 
 // 헤더 버튼
-const modeSwitchBtn = document.getElementById('modeSwitchBtn');
+// 모드 전환 UI 제거됨: 잔여 참조 방지를 위해 버튼 조회 삭제
 const gitSyncBtn = document.getElementById('gitSyncBtn');
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 const resetSessionsBtn = document.getElementById('resetSessionsBtn');
@@ -106,7 +106,7 @@ const RETRY_ACTIONS = new Set([
     'save_workspace_file', 'delete_workspace_file',
     'save_preset', 'delete_preset', 'load_preset',
     'set_history_limit',
-    'mode_switch_chatbot', 'mode_switch_coding',
+    // 모드 전환 액션 제거됨
     'git_sync', 'git_pull',
     'clear_history', 'reset_sessions'
 ]);
@@ -325,7 +325,6 @@ function initializeAppData() {
     loadPresetList();
     loadStoryList();
     checkGitStatus();
-    checkModeStatus();
 }
 
 // ===== 맥락 길이 슬라이더 =====
@@ -870,29 +869,7 @@ function handleMessage(msg) {
             }
             break;
 
-        case 'mode_check':
-            handleModeStatus(data);
-            break;
-
-        case 'mode_switch_chatbot':
-            if (data.success) {
-                log(data.message, 'success');
-                alert('⚠️ 챗봇 전용 모드로 전환되었습니다.\n\n브라우저를 새로고침(F5 또는 Ctrl+R)하세요!');
-                checkModeStatus(); // 상태 재확인
-            } else {
-                log(`모드 전환 실패: ${data.error}`, 'error');
-            }
-            break;
-
-        case 'mode_switch_coding':
-            if (data.success) {
-                log(data.message, 'success');
-                alert('⚠️ 에이전트 지침이 복구되었습니다.\n\n브라우저를 새로고침(F5 또는 Ctrl+R)하세요!');
-                checkModeStatus(); // 상태 재확인
-            } else {
-                log(`모드 전환 실패: ${data.error}`, 'error');
-            }
-            break;
+        // 모드 전환 관련 메시지 제거됨
 
         case 'list_stories':
             if (data.success) {
@@ -2129,66 +2106,7 @@ gitSyncBtn.addEventListener('click', () => {
     }, 100);
 });
 
-// ===== 모드 관리 (챗봇 ↔ 코딩) =====
-
-// 모드 상태 확인
-function checkModeStatus() {
-    sendMessage({ action: 'mode_check' });
-}
-
-// 모드 상태 처리
-function handleModeStatus(data) {
-    if (!data.success) {
-        modeSwitchBtn.textContent = '💬 모드';
-        modeSwitchBtn.title = '모드 확인 실패';
-        return;
-    }
-
-    const mode = data.mode;
-
-    if (mode === 'chatbot') {
-        // 챗봇 전용 모드
-        modeSwitchBtn.textContent = '💬 챗봇';
-        modeSwitchBtn.title = '현재: 챗봇 전용 모드 (클릭: 에이전트 지침 복구)';
-    } else if (mode === 'coding') {
-        // 코딩 모드
-        modeSwitchBtn.textContent = '⚙️ 코딩';
-        modeSwitchBtn.title = '현재: 코딩 모드 (클릭: 챗봇 전용 전환)';
-    } else if (mode === 'none') {
-        // 파일 없음
-        modeSwitchBtn.textContent = '💬 모드';
-        modeSwitchBtn.title = 'CLAUDE.md 파일 없음';
-    } else {
-        // 혼재 상태
-        modeSwitchBtn.textContent = '⚠️ 혼재';
-        modeSwitchBtn.title = '.md와 .md.bak가 혼재되어 있습니다';
-    }
-}
-
-// 모드 전환 버튼 클릭
-modeSwitchBtn.addEventListener('click', () => {
-    // 현재 모드 확인
-    sendMessage({ action: 'mode_check' });
-
-    // 잠시 후 실제 처리
-    setTimeout(() => {
-        const btnText = modeSwitchBtn.textContent;
-
-        if (btnText.includes('챗봇')) {
-            // 챗봇 → 코딩
-            if (confirm('에이전트 지침을 복구하시겠습니까?\n(CLAUDE.md 파일 복원)')) {
-                sendMessage({ action: 'mode_switch_coding' });
-            }
-        } else if (btnText.includes('코딩')) {
-            // 코딩 → 챗봇
-            if (confirm('챗봇 전용 모드로 전환하시겠습니까?\n(CLAUDE.md 파일 비활성화)')) {
-                sendMessage({ action: 'mode_switch_chatbot' });
-            }
-        } else {
-            alert('모드를 확인할 수 없습니다');
-        }
-    }, 100);
-});
+// (제거됨) 모드 관리 UI/로직은 더 이상 사용하지 않습니다.
 
 // ===== 서사 관리 =====
 
@@ -2528,5 +2446,4 @@ window.addEventListener('load', async () => {
 
     // 주기적 상태 확인 (10초마다)
     setInterval(checkGitStatus, 10000);
-    setInterval(checkModeStatus, 10000);
 });
