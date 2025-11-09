@@ -117,7 +117,7 @@ class DroidHandler:
         finally:
             self.process = None
 
-    async def send_message(self, prompt, system_prompt=None, callback=None, session_id: str | None = None):
+    async def send_message(self, prompt, system_prompt=None, callback=None, session_id: str | None = None, model: str | None = None):
         """
         Droid에 메시지 전송 및 스트리밍 응답 수신
 
@@ -361,7 +361,8 @@ class DroidHandler:
 
         try:
             # 1) 기본 모델 시도
-            ok, msg, err = await _invoke_once(self.primary_model, latest_session_id)
+            initial_model = model or self.primary_model
+            ok, msg, err = await _invoke_once(initial_model, latest_session_id)
             if ok and msg:
                 return {"success": True, "message": msg, "token_info": None, "session_id": latest_session_id}
 

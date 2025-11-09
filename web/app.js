@@ -30,6 +30,7 @@ const narratorDescription = document.getElementById('narratorDescription');
 const charactersList = document.getElementById('charactersList');
 const addCharacterBtn = document.getElementById('addCharacterBtn');
 const aiProvider = document.getElementById('aiProvider');
+const modelSelect = document.getElementById('modelSelect');
 const adultLevel = document.getElementById('adultLevel');
 const narrativeSeparation = document.getElementById('narrativeSeparation');
 const saveContextBtn = document.getElementById('saveContextBtn');
@@ -222,6 +223,41 @@ function connect() {
         tokenRefreshTimeout = null;
         setTimeout(connect, 5000);
     };
+}
+
+// 모델 옵션 갱신
+function updateModelOptions(provider) {
+    if (!modelSelect) return;
+    const prev = modelSelect.value;
+    modelSelect.innerHTML = '';
+    const add = (label, value) => {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label;
+        modelSelect.appendChild(opt);
+    };
+    if (provider === 'gemini') {
+        add('auto (CLI 기본)', '');
+        add('gemini-2.5-flash', 'gemini-2.5-flash');
+        add('gemini-1.5-flash-8b', 'gemini-1.5-flash-8b');
+        add('gemini-1.5-pro', 'gemini-1.5-pro');
+    } else if (provider === 'claude') {
+        add('기본 (CLI 설정)', '');
+        add('Sonnet 4.5', 'sonnet-4.5');
+        add('Haiku 4.5', 'haiku-4.5');
+    } else if (provider === 'droid') {
+        add('서버 기본', '');
+        add('glm-4.6', 'glm-4.6');
+        add('glm-4', 'glm-4');
+    }
+    // 이전 선택 복원
+    const found = [...modelSelect.options].some(o => o.value === prev);
+    modelSelect.value = found ? prev : '';
+}
+
+if (aiProvider) {
+    updateModelOptions(aiProvider.value || 'claude');
+    aiProvider.addEventListener('change', () => updateModelOptions(aiProvider.value));
 }
 
 // 상태 업데이트
@@ -882,7 +918,8 @@ function sendChatMessage() {
         sendMessage({
             action: 'chat',
             prompt: prompt,
-            provider: provider
+            provider: provider,
+            model: (modelSelect && modelSelect.value) ? modelSelect.value : ''
         });
 
         const providerLabel = provider === 'gemini' ? 'Gemini' : (provider === 'droid' ? 'Droid' : 'Claude');

@@ -18,7 +18,7 @@ class ClaudeCodeHandler:
         self.chatbot_workspace = Path(__file__).parent.parent.parent / "chatbot_workspace"
         self.chatbot_workspace.mkdir(exist_ok=True)
 
-    async def start(self, system_prompt=None, resume_session_id=None):
+    async def start(self, system_prompt=None, resume_session_id=None, model: str | None = None):
         """Claude Code 프로세스 시작"""
         if self.process is not None:
             logger.warning("Claude Code process already running")
@@ -35,6 +35,8 @@ class ClaudeCodeHandler:
 
             if resume_session_id:
                 args.extend(["--resume", str(resume_session_id)])
+            if model:
+                args.extend(["--model", str(model)])
 
             # System prompt 추가
             if system_prompt:
@@ -68,7 +70,7 @@ class ClaudeCodeHandler:
         finally:
             self.process = None
 
-    async def send_message(self, prompt, system_prompt=None, callback=None, session_id=None):
+    async def send_message(self, prompt, system_prompt=None, callback=None, session_id=None, model: str | None = None):
         """
         Claude Code에 메시지 전송 및 스트리밍 응답 수신
 
@@ -82,7 +84,7 @@ class ClaudeCodeHandler:
             최종 결과 딕셔너리
         """
         if self.process is None:
-            await self.start(system_prompt, resume_session_id=session_id)
+            await self.start(system_prompt, resume_session_id=session_id, model=model)
 
         try:
             # 프롬프트 전송
