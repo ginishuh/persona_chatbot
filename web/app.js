@@ -210,9 +210,9 @@ function connect() {
         console.error('WebSocket error:', error);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
         updateStatus('disconnected', '연결 끊김');
-        log('연결이 끊어졌습니다. 5초 후 재연결...', 'error');
+        log(`연결 종료(code=${event?.code || '-'}, reason=${event?.reason || '-'}) - 5초 후 재연결`, 'error');
         authRequired = false;
         isAuthenticated = false;
         hideLoginModal();
@@ -256,7 +256,14 @@ function sendMessage(payload, options = {}) {
     if (!options.skipRetry && RETRY_ACTIONS.has(payload.action)) {
         lastRequest = message;
     }
-    ws.send(JSON.stringify(message));
+    try {
+        const encoded = JSON.stringify(message);
+        ws.send(encoded);
+        log(`전송됨: ${message.action} (state=${ws.readyState}, buf=${ws.bufferedAmount})`, 'info');
+    } catch (err) {
+        console.error('ws.send error:', err);
+        log(`전송 실패: ${message.action} - ${err?.message || err}`, 'error');
+    }
 }
 
 function initializeAppData() {
