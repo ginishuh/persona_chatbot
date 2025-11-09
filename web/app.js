@@ -1301,24 +1301,18 @@ function addCharacterInput(name = '', gender = '', description = '', age = '') {
     const header = document.createElement('div');
     header.className = 'character-item-header';
 
-    // 템플릿 관리 버튼들(개별 캐릭터 전용)
-    const tplControls = document.createElement('div');
-    tplControls.style.display = 'flex';
-    tplControls.style.gap = '0.25rem';
-    tplControls.style.alignItems = 'center';
-    tplControls.style.justifyContent = 'flex-end';
+    // 요약/버튼 영역
+    const controls = document.createElement('div');
+    controls.style.display = 'flex';
+    controls.style.gap = '0.25rem';
+    controls.style.alignItems = 'center';
+    controls.style.justifyContent = 'flex-end';
 
-    const templateSelect = document.createElement('select');
-    templateSelect.className = 'template-select select-input';
-    templateSelect.style.minWidth = '80px';
-    templateSelect.style.maxWidth = '120px';
-    templateSelect.innerHTML = '<option value="">📂 템플릿</option>';
-
-    const saveTplBtn = document.createElement('button');
-    saveTplBtn.className = 'btn btn-sm';
-    saveTplBtn.textContent = '💾T';
-    saveTplBtn.title = '템플릿으로 저장(JSON)';
-    saveTplBtn.onclick = () => saveCharacterTemplate(characterDiv);
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-sm';
+    editBtn.textContent = '✏️ 편집';
+    editBtn.title = '캐릭터 편집';
+    editBtn.onclick = () => openCharacterEditor(characterDiv);
 
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn btn-sm';
@@ -1326,20 +1320,9 @@ function addCharacterInput(name = '', gender = '', description = '', age = '') {
     removeBtn.title = '제거';
     removeBtn.onclick = () => characterDiv.remove();
 
-    tplControls.appendChild(templateSelect);
-    tplControls.appendChild(saveTplBtn);
-    tplControls.appendChild(removeBtn);
-
-    header.appendChild(tplControls);
-
-    // 템플릿 선택 시 로드
-    templateSelect.onchange = () => {
-        if (templateSelect.value) {
-            window.pendingTemplateItem = characterDiv;
-            window.pendingLoadType = 'char_template';
-            loadFile('char_template', templateSelect.value);
-        }
-    };
+    controls.appendChild(editBtn);
+    controls.appendChild(removeBtn);
+    header.appendChild(controls);
 
     // 이름 필드
     const nameRow = document.createElement('div');
@@ -1365,7 +1348,6 @@ function addCharacterInput(name = '', gender = '', description = '', age = '') {
         <option value="">성별</option>
         <option value="남성">남성</option>
         <option value="여성">여성</option>
-        <option value="논바이너리">논바이너리</option>
         <option value="기타">기타</option>
     `;
     genderSelect.value = gender;
@@ -1388,15 +1370,41 @@ function addCharacterInput(name = '', gender = '', description = '', age = '') {
     descTextarea.placeholder = '성격, 말투, 배경, 외모 등...';
     descTextarea.value = description;
 
+    // 표시용 요약 바
+    const summaryBar = document.createElement('div');
+    summaryBar.className = 'character-summary';
+    summaryBar.style.fontSize = '0.9rem';
+    summaryBar.style.color = '#475569';
+    summaryBar.style.margin = '0.25rem 0 0.5rem 0';
+
+    function updateSummary() {
+        const nm = nameInput.value || '이름 없음';
+        const gd = genderSelect.value || '-';
+        const ag = ageInput.value || '-';
+        const snip = (descTextarea.value || '').slice(0, 40).replace(/\n/g, ' ');
+        summaryBar.textContent = `${nm} · ${gd} · ${ag} — ${snip}`;
+    }
+
+    // 내부 입력은 모달 전용 저장소로만 쓰고 숨김
+    nameRow.style.display = 'none';
+    genderRow.style.display = 'none';
+    ageRow.style.display = 'none';
+    descTextarea.style.display = 'none';
+
     characterDiv.appendChild(header);
+    characterDiv.appendChild(summaryBar);
     characterDiv.appendChild(nameRow);
     characterDiv.appendChild(genderRow);
     characterDiv.appendChild(ageRow);
     characterDiv.appendChild(descTextarea);
     charactersList.appendChild(characterDiv);
 
-    // 템플릿 목록 로드
-    loadCharTemplateList(templateSelect);
+    updateSummary();
+    // 요약은 값 변경 시 갱신되도록 이벤트 연결
+    [nameInput, genderSelect, ageInput, descTextarea].forEach(el => {
+        el.addEventListener('input', updateSummary);
+        el.addEventListener('change', updateSummary);
+    });
 }
 
 // 템플릿 목록 로드
@@ -1406,32 +1414,25 @@ function loadCharTemplateList(selectElement) {
 }
 
 // 캐릭터 템플릿 저장(JSON)
-function saveCharacterTemplate(characterDiv) {
-    const name = characterDiv.querySelector('.character-name-input').value.trim();
-    const gender = characterDiv.querySelector('.character-gender-input').value.trim();
-    const age = characterDiv.querySelector('.character-age-input').value.trim();
-    const desc = characterDiv.querySelector('.character-description-input').value.trim();
-    if (!name) {
-        alert('캐릭터 이름을 입력하세요');
-        return;
-    }
+// 편집 모달 내 템플릿 저장에서 사용
+function saveCharacterTemplateFromModal() {
+    const name = document.getElementById('ceName').value.trim();
+    const gender = document.getElementById('ceGender').value.trim();
+    const age = document.getElementById('ceAge').value.trim();
+    const summary = document.getElementById('ceSummary').value.trim();
+    const traits = document.getElementById('ceTraits').value.trim();
+    const goals = document.getElementById('ceGoals').value.trim();
+    const boundaries = document.getElementById('ceBoundaries').value.trim();
+    const examples = document.getElementById('ceExamples').value.trim().split('\n').filter(Boolean);
+    const tags = document.getElementById('ceTags').value.split(',').map(s => s.trim()).filter(Boolean);
+    if (!name) { alert('이름을 입력하세요'); return; }
     const filename = prompt('템플릿 파일명(확장자 제외):', slugify(name));
     if (!filename) return;
-    const payload = {
-        name,
-        role: 'npc',
-        gender,
-        age,
-        description: desc
-    };
-    sendMessage({
-        action: 'save_workspace_file',
-        file_type: 'char_template',
-        filename: filename,
-        content: JSON.stringify(payload, null, 2)
-    });
+    const payload = { name, role: 'npc', gender, age, summary, traits, goals, boundaries, examples, tags };
+    sendMessage({ action: 'save_workspace_file', file_type: 'char_template', filename, content: JSON.stringify(payload, null, 2) });
+    // 모달의 템플릿 목록 갱신
     setTimeout(() => {
-        const sel = characterDiv.querySelector('.template-select');
+        const sel = document.getElementById('ceTemplateSelect');
         if (sel) loadCharTemplateList(sel);
     }, 500);
 }
@@ -1445,6 +1446,42 @@ function slugify(str) {
         .replace(/^\-+|\-+$/g, '') || 'character';
 }
 
+function composeDescription(base, gender, age, traits, goals, boundaries, examples, tags) {
+    const lines = [];
+    const meta = [];
+    if (gender) meta.push(`성별: ${gender}`);
+    if (age) meta.push(`나이: ${age}`);
+    if (meta.length) lines.push(meta.join(', '));
+    if (base) lines.push(base);
+    if (traits) lines.push(`성격: ${traits}`);
+    if (goals) lines.push(`목표: ${goals}`);
+    if (boundaries) lines.push(`금지선: ${boundaries}`);
+    if (Array.isArray(examples) && examples.length) {
+        lines.push('예시 대사:');
+        examples.forEach(e => lines.push(`- ${e}`));
+    }
+    if (tags) lines.push(`태그: ${tags}`);
+    return lines.join('\n');
+}
+
+function collectCharacterFromItem(item) {
+    const name = item.querySelector('.character-name-input').value.trim();
+    const gender = item.querySelector('.character-gender-input').value.trim();
+    const age = item.querySelector('.character-age-input').value.trim();
+    const base = item.querySelector('.character-description-input').value.trim();
+    if (!name || !base) return null;
+    const traits = (item.dataset.traits || '').trim();
+    const goals = (item.dataset.goals || '').trim();
+    const boundaries = (item.dataset.boundaries || '').trim();
+    const tags = (item.dataset.tags || '').trim();
+    let examples = [];
+    try { examples = JSON.parse(item.dataset.examples || '[]'); } catch (_) { examples = []; }
+    const description = composeDescription(base, gender, age, traits, goals, boundaries, examples, tags);
+    const obj = { name, gender, description };
+    if (age) obj.age = age;
+    return obj;
+}
+
 // 컨텍스트 저장
 saveContextBtn.addEventListener('click', () => {
     if (saveContextBtn) saveContextBtn.disabled = true;
@@ -1452,20 +1489,8 @@ saveContextBtn.addEventListener('click', () => {
     const characterItems = charactersList.querySelectorAll('.character-item');
 
     characterItems.forEach(item => {
-        const name = item.querySelector('.character-name-input').value.trim();
-        const gender = item.querySelector('.character-gender-input').value.trim();
-        const age = item.querySelector('.character-age-input').value.trim();
-        const description = item.querySelector('textarea').value.trim();
-        if (name && description) {
-            // 프롬프트 호환을 위해 성별/나이를 설명 앞에 병기
-            const prefixBits = [];
-            if (gender) prefixBits.push(`성별: ${gender}`);
-            if (age) prefixBits.push(`나이: ${age}`);
-            const prefix = prefixBits.length ? `${prefixBits.join(', ')}\n` : '';
-            const obj = { name, gender, description: `${prefix}${description}` };
-            if (age) obj.age = age;
-            characters.push(obj);
-        }
+        const c = collectCharacterFromItem(item);
+        if (c) characters.push(c);
     });
 
     // 사용자 캐릭터 정보 수집
@@ -1510,19 +1535,8 @@ if (applyCharactersBtn) {
         const characterItems = charactersList.querySelectorAll('.character-item');
 
         characterItems.forEach(item => {
-            const name = item.querySelector('.character-name-input').value.trim();
-            const gender = item.querySelector('.character-gender-input').value.trim();
-            const age = item.querySelector('.character-age-input').value.trim();
-            const description = item.querySelector('textarea').value.trim();
-            if (name && description) {
-                const prefixBits = [];
-                if (gender) prefixBits.push(`성별: ${gender}`);
-                if (age) prefixBits.push(`나이: ${age}`);
-                const prefix = prefixBits.length ? `${prefixBits.join(', ')}\n` : '';
-                const obj = { name, gender, description: `${prefix}${description}` };
-                if (age) obj.age = age;
-                characters.push(obj);
-            }
+            const c = collectCharacterFromItem(item);
+            if (c) characters.push(c);
         });
 
         // 사용자 캐릭터 정보 수집
@@ -1589,7 +1603,8 @@ function loadContext(context) {
     charactersList.innerHTML = '';
     if (context.characters && context.characters.length > 0) {
         context.characters.forEach(char => {
-            addCharacterInput(char.name, char.gender || '', char.description);
+            // description 안에 성별/나이 병기가 있을 수 있으므로 우선 그대로 채움
+            addCharacterInput(char.name, char.gender || '', char.description, char.age || '');
         });
     }
     // 빈 상태로 시작 (사용자가 직접 추가)
@@ -1764,10 +1779,10 @@ function handleFileList(data) {
         updateFileList(window.pendingFileListSelect, data.files);
         window.pendingFileListSelect = null;
         window.pendingFileListType = null;
-    } else if (window.pendingNPCSelect) {
-    // 캐릭터 템플릿 목록 업데이트
-    updateTemplateList(window.pendingTemplateSelect, data.files);
-    window.pendingTemplateSelect = null;
+    } else if (window.pendingTemplateSelect) {
+        // 캐릭터 템플릿 목록 업데이트
+        updateTemplateList(window.pendingTemplateSelect, data.files);
+        window.pendingTemplateSelect = null;
     }
 }
 
@@ -1830,29 +1845,44 @@ function handleFileLoad(data) {
         userCharacterInput.value = content;
         myCharacterSelect.value = filename.replace('.md', '');
     } else if (window.pendingLoadType === 'char_template') {
-        // 템플릿(JSON) 로드 → 캐릭터 아이템에 반영
-        if (window.pendingTemplateItem) {
-            try {
-                const obj = JSON.parse(content || '{}');
+        // 템플릿(JSON) 로드 → 모달 또는 캐릭터 아이템에 반영
+        try {
+            const obj = JSON.parse(content || '{}');
+            if (window.pendingTemplateModal) {
+                const ceName = document.getElementById('ceName');
+                const ceGender = document.getElementById('ceGender');
+                const ceAge = document.getElementById('ceAge');
+                const ceSummary = document.getElementById('ceSummary');
+                const ceTraits = document.getElementById('ceTraits');
+                const ceGoals = document.getElementById('ceGoals');
+                const ceBoundaries = document.getElementById('ceBoundaries');
+                const ceExamples = document.getElementById('ceExamples');
+                const ceTags = document.getElementById('ceTags');
+                ceName.value = obj.name || '';
+                ceGender.value = obj.gender || '';
+                ceAge.value = (obj.age !== undefined && obj.age !== null) ? String(obj.age) : '';
+                ceSummary.value = obj.summary || obj.description || '';
+                ceTraits.value = obj.traits || '';
+                ceGoals.value = obj.goals || '';
+                ceBoundaries.value = obj.boundaries || '';
+                ceExamples.value = Array.isArray(obj.examples) ? obj.examples.join('\n') : '';
+                ceTags.value = Array.isArray(obj.tags) ? obj.tags.join(', ') : '';
+            } else if (window.pendingTemplateItem) {
                 const nameInput = window.pendingTemplateItem.querySelector('.character-name-input');
                 const genderSelect = window.pendingTemplateItem.querySelector('.character-gender-input');
                 const ageInput = window.pendingTemplateItem.querySelector('.character-age-input');
                 const descInput = window.pendingTemplateItem.querySelector('.character-description-input');
-
                 if (obj.name) nameInput.value = obj.name;
                 if (obj.gender !== undefined) genderSelect.value = obj.gender;
                 if (obj.age !== undefined) ageInput.value = obj.age;
-                // description 또는 summary 키 허용
                 if (obj.description !== undefined) descInput.value = obj.description;
                 else if (obj.summary !== undefined) descInput.value = obj.summary;
-
-                const templateSelect = window.pendingTemplateItem.querySelector('.template-select');
-                if (templateSelect) templateSelect.value = filename.replace('.json', '');
-            } catch (e) {
-                log('템플릿 JSON 파싱 실패', 'error');
             }
-            window.pendingTemplateItem = null;
+        } catch (e) {
+            log('템플릿 JSON 파싱 실패', 'error');
         }
+        window.pendingTemplateItem = null;
+        window.pendingTemplateModal = false;
     } else if (window.pendingLoadType === 'my_profile') {
         try {
             const obj = JSON.parse(content || '{}');
@@ -2002,6 +2032,109 @@ if (loadProfileJsonBtn) {
         });
     });
 }
+
+// ===== 캐릭터 편집 모달 =====
+
+let currentEditingCharacterItem = null;
+
+function openCharacterEditor(characterDiv) {
+    currentEditingCharacterItem = characterDiv;
+    const modal = document.getElementById('characterEditorModal');
+    const ceName = document.getElementById('ceName');
+    const ceGender = document.getElementById('ceGender');
+    const ceAge = document.getElementById('ceAge');
+    const ceSummary = document.getElementById('ceSummary');
+    const ceTraits = document.getElementById('ceTraits');
+    const ceGoals = document.getElementById('ceGoals');
+    const ceBoundaries = document.getElementById('ceBoundaries');
+    const ceExamples = document.getElementById('ceExamples');
+    const ceTags = document.getElementById('ceTags');
+    const nameInput = characterDiv.querySelector('.character-name-input');
+    const genderInput = characterDiv.querySelector('.character-gender-input');
+    const ageInput = characterDiv.querySelector('.character-age-input');
+    const descInput = characterDiv.querySelector('.character-description-input');
+
+    // 값 채우기
+    ceName.value = nameInput.value || '';
+    ceGender.value = genderInput.value || '';
+    ceAge.value = ageInput.value || '';
+    ceSummary.value = descInput.value || '';
+    ceTraits.value = characterDiv.dataset.traits || '';
+    ceGoals.value = characterDiv.dataset.goals || '';
+    ceBoundaries.value = characterDiv.dataset.boundaries || '';
+    ceExamples.value = characterDiv.dataset.examples ? JSON.parse(characterDiv.dataset.examples).join('\n') : '';
+    ceTags.value = characterDiv.dataset.tags || '';
+
+    // 템플릿 목록 갱신
+    loadCharTemplateList(document.getElementById('ceTemplateSelect'));
+
+    modal.classList.remove('hidden');
+}
+
+function closeCharacterEditor() {
+    const modal = document.getElementById('characterEditorModal');
+    modal.classList.add('hidden');
+    currentEditingCharacterItem = null;
+}
+
+function applyCharacterEditorToItem() {
+    if (!currentEditingCharacterItem) return;
+    const ceName = document.getElementById('ceName');
+    const ceGender = document.getElementById('ceGender');
+    const ceAge = document.getElementById('ceAge');
+    const ceSummary = document.getElementById('ceSummary');
+    const ceTraits = document.getElementById('ceTraits');
+    const ceGoals = document.getElementById('ceGoals');
+    const ceBoundaries = document.getElementById('ceBoundaries');
+    const ceExamples = document.getElementById('ceExamples');
+    const ceTags = document.getElementById('ceTags');
+
+    const nameInput = currentEditingCharacterItem.querySelector('.character-name-input');
+    const genderInput = currentEditingCharacterItem.querySelector('.character-gender-input');
+    const ageInput = currentEditingCharacterItem.querySelector('.character-age-input');
+    const descInput = currentEditingCharacterItem.querySelector('.character-description-input');
+
+    nameInput.value = ceName.value.trim();
+    genderInput.value = ceGender.value.trim();
+    ageInput.value = ceAge.value.trim();
+    descInput.value = ceSummary.value.trim();
+
+    // 확장 필드 저장 (dataset)
+    currentEditingCharacterItem.dataset.traits = ceTraits.value.trim();
+    currentEditingCharacterItem.dataset.goals = ceGoals.value.trim();
+    currentEditingCharacterItem.dataset.boundaries = ceBoundaries.value.trim();
+    const examplesArr = ceExamples.value.split('\n').map(s => s.trim()).filter(Boolean);
+    currentEditingCharacterItem.dataset.examples = JSON.stringify(examplesArr);
+    currentEditingCharacterItem.dataset.tags = ceTags.value.trim();
+
+    // 요약 갱신
+    const summaryBar = currentEditingCharacterItem.querySelector('.character-summary');
+    if (summaryBar) {
+        const nm = nameInput.value || '이름 없음';
+        const gd = genderInput.value || '-';
+        const ag = ageInput.value || '-';
+        const snip = (descInput.value || '').slice(0, 40).replace(/\n/g, ' ');
+        summaryBar.textContent = `${nm} · ${gd} · ${ag} — ${snip}`;
+    }
+
+    closeCharacterEditor();
+}
+
+// 모달 버튼 이벤트
+document.getElementById('ceCloseBtn')?.addEventListener('click', closeCharacterEditor);
+document.getElementById('ceCancelBtn')?.addEventListener('click', closeCharacterEditor);
+document.getElementById('ceSaveBtn')?.addEventListener('click', applyCharacterEditorToItem);
+document.getElementById('ceSaveTemplateBtn')?.addEventListener('click', saveCharacterTemplateFromModal);
+
+// 모달 템플릿 선택 시 로드
+document.getElementById('ceTemplateSelect')?.addEventListener('change', (e) => {
+    const sel = e.target;
+    if (sel.value) {
+        window.pendingLoadType = 'char_template';
+        window.pendingTemplateModal = true;
+        sendMessage({ action: 'load_workspace_file', file_type: 'char_template', filename: sel.value });
+    }
+});
 
 // ===== 프리셋 관리 =====
 

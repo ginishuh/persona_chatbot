@@ -226,7 +226,6 @@
                                 <option value="">성별</option>
                                 <option value="남성">남성</option>
                                 <option value="여성">여성</option>
-                                <option value="논바이너리">논바이너리</option>
                                 <option value="기타">기타</option>
                             </select>
                             <input type="text" id="userCharacterAge" class="character-age-field" placeholder="나이" style="width: 80px;" />
@@ -311,6 +310,46 @@
                 <button id="autoLoginButton" class="btn" style="flex:1;">자동 로그인</button>
             </div>
             <p id="loginError" class="login-error"></p>
+        </div>
+    </div>
+
+    <!-- 캐릭터 편집 모달 -->
+    <div id="characterEditorModal" class="settings-modal hidden">
+        <div class="settings-modal-overlay"></div>
+        <div class="settings-modal-content">
+            <div class="settings-modal-header">
+                <h2>🛠️ 캐릭터 편집</h2>
+                <button id="ceCloseBtn" class="btn-icon" title="닫기">✕</button>
+            </div>
+            <div class="settings-modal-body">
+                <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+                    <input id="ceName" type="text" class="input" placeholder="이름" style="flex:1;" />
+                    <select id="ceGender" class="select-input" style="width: 120px;">
+                        <option value="">성별</option>
+                        <option value="남성">남성</option>
+                        <option value="여성">여성</option>
+                        <option value="기타">기타</option>
+                    </select>
+                    <input id="ceAge" type="text" class="input" placeholder="나이" style="width:100px;" />
+                </div>
+                <textarea id="ceSummary" rows="4" placeholder="성격, 말투, 배경, 외모 등..." style="width:100%;"></textarea>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:0.5rem;">
+                    <textarea id="ceTraits" rows="2" placeholder="성격/말투"></textarea>
+                    <textarea id="ceGoals" rows="2" placeholder="목표"></textarea>
+                    <textarea id="ceBoundaries" rows="2" placeholder="금지선"></textarea>
+                    <textarea id="ceExamples" rows="2" placeholder="예시 대사(줄바꿈으로 구분)"></textarea>
+                </div>
+                <input id="ceTags" type="text" class="input" placeholder="태그(쉼표로 구분)" style="width:100%; margin-top:0.5rem;" />
+            </div>
+            <div class="settings-modal-footer" style="display:flex; gap:0.5rem; align-items:center;">
+                <select id="ceTemplateSelect" class="select-input" style="flex:1; min-width:160px;">
+                    <option value="">📂 템플릿 불러오기...</option>
+                </select>
+                <button id="ceSaveTemplateBtn" class="btn" title="현재 내용으로 템플릿 저장">💾 템플릿</button>
+                <div style="flex:1"></div>
+                <button id="ceCancelBtn" class="btn">취소</button>
+                <button id="ceSaveBtn" class="btn btn-primary">저장</button>
+            </div>
         </div>
     </div>
 
