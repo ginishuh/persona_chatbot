@@ -92,7 +92,16 @@ let refreshTokenExpiresAt = '';
 let tokenRefreshTimeout = null;
 let refreshRetryCount = 0;
 let refreshInProgress = false;
-let lastRequest = null; // 재전송용 마지막 요청 저장
+let lastRequest = null; // 재전송용 마지막 사용자 액션
+const RETRY_ACTIONS = new Set([
+    'set_context', 'chat',
+    'save_workspace_file', 'delete_workspace_file',
+    'save_preset', 'delete_preset', 'load_preset',
+    'set_history_limit',
+    'mode_switch_chatbot', 'mode_switch_coding',
+    'git_sync', 'git_pull',
+    'clear_history', 'reset_sessions'
+]);
 const MAX_REFRESH_RETRIES = 3;
 const HISTORY_LIMIT_DEFAULT = 30;
 let currentHistoryLimit = HISTORY_LIMIT_DEFAULT;
@@ -244,7 +253,7 @@ function sendMessage(payload, options = {}) {
     if (!options.skipToken && authToken) {
         message.token = authToken;
     }
-    if (!options.skipRetry && payload.action !== 'login' && payload.action !== 'token_refresh') {
+    if (!options.skipRetry && RETRY_ACTIONS.has(payload.action)) {
         lastRequest = message;
     }
     ws.send(JSON.stringify(message));
