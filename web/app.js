@@ -1470,15 +1470,9 @@ saveNarrativeBtn.addEventListener('click', () => {
     if (!filename) return;
 
     const exists = (typeof latestStories !== 'undefined') && latestStories.some(f => f.name === filename || f.filename === filename || f.filename === `${filename}.md`);
-    let append = false;
+    const append = !!exists; // 동일 파일명은 항상 덧붙이기 정책
     if (exists) {
-        const doAppend = confirm(`"${filename}" 파일이 존재합니다. 덧붙여 저장하시겠습니까?`);
-        if (doAppend) {
-            append = true;
-        } else {
-            const overwrite = confirm('덮어쓰시겠습니까? (취소하면 저장을 중단합니다)');
-            if (!overwrite) return;
-        }
+        log(`기존 파일에 덧붙여 저장: ${filename}`, 'info');
     }
 
     // 서버 원본 서사를 사용하여 저장 (append 지원)
