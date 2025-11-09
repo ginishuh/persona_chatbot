@@ -80,6 +80,7 @@ let currentAssistantMessage = null;
 let characterColors = {}; // 캐릭터별 색상 매핑
 let authRequired = false;
 let isAuthenticated = false;
+let currentProvider = 'claude'; // 최근 전송에 사용한 프로바이더
 
 const AUTH_TOKEN_KEY = 'persona_auth_token';
 const AUTH_EXP_KEY = 'persona_auth_exp';
@@ -872,14 +873,20 @@ function sendChatMessage() {
         // 타이핑 인디케이터 표시
         addTypingIndicator();
 
-        // 서버로 전송
+        // 선택된 프로바이더 확인 및 저장
+        const provider = (aiProvider && aiProvider.value) ? aiProvider.value : 'claude';
+        currentProvider = provider;
+
+        // 서버로 전송(프로바이더 명시)
         sendMessage({
             action: 'chat',
-            prompt: prompt
+            prompt: prompt,
+            provider: provider
         });
 
+        const providerLabel = provider === 'gemini' ? 'Gemini' : (provider === 'droid' ? 'Droid' : 'Claude');
         const shortPrompt = prompt.length > 50 ? prompt.slice(0, 50) + '...' : prompt;
-        log('Claude에게 메시지 전송: ' + shortPrompt);
+        log(`${providerLabel}에게 메시지 전송: ${shortPrompt}`);
     } else {
         log('WebSocket 연결이 끊어졌습니다', 'error');
     }
@@ -977,7 +984,8 @@ function handleChatStream(data) {
     }
 
     if (jsonData.type === 'result') {
-        log('Claude 응답 완료', 'success');
+        const label = currentProvider === 'gemini' ? 'Gemini' : (currentProvider === 'droid' ? 'Droid' : 'Claude');
+        log(`${label} 응답 완료`, 'success');
         // 스트리밍 완료 시 메시지 고정
         chatMessages.querySelectorAll('.chat-message.assistant').forEach(msg => {
             msg.dataset.permanent = 'true';
@@ -998,7 +1006,9 @@ function handleChatComplete(response) {
     const data = response.data || response;
 
     if (data.success) {
-        log('응답 완료', 'success');
+        const used = data.provider_used || currentProvider || 'claude';
+        const label = used === 'gemini' ? 'Gemini' : (used === 'droid' ? 'Droid' : 'Claude');
+        log(`${label} 응답 완료`, 'success');
 
         // Droid/Gemini: 누적된 스트리밍 텍스트 처리
         if (window.streamingText) {
