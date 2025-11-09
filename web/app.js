@@ -1457,7 +1457,12 @@ saveContextBtn.addEventListener('click', () => {
         const age = item.querySelector('.character-age-input').value.trim();
         const description = item.querySelector('textarea').value.trim();
         if (name && description) {
-            const obj = { name, gender, description };
+            // 프롬프트 호환을 위해 성별/나이를 설명 앞에 병기
+            const prefixBits = [];
+            if (gender) prefixBits.push(`성별: ${gender}`);
+            if (age) prefixBits.push(`나이: ${age}`);
+            const prefix = prefixBits.length ? `${prefixBits.join(', ')}\n` : '';
+            const obj = { name, gender, description: `${prefix}${description}` };
             if (age) obj.age = age;
             characters.push(obj);
         }
@@ -1510,7 +1515,11 @@ if (applyCharactersBtn) {
             const age = item.querySelector('.character-age-input').value.trim();
             const description = item.querySelector('textarea').value.trim();
             if (name && description) {
-                const obj = { name, gender, description };
+                const prefixBits = [];
+                if (gender) prefixBits.push(`성별: ${gender}`);
+                if (age) prefixBits.push(`나이: ${age}`);
+                const prefix = prefixBits.length ? `${prefixBits.join(', ')}\n` : '';
+                const obj = { name, gender, description: `${prefix}${description}` };
                 if (age) obj.age = age;
                 characters.push(obj);
             }
