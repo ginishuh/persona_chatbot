@@ -285,11 +285,6 @@ header h1 {
     color: #2c3e50;
 }
 
-/* 서사기록 헤더 스타일 */
-.narrative-header {
-    padding: 0.75rem 1rem;
-}
-
 .narrative-controls {
     background: #ffffff;
 }
@@ -1009,11 +1004,6 @@ footer {
     .narrative-controls .btn-sm {
         font-size: 0.7rem;
         padding: 0.25rem 0.4rem;
-    }
-
-    /* 모바일에서 서사기록 헤더 숨기기 */
-    .right-panel .narrative-header {
-        display: none;
     }
 
     /* 좌측/우측 패널을 오버레이로 표시 */
