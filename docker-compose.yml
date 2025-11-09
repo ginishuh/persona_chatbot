@@ -17,7 +17,8 @@ services:
       - ./chatbot_workspace:/app/chatbot_workspace  # CLAUDE 지침/작업 폴더 공유
       - ${FACTORY_AUTH_DIR?set FACTORY_AUTH_DIR}:/home/node/.factory     # Droid 커스텀 모델/인증 정보
       - ${CLAUDE_AUTH_DIR?set CLAUDE_AUTH_DIR}:/home/node/.claude       # Claude OAuth 인증 정보 (선택)
-      - ${GEMINI_AUTH_DIR?set GEMINI_AUTH_DIR}:/home/node/.config/gemini # Gemini OAuth 인증 정보 (선택)
+      # Gemini 인증: 최신 CLI는 ~/.gemini/settings.json 사용
+      - ${GEMINI_AUTH_DIR?set GEMINI_AUTH_DIR}:/home/node/.gemini # Gemini 인증 정보 (권장)
     environment:
       - PYTHONUNBUFFERED=1
       - CLAUDE_PATH=claude

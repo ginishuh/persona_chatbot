@@ -399,7 +399,7 @@ Docker를 사용하는 경우에도 호스트 디렉토리의 소유자가 현�
 # AI CLI 인증 (호스트 경로 절대 경로)
 FACTORY_AUTH_DIR=/home/user/.factory
 CLAUDE_AUTH_DIR=/home/user/.claude
-GEMINI_AUTH_DIR=/home/user/.config/gemini
+GEMINI_AUTH_DIR=/home/user/.gemini
 
 # Droid API 키 (선택)
 FACTORY_API_KEY=your-api-key
@@ -429,7 +429,7 @@ APP_BIND_HOST=127.0.0.1
 - 애플리케이션 코드 (`server/`, `web/`)
 
 #### 호스트에서 마운트되는 것
-- AI CLI 인증 정보 (`~/.claude`, `~/.factory`, `~/.config/gemini`)
+- AI CLI 인증 정보 (`~/.claude`, `~/.factory`, `~/.gemini`)
 - 개발 코드 (`./server`, `./web`) - 실시간 반영
 - 데이터 (`./persona_data`, `./chatbot_workspace`, `./STORIES`)
 
