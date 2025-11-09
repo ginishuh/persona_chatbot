@@ -129,6 +129,19 @@
                     <p class="hint">활성화 시: [캐릭터] 대사, *효과음*, 서술(태그없음)</p>
                 </div>
 
+                <!-- 참여자 관리 -->
+                <div class="context-section" id="participantsManagerSection">
+                    <label>👥 참여자 관리</label>
+                    <div id="participantsManagerList" style="margin-bottom:0.5rem;"></div>
+                    <div style="display:flex; gap:0.5rem; align-items:center;">
+                        <button id="pmAddNewBtn" class="btn btn-sm">+ 새 참여자</button>
+                        <select id="pmTemplateSelect" class="select-input" style="flex:1; min-width:160px;">
+                            <option value="">템플릿에서 추가...</option>
+                        </select>
+                        <button id="pmAddFromTemplateBtn" class="btn btn-sm">추가</button>
+                    </div>
+                </div>
+
                 <!-- 프리셋 관리 -->
                 <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e8ecef;">
                     <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📦 전체 프리셋</label>
@@ -356,15 +369,3 @@
     <script src="app.js"></script>
 </body>
 </html>
-                <!-- 참여자 관리 -->
-                <div class="context-section" id="participantsManagerSection">
-                    <label>👥 참여자 관리</label>
-                    <div id="participantsManagerList" style="margin-bottom:0.5rem;"></div>
-                    <div style="display:flex; gap:0.5rem; align-items:center;">
-                        <button id="pmAddNewBtn" class="btn btn-sm">+ 새 참여자</button>
-                        <select id="pmTemplateSelect" class="select-input" style="flex:1; min-width:160px;">
-                            <option value="">템플릿에서 추가...</option>
-                        </select>
-                        <button id="pmAddFromTemplateBtn" class="btn btn-sm">추가</button>
-                    </div>
-                </div>
