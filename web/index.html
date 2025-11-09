@@ -153,6 +153,8 @@
 
     <!-- 모바일 더보기 메뉴 -->
     <div id="moreMenuDropdown" class="more-menu-dropdown hidden">
+        <button class="more-menu-item" id="moreParticipantsBtn">👥 참여자</button>
+        <button class="more-menu-item" id="moreSettingsBtn">⚙️ 설정</button>
         <button class="more-menu-item" id="moreGitSyncBtn">🔄 Git 동기화</button>
         <button class="more-menu-item" id="moreClearHistoryBtn">🗑️ 대화 초기화</button>
         <button class="more-menu-item" id="moreResetSessionsBtn">♻️ 세션 리셋</button>
@@ -335,14 +337,14 @@
                     </select>
                     <input id="ceAge" type="text" class="input" placeholder="나이" style="width:100px;" />
                 </div>
-                <textarea id="ceSummary" rows="4" placeholder="성격, 말투, 배경, 외모 등..." style="width:100%;"></textarea>
+                <textarea id="ceSummary" rows="4" placeholder="예) 무뚝뚝한 대장장이. 말수 적고 실용적이며 고객에게 솔직하다." style="width:100%;"></textarea>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:0.5rem;">
-                    <textarea id="ceTraits" rows="2" placeholder="성격/말투"></textarea>
-                    <textarea id="ceGoals" rows="2" placeholder="목표"></textarea>
-                    <textarea id="ceBoundaries" rows="2" placeholder="금지선"></textarea>
-                    <textarea id="ceExamples" rows="2" placeholder="예시 대사(줄바꿈으로 구분)"></textarea>
+                    <textarea id="ceTraits" rows="2" placeholder="예) 투박한 말투, 단문, 정직"></textarea>
+                    <textarea id="ceGoals" rows="2" placeholder="예) 의뢰 검 수리, 제련 기술 향상"></textarea>
+                    <textarea id="ceBoundaries" rows="2" placeholder="예) 비밀 의뢰 금지, 뇌물 수수 금지"></textarea>
+                    <textarea id="ceExamples" rows="2" placeholder="예) 뭘 맡기러 왔나?\n이건 이틀이면 된다."></textarea>
                 </div>
-                <input id="ceTags" type="text" class="input" placeholder="태그(쉼표로 구분)" style="width:100%; margin-top:0.5rem;" />
+                <input id="ceTags" type="text" class="input" placeholder="예) 도시, 상인, 중립" style="width:100%; margin-top:0.5rem;" />
             </div>
             <div class="settings-modal-footer" style="display:flex; gap:0.5rem; align-items:center;">
                 <select id="ceTemplateSelect" class="select-input" style="flex:1; min-width:160px;">

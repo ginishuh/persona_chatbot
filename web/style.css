@@ -1257,3 +1257,7 @@ footer {
     padding: 1rem 1.5rem;
     border-top: 2px solid #e8ecef;
 }
+/* 입력 플레이스홀더 색상 통일(회색) */
+input::placeholder, textarea::placeholder {
+    color: #94a3b8;
+}

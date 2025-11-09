@@ -2712,6 +2712,17 @@ document.getElementById('moreGitSyncBtn')?.addEventListener('click', () => {
     document.getElementById('gitSyncBtn')?.click();
 });
 
+document.getElementById('moreSettingsBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    const settingsModal = document.getElementById('settingsModal');
+    settingsModal?.classList.remove('hidden');
+});
+
+document.getElementById('moreParticipantsBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    openParticipantsModal();
+});
+
 document.getElementById('moreClearHistoryBtn')?.addEventListener('click', () => {
     closeMoreMenu();
     document.getElementById('clearHistoryBtn')?.click();
