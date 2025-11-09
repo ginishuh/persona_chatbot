@@ -833,8 +833,8 @@ header h1 {
 }
 
 .btn-sm {
-    padding: 0.35rem 0.7rem;
-    font-size: 0.8rem;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.7rem;
     min-width: auto;
     border-radius: 6px;
     background: #f1f5f9;
@@ -1009,12 +1009,6 @@ footer {
         display: none;
     }
 
-    /* 서사 컨트롤 버튼들 작게 */
-    .narrative-controls .btn-sm {
-        font-size: 0.7rem;
-        padding: 0.25rem 0.4rem;
-    }
-
     /* 좌측/우측 패널을 오버레이로 표시 */
     .left-panel,
     .right-panel {
@@ -1078,10 +1072,10 @@ footer {
         padding: 0.6rem 0.75rem;
     }
 
-    /* 작은 버튼들 더 작게 */
+    /* 작은 버튼들 크기 통일 */
     .btn-sm {
         font-size: 0.7rem;
-        padding: 0.25rem 0.5rem;
+        padding: 0.25rem 0.4rem;
     }
 }
 
