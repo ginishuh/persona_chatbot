@@ -2366,11 +2366,6 @@ function syncMoreMenuStatus() {
 }
 
 // 더보기 메뉴 아이템 클릭 이벤트
-document.getElementById('moreModeSwitchBtn')?.addEventListener('click', () => {
-    closeMoreMenu();
-    document.getElementById('modeSwitchBtn')?.click();
-});
-
 document.getElementById('moreGitSyncBtn')?.addEventListener('click', () => {
     closeMoreMenu();
     document.getElementById('gitSyncBtn')?.click();
