@@ -1011,6 +1011,11 @@ footer {
         padding: 0.25rem 0.4rem;
     }
 
+    /* 모바일에서 서사기록 헤더 숨기기 */
+    .right-panel .narrative-header {
+        display: none;
+    }
+
     /* 좌측/우측 패널을 오버레이로 표시 */
     .left-panel,
     .right-panel {
