@@ -71,6 +71,7 @@ const injectStoryBtn = document.getElementById('injectStoryBtn');
 const storySelect = document.getElementById('storySelect');
 const loadStoryBtn = document.getElementById('loadStoryBtn');
 const deleteStoryBtn = document.getElementById('deleteStoryBtn');
+const resumeStoryBtn = document.getElementById('resumeStoryBtn');
 
 // 로그인 요소
 const loginModal = document.getElementById('loginModal');
@@ -839,6 +840,24 @@ function handleMessage(msg) {
                 narrativeContent.innerHTML = '<p class="placeholder">대화가 진행되면 여기에 서사가 기록됩니다.</p>';
             } else {
                 log(`서사 삭제 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'resume_from_story':
+            if (data.success) {
+                log(`이어하기 완료: 최근 ${data.injected_turns}턴 주입${data.summarized ? ' + 요약' : ''} (예상 토큰 ~${data.approx_tokens})`, 'success');
+                // 주입 후 스냅샷 받아 채팅창 복원
+                sendMessage({ action: 'get_history_snapshot' });
+            } else {
+                log(`이어하기 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'get_history_snapshot':
+            if (data.success) {
+                renderHistorySnapshot(data.history || []);
+            } else {
+                log(`스냅샷 로드 실패: ${data.error}`, 'error');
             }
             break;
 
@@ -2044,6 +2063,48 @@ loadStoryBtn.addEventListener('click', () => {
         filename: filename
     });
 });
+
+// 서사 이어하기 버튼
+if (resumeStoryBtn) {
+    resumeStoryBtn.addEventListener('click', () => {
+        const filename = storySelect.value;
+        if (!filename) {
+            alert('이어할 서사를 선택하세요');
+            return;
+        }
+        // 불러올 턴 수: 기본 = 현재 슬라이더 값
+        const defaultTurns = currentHistoryLimit || HISTORY_LIMIT_DEFAULT;
+        const input = prompt('불러올 턴 수(최근 N턴):', String(defaultTurns));
+        if (!input) return;
+        const turns = Math.max(1, parseInt(input, 10) || defaultTurns);
+        const summarize = confirm('이전 구간을 간단히 요약해서 포함할까요?');
+
+        sendMessage({
+            action: 'resume_from_story',
+            filename: filename,
+            turns: turns,
+            summarize: summarize
+        });
+    });
+}
+
+function renderHistorySnapshot(history) {
+    try {
+        chatMessages.innerHTML = '';
+        if (!Array.isArray(history) || history.length === 0) {
+            chatMessages.innerHTML = '<div class="chat-message system"><p>대화를 시작하세요</p></div>';
+            return;
+        }
+        history.forEach(msg => {
+            const role = msg.role === 'user' ? 'user' : 'assistant';
+            addChatMessage(role, msg.content || '');
+        });
+        // 서사 패널도 최신으로 갱신
+        sendMessage({ action: 'get_narrative' });
+    } catch (e) {
+        console.error('renderHistorySnapshot error', e);
+    }
+}
 
 // 서사 삭제 버튼
 deleteStoryBtn.addEventListener('click', () => {

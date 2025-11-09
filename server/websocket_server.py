@@ -88,6 +88,58 @@ def is_session_retention_enabled(websocket):
     settings = client_session_settings.get(websocket, {})
     return settings.get("retention_enabled", False)
 
+
+def _parse_story_markdown(md: str) -> list[dict]:
+    """서사(.md)에서 히스토리 리스트로 변환
+
+    포맷 가정:
+    - "## n. 사용자" 섹션과 "## n. <이름>" 섹션이 번갈아 등장
+    - 섹션 본문은 다음 '## ' 전까지의 텍스트(--- 구분선은 무시)
+    반환: [{"role":"user"|"assistant","content":str}, ...]
+    """
+    try:
+        lines = md.splitlines()
+        items: list[dict] = []
+        i = 0
+        current_role = None
+        buf: list[str] = []
+
+        def flush():
+            nonlocal buf, current_role
+            if current_role and buf:
+                # 구분선 제거
+                text = "\n".join([ln for ln in buf if ln.strip() != '---']).strip()
+                if text:
+                    items.append({"role": current_role, "content": text})
+            buf = []
+
+        import re
+        header_re = re.compile(r"^##\s+\d+\.\s*(.+?)\s*$")
+
+        while i < len(lines):
+            m = header_re.match(lines[i])
+            if m:
+                # 이전 섹션 flush
+                flush()
+                title = m.group(1)
+                if "사용자" in title:
+                    current_role = "user"
+                else:
+                    current_role = "assistant"
+                buf = []
+                i += 1
+                continue
+            else:
+                if current_role:
+                    buf.append(lines[i])
+                i += 1
+
+        flush()
+        return items
+    except Exception:
+        # 파싱 실패 시 빈 배열
+        return []
+
 def _issue_token(ttl_seconds: int, typ: str):
     """JWT 생성 공통 함수"""
     if not JWT_SECRET:
@@ -542,6 +594,99 @@ async def handle_message(websocket, message):
             filename = data.get("filename")
             result = await workspace_handler.delete_story(filename)
             await websocket.send(json.dumps({"action": "delete_story", "data": result}))
+
+        # 서사에서 이어하기 (히스토리 주입)
+        elif action == "resume_from_story":
+            filename = data.get("filename")
+            turns_req = data.get("turns")
+            summarize = bool(data.get("summarize", False))
+            try:
+                # 서사 로드
+                loaded = await workspace_handler.load_story(filename)
+                if not loaded.get("success"):
+                    raise ValueError(loaded.get("error") or "서사를 불러오지 못했습니다")
+
+                md = loaded.get("content", "")
+                all_msgs = _parse_story_markdown(md)
+                if not all_msgs:
+                    raise ValueError("서사에서 대화를 파싱하지 못했습니다")
+
+                # 불러올 턴 수 계산
+                try:
+                    if turns_req is None:
+                        turns = history_handler.max_turns or 30
+                    else:
+                        turns = int(turns_req)
+                except Exception:
+                    turns = history_handler.max_turns or 30
+
+                if turns <= 0:
+                    turns = 10
+
+                # 최근 N턴
+                inject = all_msgs[-turns:]
+
+                # 이전 구간 요약(옵션, 간단 요약)
+                summary_text = None
+                if summarize and len(all_msgs) > len(inject):
+                    prev = all_msgs[:len(all_msgs) - len(inject)]
+                    # 매우 단순한 요약: 각 메시지 첫 줄의 앞부분 1문장씩 최대 15줄
+                    bullets = []
+                    import re
+                    for m in prev:
+                        text = (m.get("content") or '').splitlines()[0]
+                        # 문장 단위로 자르기
+                        parts = re.split(r"[\.\!\?。？！]", text)
+                        first = parts[0].strip() if parts else text.strip()
+                        if first:
+                            bullets.append(f"- {('사용자' if m['role']=='user' else 'AI')}: {first}")
+                        if len(bullets) >= 15:
+                            break
+                    if bullets:
+                        summary_text = "요약:\n" + "\n".join(bullets)
+
+                # 히스토리 교체
+                history_handler.clear()
+                if summary_text:
+                    history_handler.add_assistant_message(summary_text)
+                for m in inject:
+                    if m["role"] == "user":
+                        history_handler.add_user_message(m["content"])
+                    else:
+                        history_handler.add_assistant_message(m["content"])
+
+                # 대략 토큰 추정
+                total_chars = sum(len(m["content"]) for m in inject) + (len(summary_text) if summary_text else 0)
+                approx_tokens = int(total_chars / 4)
+
+                await websocket.send(json.dumps({
+                    "action": "resume_from_story",
+                    "data": {
+                        "success": True,
+                        "injected_turns": len(inject),
+                        "summarized": bool(summary_text),
+                        "approx_tokens": approx_tokens
+                    }
+                }))
+            except Exception as exc:
+                await websocket.send(json.dumps({
+                    "action": "resume_from_story",
+                    "data": {"success": False, "error": str(exc)}
+                }))
+
+        # 히스토리 스냅샷 반환
+        elif action == "get_history_snapshot":
+            try:
+                snap = history_handler.get_history()
+                await websocket.send(json.dumps({
+                    "action": "get_history_snapshot",
+                    "data": {"success": True, "history": snap}
+                }))
+            except Exception as exc:
+                await websocket.send(json.dumps({
+                    "action": "get_history_snapshot",
+                    "data": {"success": False, "error": str(exc)}
+                }))
 
         # AI 채팅 (컨텍스트 + 히스토리 포함)
         elif action == "chat":
