@@ -519,11 +519,16 @@ async def handle_message(websocket, message):
             result = await workspace_handler.list_stories()
             await websocket.send(json.dumps({"action": "list_stories", "data": result}))
 
-        # 서사 저장
+        # 서사 저장 (append/use_server 옵션 지원)
         elif action == "save_story":
             filename = data.get("filename")
             content = data.get("content")
-            result = await workspace_handler.save_story(filename, content)
+            use_server = bool(data.get("use_server", False))
+            append = bool(data.get("append", False))
+            if use_server:
+                # 서버 원본 서사 사용
+                content = history_handler.get_narrative_markdown()
+            result = await workspace_handler.save_story(filename, content, append=append)
             await websocket.send(json.dumps({"action": "save_story", "data": result}))
 
         # 서사 로드

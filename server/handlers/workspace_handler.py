@@ -623,12 +623,13 @@ class WorkspaceHandler:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def save_story(self, filename, content):
+    async def save_story(self, filename, content, append: bool = False):
         """서사 저장
 
         Args:
             filename: 서사 파일명
-            content: 마크다운 내용
+            content: 마크다운 내용 (append=True일 때 전체 본문이어도 자동으로 delta만 추가)
+            append: True이면 기존 파일 뒤에 새로운 부분만 덧붙임
         """
         try:
             if not filename.endswith(".md"):
@@ -640,10 +641,47 @@ class WorkspaceHandler:
             if not str(full_path.resolve()).startswith(str(self.stories_path.resolve())):
                 return {"success": False, "error": "잘못된 경로입니다"}
 
+            # 덧붙이기: 기존 파일이 있고, 새 본문이 기존의 확장이라면 delta만 추가
+            if append and full_path.exists():
+                async with aiofiles.open(full_path, 'r', encoding='utf-8') as rf:
+                    existing = await rf.read()
+
+                new_full = content or ""
+                # 정확한 접두 검사: 기존 본문이 새 본문의 앞부분이면 delta만 추가
+                if new_full.startswith(existing):
+                    delta = new_full[len(existing):]
+                    if not delta.strip():
+                        return {"success": True, "filename": filename, "message": "변경사항이 없습니다"}
+                    async with aiofiles.open(full_path, 'a', encoding='utf-8') as af:
+                        await af.write(delta)
+                    return {"success": True, "filename": filename, "appended": True}
+
+                # 접두가 아니면 헤더 중복 최소화를 위해 첫 행의 제목 제거 후 이어붙임
+                to_append = new_full
+                if to_append.lstrip().startswith("# "):
+                    # 첫 제목 라인과 이어지는 빈 줄 제거
+                    stripped = to_append.lstrip()
+                    idx = stripped.find("\n")
+                    if idx != -1:
+                        stripped = stripped[idx+1:]
+                        # 다음 빈 줄 하나 더 제거
+                        if stripped.startswith("\n"):
+                            stripped = stripped[1:]
+                    to_append = stripped
+
+                # 파일 끝에 개행이 없으면 하나 추가
+                if not existing.endswith("\n"):
+                    to_append = "\n" + to_append
+
+                async with aiofiles.open(full_path, 'a', encoding='utf-8') as af:
+                    await af.write(to_append)
+                return {"success": True, "filename": filename, "appended": True}
+
+            # 기본: 새 파일 생성 또는 덮어쓰기
             async with aiofiles.open(full_path, 'w', encoding='utf-8') as f:
                 await f.write(content)
 
-            return {"success": True, "filename": filename}
+            return {"success": True, "filename": filename, "appended": False}
         except Exception as e:
             return {"success": False, "error": str(e)}
 

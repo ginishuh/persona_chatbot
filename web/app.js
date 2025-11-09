@@ -1459,22 +1459,34 @@ function getNarrativeMarkdown() {
 
 // 서사 저장
 saveNarrativeBtn.addEventListener('click', () => {
-    const narrativeText = narrativeContent.innerText;
-
-    if (!narrativeText || narrativeText.includes('대화가 진행되면')) {
+    const hasContent = narrativeContent.innerText && !narrativeContent.innerText.includes('대화가 진행되면');
+    if (!hasContent) {
         alert('저장할 서사가 없습니다.');
         return;
     }
 
-    const filename = prompt('서사 이름을 입력하세요:', `서사_${new Date().toISOString().slice(0, 10)}`);
+    const defaultName = `서사_${new Date().toISOString().slice(0, 10)}`;
+    const filename = prompt('서사 이름을 입력하세요:', defaultName);
     if (!filename) return;
 
-    const markdown = getNarrativeMarkdown();
+    const exists = (typeof latestStories !== 'undefined') && latestStories.some(f => f.name === filename || f.filename === filename || f.filename === `${filename}.md`);
+    let append = false;
+    if (exists) {
+        const doAppend = confirm(`"${filename}" 파일이 존재합니다. 덧붙여 저장하시겠습니까?`);
+        if (doAppend) {
+            append = true;
+        } else {
+            const overwrite = confirm('덮어쓰시겠습니까? (취소하면 저장을 중단합니다)');
+            if (!overwrite) return;
+        }
+    }
 
+    // 서버 원본 서사를 사용하여 저장 (append 지원)
     sendMessage({
         action: 'save_story',
         filename: filename,
-        content: markdown
+        use_server: true,
+        append: append
     });
 });
 
@@ -2009,6 +2021,7 @@ function updateStoryList(files) {
     if (currentValue && files.some(f => f.name === currentValue)) {
         storySelect.value = currentValue;
     }
+    latestStories = files || [];
 }
 
 // 서사 표시
