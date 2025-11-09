@@ -407,7 +407,14 @@ FACTORY_API_KEY=your-api-key
 # 간단 로그인 (선택, 비워두면 인증 없음)
 APP_LOGIN_PASSWORD=yourpassword
 APP_JWT_SECRET=your-secret-key
-APP_JWT_TTL=3600
+
+# 토큰 수명 (리프레시 토큰 도입)
+# ACCESS 기본값: APP_JWT_TTL (없으면 7일), REFRESH 기본 30일
+# 운영 권장: ACCESS 15~60분, REFRESH 7~30일
+APP_ACCESS_TTL=3600
+APP_REFRESH_TTL=2592000
+# 리프레시 토큰 회전 (1=매 갱신 시 새 토큰 발급)
+APP_REFRESH_ROTATE=1
 
 # 포트 바인딩 (기본: 127.0.0.1, 외부 공개 시 0.0.0.0)
 APP_BIND_HOST=127.0.0.1
