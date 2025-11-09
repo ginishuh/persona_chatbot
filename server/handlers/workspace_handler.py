@@ -5,7 +5,11 @@ import asyncio
 from pathlib import Path
 
 class WorkspaceHandler:
-    """세계관, 캐릭터, 상황 파일 관리 + 프리셋 관리"""
+    """세계관, 캐릭터, 상황 파일 관리 + 프리셋 관리
+
+    - 기존 MD 기반(world, situation, my_character, npc) 파일을 유지합니다.
+    - 캐릭터 템플릿(JSON)과 내 프로필(JSON)을 간단히 저장/로드하기 위한 경로를 추가합니다.
+    """
 
     def __init__(self, workspace_path="persona_data"):
         self.workspace_path = Path(workspace_path).resolve()
@@ -17,6 +21,11 @@ class WorkspaceHandler:
         self.stories_path = self.workspace_path / "stories"
         self.config_path = self.workspace_path / "config.json"
 
+        # 신규: JSON 캐릭터 템플릿/내 프로필
+        self.characters_dir = self.workspace_path / "characters"
+        self.char_templates_path = self.characters_dir / "templates"
+        self.my_profile_path = self.characters_dir / "my_profile.json"
+
         # 디렉토리 생성
         self.worlds_path.mkdir(parents=True, exist_ok=True)
         self.my_characters_path.mkdir(parents=True, exist_ok=True)
@@ -24,6 +33,8 @@ class WorkspaceHandler:
         self.situations_path.mkdir(parents=True, exist_ok=True)
         self.presets_path.mkdir(parents=True, exist_ok=True)
         self.stories_path.mkdir(parents=True, exist_ok=True)
+        self.characters_dir.mkdir(parents=True, exist_ok=True)
+        self.char_templates_path.mkdir(parents=True, exist_ok=True)
 
     def _get_base_path(self, file_type):
         """파일 타입에 따른 기본 경로 반환"""
@@ -31,7 +42,9 @@ class WorkspaceHandler:
             "world": self.worlds_path,
             "my_character": self.my_characters_path,
             "npc": self.npcs_path,
-            "situation": self.situations_path
+            "situation": self.situations_path,
+            # 신규: JSON 템플릿 디렉터리(파일 확장자만 다름)
+            "char_template": self.char_templates_path,
         }
         return paths.get(file_type)
 
@@ -42,6 +55,19 @@ class WorkspaceHandler:
             file_type: "world", "my_character", "npc", "situation"
         """
         try:
+            # 단일 파일 타입 처리(my_profile)
+            if file_type == "my_profile":
+                if self.my_profile_path.exists():
+                    return {
+                        "success": True,
+                        "files": [{
+                            "name": "my_profile",
+                            "filename": self.my_profile_path.name,
+                            "size": self.my_profile_path.stat().st_size
+                        }]
+                    }
+                return {"success": True, "files": []}
+
             base_path = self._get_base_path(file_type)
             if not base_path:
                 return {"success": False, "error": f"Unknown file type: {file_type}"}
@@ -49,18 +75,17 @@ class WorkspaceHandler:
             if not base_path.exists():
                 return {"success": True, "files": []}
 
-            # 모두 마크다운 파일
             files = []
-            for file_path in base_path.glob("*.md"):
+            # 확장자 분기: 템플릿은 .json, 나머지는 .md
+            pattern = "*.json" if file_type == "char_template" else "*.md"
+            for file_path in base_path.glob(pattern):
                 files.append({
                     "name": file_path.stem,  # 확장자 제외한 파일명
                     "filename": file_path.name,
                     "size": file_path.stat().st_size
                 })
 
-            # 이름순 정렬
             files.sort(key=lambda x: x["name"])
-
             return {"success": True, "files": files}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -73,13 +98,26 @@ class WorkspaceHandler:
             filename: 파일명 (확장자 포함 또는 미포함)
         """
         try:
+            # 단일 파일(my_profile)
+            if file_type == "my_profile":
+                full_path = self.my_profile_path
+                if not full_path.exists():
+                    return {"success": False, "error": "프로필이 존재하지 않습니다"}
+                async with aiofiles.open(full_path, 'r', encoding='utf-8') as f:
+                    content = await f.read()
+                return {"success": True, "content": content, "filename": full_path.name}
+
             base_path = self._get_base_path(file_type)
             if not base_path:
                 return {"success": False, "error": f"Unknown file type: {file_type}"}
 
-            # 모두 .md 확장자
-            if not filename.endswith(".md"):
-                filename = f"{filename}.md"
+            # 확장자 결정
+            if file_type == "char_template":
+                if not filename.endswith(".json"):
+                    filename = f"{filename}.json"
+            else:
+                if not filename.endswith(".md"):
+                    filename = f"{filename}.md"
 
             full_path = base_path / filename
 
@@ -106,19 +144,35 @@ class WorkspaceHandler:
             content: 파일 내용
         """
         try:
+            # 단일 파일(my_profile)
+            if file_type == "my_profile":
+                full_path = self.my_profile_path
+                # 디렉터리 보장
+                full_path.parent.mkdir(parents=True, exist_ok=True)
+                async with aiofiles.open(full_path, 'w', encoding='utf-8') as f:
+                    await f.write(content)
+                return {"success": True, "filename": full_path.name}
+
             base_path = self._get_base_path(file_type)
             if not base_path:
                 return {"success": False, "error": f"Unknown file type: {file_type}"}
 
-            # 모두 .md 확장자
-            if not filename.endswith(".md"):
-                filename = f"{filename}.md"
+            # 확장자 결정
+            if file_type == "char_template":
+                if not filename.endswith(".json"):
+                    filename = f"{filename}.json"
+            else:
+                if not filename.endswith(".md"):
+                    filename = f"{filename}.md"
 
             full_path = base_path / filename
 
             # 보안: 경로 탈출 방지
             if not str(full_path.resolve()).startswith(str(base_path.resolve())):
                 return {"success": False, "error": "잘못된 경로입니다"}
+
+            # 디렉터리 보장
+            full_path.parent.mkdir(parents=True, exist_ok=True)
 
             async with aiofiles.open(full_path, 'w', encoding='utf-8') as f:
                 await f.write(content)
@@ -135,13 +189,24 @@ class WorkspaceHandler:
             filename: 파일명
         """
         try:
+            # 단일 파일(my_profile)
+            if file_type == "my_profile":
+                if self.my_profile_path.exists():
+                    self.my_profile_path.unlink()
+                    return {"success": True, "filename": self.my_profile_path.name}
+                return {"success": False, "error": "프로필이 존재하지 않습니다"}
+
             base_path = self._get_base_path(file_type)
             if not base_path:
                 return {"success": False, "error": f"Unknown file type: {file_type}"}
 
-            # 모두 .md 확장자
-            if not filename.endswith(".md"):
-                filename = f"{filename}.md"
+            # 확장자 결정
+            if file_type == "char_template":
+                if not filename.endswith(".json"):
+                    filename = f"{filename}.json"
+            else:
+                if not filename.endswith(".md"):
+                    filename = f"{filename}.md"
 
             full_path = base_path / filename
 

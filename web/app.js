@@ -48,6 +48,9 @@ const deleteSituationBtn = document.getElementById('deleteSituationBtn');
 const myCharacterSelect = document.getElementById('myCharacterSelect');
 const saveMyCharacterBtn = document.getElementById('saveMyCharacterBtn');
 const deleteMyCharacterBtn = document.getElementById('deleteMyCharacterBtn');
+const userCharacterAgeInput = document.getElementById('userCharacterAge');
+const loadProfileJsonBtn = document.getElementById('loadProfileJsonBtn');
+const saveProfileJsonBtn = document.getElementById('saveProfileJsonBtn');
 
 // 프리셋 관리 요소
 const presetSelect = document.getElementById('presetSelect');
@@ -1291,31 +1294,31 @@ addCharacterBtn.addEventListener('click', () => {
     addCharacterInput();
 });
 
-function addCharacterInput(name = '', gender = '', description = '') {
+function addCharacterInput(name = '', gender = '', description = '', age = '') {
     const characterDiv = document.createElement('div');
     characterDiv.className = 'character-item';
 
     const header = document.createElement('div');
     header.className = 'character-item-header';
 
-    // NPC 파일 관리 버튼들
-    const fileControls = document.createElement('div');
-    fileControls.style.display = 'flex';
-    fileControls.style.gap = '0.25rem';
-    fileControls.style.alignItems = 'center';
-    fileControls.style.justifyContent = 'flex-end';
+    // 템플릿 관리 버튼들(개별 캐릭터 전용)
+    const tplControls = document.createElement('div');
+    tplControls.style.display = 'flex';
+    tplControls.style.gap = '0.25rem';
+    tplControls.style.alignItems = 'center';
+    tplControls.style.justifyContent = 'flex-end';
 
-    const npcSelect = document.createElement('select');
-    npcSelect.className = 'npc-select select-input';
-    npcSelect.style.minWidth = '70px';
-    npcSelect.style.maxWidth = '100px';
-    npcSelect.innerHTML = '<option value="">📤</option>';
+    const templateSelect = document.createElement('select');
+    templateSelect.className = 'template-select select-input';
+    templateSelect.style.minWidth = '80px';
+    templateSelect.style.maxWidth = '120px';
+    templateSelect.innerHTML = '<option value="">📂 템플릿</option>';
 
-    const saveNPCBtn = document.createElement('button');
-    saveNPCBtn.className = 'btn btn-sm';
-    saveNPCBtn.textContent = '💾';
-    saveNPCBtn.title = 'NPC 저장';
-    saveNPCBtn.onclick = () => saveNPC(characterDiv);
+    const saveTplBtn = document.createElement('button');
+    saveTplBtn.className = 'btn btn-sm';
+    saveTplBtn.textContent = '💾T';
+    saveTplBtn.title = '템플릿으로 저장(JSON)';
+    saveTplBtn.onclick = () => saveCharacterTemplate(characterDiv);
 
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn btn-sm';
@@ -1323,17 +1326,18 @@ function addCharacterInput(name = '', gender = '', description = '') {
     removeBtn.title = '제거';
     removeBtn.onclick = () => characterDiv.remove();
 
-    fileControls.appendChild(npcSelect);
-    fileControls.appendChild(saveNPCBtn);
-    fileControls.appendChild(removeBtn);
+    tplControls.appendChild(templateSelect);
+    tplControls.appendChild(saveTplBtn);
+    tplControls.appendChild(removeBtn);
 
-    header.appendChild(fileControls);
+    header.appendChild(tplControls);
 
-    // NPC 선택 시 로드
-    npcSelect.onchange = () => {
-        if (npcSelect.value) {
-            window.pendingNPCItem = characterDiv;
-            loadFile('npc', npcSelect.value);
+    // 템플릿 선택 시 로드
+    templateSelect.onchange = () => {
+        if (templateSelect.value) {
+            window.pendingTemplateItem = characterDiv;
+            window.pendingLoadType = 'char_template';
+            loadFile('char_template', templateSelect.value);
         }
     };
 
@@ -1361,11 +1365,23 @@ function addCharacterInput(name = '', gender = '', description = '') {
         <option value="">성별</option>
         <option value="남성">남성</option>
         <option value="여성">여성</option>
+        <option value="논바이너리">논바이너리</option>
         <option value="기타">기타</option>
     `;
     genderSelect.value = gender;
 
     genderRow.appendChild(genderSelect);
+
+    // 나이 필드
+    const ageRow = document.createElement('div');
+    ageRow.style.marginBottom = '0.5rem';
+    const ageInput = document.createElement('input');
+    ageInput.type = 'text';
+    ageInput.className = 'character-age-input character-age-field';
+    ageInput.placeholder = '나이(숫자 또는 예: 20대)';
+    ageInput.value = age;
+    ageInput.style.width = '100%';
+    ageRow.appendChild(ageInput);
 
     const descTextarea = document.createElement('textarea');
     descTextarea.className = 'character-description-input';
@@ -1375,53 +1391,58 @@ function addCharacterInput(name = '', gender = '', description = '') {
     characterDiv.appendChild(header);
     characterDiv.appendChild(nameRow);
     characterDiv.appendChild(genderRow);
+    characterDiv.appendChild(ageRow);
     characterDiv.appendChild(descTextarea);
     charactersList.appendChild(characterDiv);
 
-    // NPC 목록 로드
-    loadNPCList(npcSelect);
+    // 템플릿 목록 로드
+    loadCharTemplateList(templateSelect);
 }
 
-// NPC 저장
-function saveNPC(characterDiv) {
-    const nameInput = characterDiv.querySelector('.character-name-input');
-    const descInput = characterDiv.querySelector('.character-description-input');
+// 템플릿 목록 로드
+function loadCharTemplateList(selectElement) {
+    sendMessage({ action: 'list_workspace_files', file_type: 'char_template' });
+    window.pendingTemplateSelect = selectElement;
+}
 
-    const name = nameInput.value.trim();
-    const desc = descInput.value.trim();
-
+// 캐릭터 템플릿 저장(JSON)
+function saveCharacterTemplate(characterDiv) {
+    const name = characterDiv.querySelector('.character-name-input').value.trim();
+    const gender = characterDiv.querySelector('.character-gender-input').value.trim();
+    const age = characterDiv.querySelector('.character-age-input').value.trim();
+    const desc = characterDiv.querySelector('.character-description-input').value.trim();
     if (!name) {
-        alert('NPC 이름을 입력하세요');
+        alert('캐릭터 이름을 입력하세요');
         return;
     }
-    if (!desc) {
-        alert('NPC 설명을 입력하세요');
-        return;
-    }
-
-    const filename = prompt('저장할 파일명:', name);
+    const filename = prompt('템플릿 파일명(확장자 제외):', slugify(name));
     if (!filename) return;
-
+    const payload = {
+        name,
+        role: 'npc',
+        gender,
+        age,
+        description: desc
+    };
     sendMessage({
         action: 'save_workspace_file',
-        file_type: 'npc',
+        file_type: 'char_template',
         filename: filename,
-        content: desc
+        content: JSON.stringify(payload, null, 2)
     });
-
-    // 저장 후 목록 새로고침
     setTimeout(() => {
-        const npcSelect = characterDiv.querySelector('.npc-select');
-        if (npcSelect) {
-            loadNPCList(npcSelect);
-        }
+        const sel = characterDiv.querySelector('.template-select');
+        if (sel) loadCharTemplateList(sel);
     }, 500);
 }
 
-// NPC 목록 로드
-function loadNPCList(selectElement) {
-    sendMessage({ action: 'list_workspace_files', file_type: 'npc' });
-    window.pendingNPCSelect = selectElement;
+function slugify(str) {
+    return (str || '')
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9\-]/g, '')
+        .replace(/\-+/g, '-')
+        .replace(/^\-+|\-+$/g, '') || 'character';
 }
 
 // 컨텍스트 저장
@@ -1433,9 +1454,12 @@ saveContextBtn.addEventListener('click', () => {
     characterItems.forEach(item => {
         const name = item.querySelector('.character-name-input').value.trim();
         const gender = item.querySelector('.character-gender-input').value.trim();
+        const age = item.querySelector('.character-age-input').value.trim();
         const description = item.querySelector('textarea').value.trim();
         if (name && description) {
-            characters.push({ name, gender, description });
+            const obj = { name, gender, description };
+            if (age) obj.age = age;
+            characters.push(obj);
         }
     });
 
@@ -1443,12 +1467,14 @@ saveContextBtn.addEventListener('click', () => {
     const userName = document.getElementById('userCharacterName').value.trim();
     const userGender = document.getElementById('userCharacterGender').value.trim();
     const userDesc = userCharacterInput.value.trim();
+    const userAge = (userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '');
 
     // 사용자 캐릭터 정보를 하나의 문자열로 결합
     let userCharacterData = '';
     if (userName) {
         userCharacterData = `이름: ${userName}`;
         if (userGender) userCharacterData += `, 성별: ${userGender}`;
+        if (userAge) userCharacterData += `, 나이: ${userAge}`;
         if (userDesc) userCharacterData += `\n${userDesc}`;
     } else if (userDesc) {
         userCharacterData = userDesc;
@@ -1481,9 +1507,12 @@ if (applyCharactersBtn) {
         characterItems.forEach(item => {
             const name = item.querySelector('.character-name-input').value.trim();
             const gender = item.querySelector('.character-gender-input').value.trim();
+            const age = item.querySelector('.character-age-input').value.trim();
             const description = item.querySelector('textarea').value.trim();
             if (name && description) {
-                characters.push({ name, gender, description });
+                const obj = { name, gender, description };
+                if (age) obj.age = age;
+                characters.push(obj);
             }
         });
 
@@ -1491,12 +1520,14 @@ if (applyCharactersBtn) {
         const userName = document.getElementById('userCharacterName').value.trim();
         const userGender = document.getElementById('userCharacterGender').value.trim();
         const userDesc = userCharacterInput.value.trim();
+        const userAge = (userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '');
 
         // 사용자 캐릭터 정보를 하나의 문자열로 결합
         let userCharacterData = '';
         if (userName) {
             userCharacterData = `이름: ${userName}`;
             if (userGender) userCharacterData += `, 성별: ${userGender}`;
+            if (userAge) userCharacterData += `, 나이: ${userAge}`;
             if (userDesc) userCharacterData += `\n${userDesc}`;
         } else if (userDesc) {
             userCharacterData = userDesc;
@@ -1725,16 +1756,16 @@ function handleFileList(data) {
         window.pendingFileListSelect = null;
         window.pendingFileListType = null;
     } else if (window.pendingNPCSelect) {
-        // NPC 목록 업데이트
-        updateNPCList(window.pendingNPCSelect, data.files);
-        window.pendingNPCSelect = null;
+    // 캐릭터 템플릿 목록 업데이트
+    updateTemplateList(window.pendingTemplateSelect, data.files);
+    window.pendingTemplateSelect = null;
     }
 }
 
 // NPC 목록 업데이트
-function updateNPCList(selectElement, files) {
+function updateTemplateList(selectElement, files) {
     const currentValue = selectElement.value;
-    selectElement.innerHTML = '<option value="">불러오기...</option>';
+    selectElement.innerHTML = '<option value="">📂 템플릿</option>';
 
     files.forEach(file => {
         const option = document.createElement('option');
@@ -1789,19 +1820,44 @@ function handleFileLoad(data) {
     } else if (window.pendingLoadType === 'my_character') {
         userCharacterInput.value = content;
         myCharacterSelect.value = filename.replace('.md', '');
-    } else if (window.pendingLoadType === 'npc') {
-        // NPC 로드는 addCharacterInput 시 처리
-        if (window.pendingNPCItem) {
-            const nameInput = window.pendingNPCItem.querySelector('.character-name-input');
-            const descInput = window.pendingNPCItem.querySelector('.character-description-input');
-            const npcSelect = window.pendingNPCItem.querySelector('.npc-select');
+    } else if (window.pendingLoadType === 'char_template') {
+        // 템플릿(JSON) 로드 → 캐릭터 아이템에 반영
+        if (window.pendingTemplateItem) {
+            try {
+                const obj = JSON.parse(content || '{}');
+                const nameInput = window.pendingTemplateItem.querySelector('.character-name-input');
+                const genderSelect = window.pendingTemplateItem.querySelector('.character-gender-input');
+                const ageInput = window.pendingTemplateItem.querySelector('.character-age-input');
+                const descInput = window.pendingTemplateItem.querySelector('.character-description-input');
 
-            descInput.value = content;
-            if (npcSelect) {
-                npcSelect.value = filename.replace('.md', '');
+                if (obj.name) nameInput.value = obj.name;
+                if (obj.gender !== undefined) genderSelect.value = obj.gender;
+                if (obj.age !== undefined) ageInput.value = obj.age;
+                // description 또는 summary 키 허용
+                if (obj.description !== undefined) descInput.value = obj.description;
+                else if (obj.summary !== undefined) descInput.value = obj.summary;
+
+                const templateSelect = window.pendingTemplateItem.querySelector('.template-select');
+                if (templateSelect) templateSelect.value = filename.replace('.json', '');
+            } catch (e) {
+                log('템플릿 JSON 파싱 실패', 'error');
             }
-
-            window.pendingNPCItem = null;
+            window.pendingTemplateItem = null;
+        }
+    } else if (window.pendingLoadType === 'my_profile') {
+        try {
+            const obj = JSON.parse(content || '{}');
+            if (loginModal) { /* noop */ }
+            const nameEl = document.getElementById('userCharacterName');
+            const genderEl = document.getElementById('userCharacterGender');
+            const ageEl = document.getElementById('userCharacterAge');
+            if (nameEl) nameEl.value = obj.name || '';
+            if (genderEl) genderEl.value = obj.gender || '';
+            if (ageEl) ageEl.value = (obj.age !== undefined && obj.age !== null) ? String(obj.age) : '';
+            userCharacterInput.value = obj.description || obj.summary || '';
+            log('내 프로필을 불러왔습니다.', 'success');
+        } catch (e) {
+            log('내 프로필 JSON 파싱 실패', 'error');
         }
     }
 }
@@ -1908,6 +1964,35 @@ myCharacterSelect.addEventListener('change', () => {
 deleteMyCharacterBtn.addEventListener('click', () => {
     deleteFile('my_character', myCharacterSelect);
 });
+
+// 내 프로필(JSON) 저장/불러오기
+if (saveProfileJsonBtn) {
+    saveProfileJsonBtn.addEventListener('click', () => {
+        const name = document.getElementById('userCharacterName').value.trim();
+        const gender = document.getElementById('userCharacterGender').value.trim();
+        const age = userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '';
+        const description = userCharacterInput.value.trim();
+        const payload = { name, role: 'user', gender, age, description };
+        sendMessage({
+            action: 'save_workspace_file',
+            file_type: 'my_profile',
+            filename: 'my_profile',
+            content: JSON.stringify(payload, null, 2)
+        });
+        log('내 프로필(JSON) 저장 요청', 'info');
+    });
+}
+
+if (loadProfileJsonBtn) {
+    loadProfileJsonBtn.addEventListener('click', () => {
+        window.pendingLoadType = 'my_profile';
+        sendMessage({
+            action: 'load_workspace_file',
+            file_type: 'my_profile',
+            filename: 'my_profile'
+        });
+    });
+}
 
 // ===== 프리셋 관리 =====
 

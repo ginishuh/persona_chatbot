@@ -220,14 +220,18 @@
                             <button id="saveMyCharacterBtn" class="btn btn-sm" title="저장">💾</button>
                             <button id="deleteMyCharacterBtn" class="btn btn-sm btn-remove" title="삭제">🗑️</button>
                         </div>
-                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;">
                             <input type="text" id="userCharacterName" class="character-name-field" placeholder="이름" />
                             <select id="userCharacterGender" class="character-gender-field">
                                 <option value="">성별</option>
                                 <option value="남성">남성</option>
                                 <option value="여성">여성</option>
+                                <option value="논바이너리">논바이너리</option>
                                 <option value="기타">기타</option>
                             </select>
+                            <input type="text" id="userCharacterAge" class="character-age-field" placeholder="나이" style="width: 80px;" />
+                            <button id="loadProfileJsonBtn" class="btn btn-sm" title="내 프로필 불러오기(JSON)">📤</button>
+                            <button id="saveProfileJsonBtn" class="btn btn-sm" title="내 프로필 저장(JSON)">💾</button>
                         </div>
                         <textarea id="userCharacterInput" placeholder="성격, 배경, 외모 등..." rows="3"></textarea>
                     </div>
