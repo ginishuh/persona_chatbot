@@ -315,9 +315,9 @@ if (narratorDrive) {
         const mode = narratorDrive.value;
         if (!forceChoices || !choiceCount) return;
         if (mode === 'guide') {
-            forceChoices.checked = true;
+            // 자동 체크하지 않음: 진행자 방식과 혼선 방지
             forceChoices.disabled = false;
-            choiceCount.disabled = false;
+            choiceCount.disabled = !forceChoices.checked;
         } else if (mode === 'direct') {
             forceChoices.checked = false;
             forceChoices.disabled = true;
@@ -330,6 +330,13 @@ if (narratorDrive) {
     };
     narratorDrive.addEventListener('change', syncChoiceControls);
     syncChoiceControls();
+}
+
+// 선택지 토글이 바뀌면 개수 입력 사용 가능 여부 동기화
+if (forceChoices && choiceCount) {
+    forceChoices.addEventListener('change', () => {
+        choiceCount.disabled = !forceChoices.checked;
+    });
 }
 
 // 상태 업데이트
