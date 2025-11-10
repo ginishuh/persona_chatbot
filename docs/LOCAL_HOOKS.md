@@ -22,6 +22,9 @@ pre-commit run --all-files
 - `bandit.yaml`: bandit 상세 설정
 - `.secrets.baseline`: detect-secrets 베이스라인(신규 시크릿 추가 차단)
 
+**제외 경로**
+- `persona_data/`는 프라이빗 데이터 레포로 가정하고 모든 훅에서 제외됩니다. (전역 exclude)
+
 **베이스라인 갱신**
 ```
 detect-secrets scan --exclude-files '(^|/)(\.git|\.env|\.venv|venv|node_modules)/' > .secrets.baseline
@@ -31,4 +34,3 @@ git add .secrets.baseline && git commit -m "chore(security): 시크릿 베이스
 **팁**
 - 느린 훅은 pre-push 단계에서만 실행하도록 분리할 수 있습니다.
 - Node가 없으면 Prettier 훅을 일시 비활성화하거나 Node 설치 후 사용하세요.
-

@@ -36,4 +36,3 @@ else
   echo "[host-git-sync] push 실패 → 트리거 유지 (후속 재시도 필요)" >&2
   exit 1
 fi
-

@@ -15,4 +15,3 @@ while true; do
   "${SCRIPT_DIR}/host_git_sync_once.sh" || true
   sleep 3
 done
-

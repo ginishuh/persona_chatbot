@@ -1,3 +1,4 @@
+exclude: ^persona_data/
 repos:
   # 기본 위생 검사
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -37,7 +38,7 @@ repos:
     hooks:
       - id: detect-secrets
         name: detect-secrets (pre-commit)
-        args: ["--baseline", ".secrets.baseline"]
+        args: ["--baseline", ".secrets.baseline", "--exclude-files", "^persona_data/"]
 
   # 웹 자산 포맷터 (Prettier) — 선택: 필요 시 주석 해제 후 `rev`는 최신으로 조정
   # - repo: https://github.com/pre-commit/mirrors-prettier

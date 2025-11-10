@@ -313,6 +313,7 @@ pre-commit run --all-files
 ```
 
 구성 파일: `.pre-commit-config.yaml`, `pyproject.toml`, `bandit.yaml`, `.secrets.baseline` (detect-secrets)
+※ `persona_data/`는 전역 exclude로 모든 훅 검사 대상에서 제외됩니다.
 
 ### 상태/스모크 테스트 (2025-11-10 확인)
 

@@ -16,4 +16,3 @@ echo "최초 전체 검사 실행(캐시 생성)..."
 pre-commit run --all-files || true
 
 echo "완료: .git/hooks/pre-commit, pre-push 설치됨"
-
