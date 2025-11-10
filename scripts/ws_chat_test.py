@@ -67,7 +67,12 @@ async def _send_reset_sessions(ws, token: str | None) -> None:
 
 
 async def run(
-    uri: str, prompt: str, provider: str, cleanup: bool = True, timeout_seconds: int = 240
+    uri: str,
+    prompt: str,
+    provider: str,
+    cleanup: bool = True,
+    timeout_seconds: int = 240,
+    adult_level: str = "explicit",
 ) -> int:
     env = load_env_dotenv()
     username = env.get("APP_LOGIN_USERNAME", "")
@@ -112,7 +117,7 @@ async def run(
             "user_character": "테스터",
             "characters": [{"name": "테스트봇", "description": "테스트용 캐릭터"}],
             "narrator_mode": "no_narrator",
-            "adult_level": "safe",
+            "adult_level": adult_level,
             "ai_provider": provider,
         }
         await ws.send(json.dumps(set_ctx))
@@ -175,12 +180,16 @@ async def run(
                 return 6
 
 
-async def _run_all(uri: str, prompt: str, providers: list[str], timeout_seconds: int) -> int:
+async def _run_all(
+    uri: str, prompt: str, providers: list[str], timeout_seconds: int, adult_level: str
+) -> int:
     """여러 프로바이더 순차 테스트. 하나라도 실패하면 마지막 실패 코드 반환."""
     last_code = 0
     for p in providers:
         logger.info("\n=== Provider 테스트 시작: %s ===", p)
-        code = await run(uri, prompt, p, cleanup=True, timeout_seconds=timeout_seconds)
+        code = await run(
+            uri, prompt, p, cleanup=True, timeout_seconds=timeout_seconds, adult_level=adult_level
+        )
         if code != 0:
             last_code = code
         logger.info("=== Provider 테스트 종료: %s (code=%s) ===\n", p, code)
@@ -197,19 +206,32 @@ def main() -> int:
     )
     ap.add_argument("--prompt", default="안녕하세요?", help="테스트 메시지")
     ap.add_argument("--timeout", type=int, default=240, help="스트리밍 응답 대기 타임아웃(초)")
+    ap.add_argument(
+        "--adult",
+        default="explicit",
+        choices=["explicit", "enhanced", "extreme"],
+        help="성인 수위 단계(explicit|enhanced|extreme)",
+    )
     args = ap.parse_args()
 
     if args.provider.lower() == "all":
         providers = ["claude", "droid", "gemini"]
-        return asyncio.run(_run_all(args.uri, args.prompt, providers, args.timeout))
+        return asyncio.run(_run_all(args.uri, args.prompt, providers, args.timeout, args.adult))
     else:
         # 콤마 구분 목록 지원
         providers = [p.strip() for p in args.provider.split(",") if p.strip()]
         if len(providers) == 1:
             return asyncio.run(
-                run(args.uri, args.prompt, providers[0], cleanup=True, timeout_seconds=args.timeout)
+                run(
+                    args.uri,
+                    args.prompt,
+                    providers[0],
+                    cleanup=True,
+                    timeout_seconds=args.timeout,
+                    adult_level=args.adult,
+                )
             )
-        return asyncio.run(_run_all(args.uri, args.prompt, providers, args.timeout))
+        return asyncio.run(_run_all(args.uri, args.prompt, providers, args.timeout, args.adult))
 
 
 if __name__ == "__main__":

@@ -2,8 +2,10 @@
 """WebSocket 클라이언트 테스트"""
 
 import asyncio
-import websockets
 import json
+
+import websockets
+
 
 async def test_websocket():
     uri = "ws://localhost:8765"
@@ -19,15 +21,10 @@ async def test_websocket():
                     "world": "테스트 세계",
                     "situation": "간단한 테스트입니다.",
                     "user_character": "테스터",
-                    "characters": [
-                        {
-                            "name": "테스트봇",
-                            "description": "테스트용 캐릭터입니다."
-                        }
-                    ],
+                    "characters": [{"name": "테스트봇", "description": "테스트용 캐릭터입니다."}],
                     "narrator_mode": "no_narrator",
-                    "adult_mode": False
-                }
+                    "adult_mode": False,
+                },
             }
 
             await websocket.send(json.dumps(set_context))
@@ -35,10 +32,7 @@ async def test_websocket():
             print(f"✓ 컨텍스트 설정 완료: {response}")
 
             # 채팅 메시지 전송
-            chat_msg = {
-                "action": "chat",
-                "prompt": "안녕하세요?"
-            }
+            chat_msg = {"action": "chat", "prompt": "안녕하세요?"}
 
             print("\n채팅 메시지 전송 중...")
             await websocket.send(json.dumps(chat_msg))
@@ -51,7 +45,9 @@ async def test_websocket():
                     data = json.loads(message)
 
                     # 디버깅: 받은 메시지 출력
-                    print(f"\n[DEBUG] 받은 메시지: action={data.get('action')}, type={data.get('type')}")
+                    print(
+                        f"\n[DEBUG] 받은 메시지: action={data.get('action')}, type={data.get('type')}"
+                    )
 
                     action = data.get("action")
 
@@ -61,12 +57,12 @@ async def test_websocket():
                         print(f"[DEBUG] stream_data type: {stream_data.get('type')}")
 
                         # assistant 메시지 추출
-                        if stream_data.get('type') == 'assistant':
-                            message_obj = stream_data.get('message', {})
-                            content = message_obj.get('content', [])
+                        if stream_data.get("type") == "assistant":
+                            message_obj = stream_data.get("message", {})
+                            content = message_obj.get("content", [])
                             for item in content:
-                                if item.get('type') == 'text':
-                                    chunk = item.get('text', '')
+                                if item.get("type") == "text":
+                                    chunk = item.get("text", "")
                                     response_chunks.append(chunk)
                                     print(chunk, end="", flush=True)
                     elif action == "chat_complete":
@@ -75,7 +71,7 @@ async def test_websocket():
                     elif action == "error":
                         print(f"\n✗ 에러: {data.get('data', {}).get('error')}")
                         break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     print("\n✗ 타임아웃")
                     break
 
@@ -90,6 +86,7 @@ async def test_websocket():
     except Exception as e:
         print(f"✗ 에러: {e}")
         return False
+
 
 if __name__ == "__main__":
     result = asyncio.run(test_websocket())
