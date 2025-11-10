@@ -1058,9 +1058,16 @@ async def handle_message(websocket, message):
             room["history"].add_user_message(prompt)
 
             # 히스토리 텍스트 가져오기(채팅방)
-            history_text = room["history"].get_history_text()
+            # 제공자별 세션 지원 여부 확인
+            provider_supports_session = provider in ("claude", "droid")
+            # 세션 유지가 활성화되어 있고, 제공자가 세션을 지원하고, 기존 세션이 있으면 히스토리 주입 불필요
+            # (세션으로 기억하므로 토큰 절약)
+            if retention_enabled and provider_supports_session and provider_session_id:
+                history_text = ""
+            else:
+                history_text = room["history"].get_history_text()
 
-            # System prompt 생성 (히스토리 포함)
+            # System prompt 생성 (히스토리 포함 여부는 위에서 결정)
             system_prompt = context_handler.build_system_prompt(history_text)
 
             # 스트리밍 콜백: 각 JSON 라인을 클라이언트에 전송
