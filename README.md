@@ -297,6 +297,23 @@ docker compose down
 
 접속: http://localhost:9000
 
+### 로컬 훅(린트/보안) 설정
+
+커밋/푸시 전에 자동으로 포맷/린트/보안 점검을 수행합니다.
+
+1) 설치
+```
+python3 -m pip install --user pre-commit
+bash scripts/install_hooks.sh
+```
+
+2) 수동 실행
+```
+pre-commit run --all-files
+```
+
+구성 파일: `.pre-commit-config.yaml`, `pyproject.toml`, `bandit.yaml`, `.secrets.baseline` (detect-secrets)
+
 ### 상태/스모크 테스트 (2025-11-10 확인)
 
 - 현재 상태: ✅ Claude / ✅ Droid / ✅ Gemini 모두 정상 동작 확인됨 (Docker/로컬 모두).

@@ -1,0 +1,29 @@
+[tool.black]
+line-length = 100
+target-version = ["py311", "py310", "py39"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+  ".git",
+  "venv",
+  ".venv",
+  "node_modules",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "W"]
+ignore = [
+  "E501",  # 긴 줄은 black에 위임
+]
+
+[tool.ruff.lint.per-file-ignores]
+"server/handlers/droid_handler.py" = ["F841", "E712"]
+"server/websocket_server.py" = ["F841"]
+"server/handlers/workspace_handler.py" = ["F841"]
+"test_websocket.py" = ["E501"]
+
+[tool.bandit]
+skips = ["B101"]  # assert 허용 (테스트/스크립트 편의)
+exclude_dirs = ["tests", "venv", ".venv"]

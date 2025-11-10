@@ -20,10 +20,7 @@ from argparse import ArgumentParser
 try:
     import websockets  # type: ignore
 except Exception as e:  # pragma: no cover - 런타임 설치 안내용
-    raise SystemExit(
-        "websockets 모듈이 필요합니다.\n"
-        "설치: pip install websockets"
-    )
+    raise SystemExit("websockets 모듈이 필요합니다.\n설치: pip install websockets") from e
 
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -36,7 +33,7 @@ def load_env_dotenv(path: str = ".env") -> dict[str, str]:
     if not os.path.exists(path):
         return env
     line_re = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for raw in f:
             line = raw.strip()
             if not line or line.startswith("#"):
@@ -62,14 +59,16 @@ async def _send_reset_sessions(ws, token: str | None) -> None:
             res = json.loads(res_raw)
             if res.get("action") == "reset_sessions":
                 logger.info("세션 초기화 완료")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
     except Exception:
         # 정리 과정 오류는 치명적이지 않으므로 무시
         pass
 
 
-async def run(uri: str, prompt: str, provider: str, cleanup: bool = True, timeout_seconds: int = 240) -> int:
+async def run(
+    uri: str, prompt: str, provider: str, cleanup: bool = True, timeout_seconds: int = 240
+) -> int:
     env = load_env_dotenv()
     username = env.get("APP_LOGIN_USERNAME", "")
     password = env.get("APP_LOGIN_PASSWORD", "")
@@ -86,7 +85,7 @@ async def run(uri: str, prompt: str, provider: str, cleanup: bool = True, timeou
                 logger.info(f"서버 초기 메시지: action={data.get('action')}")
                 if data.get("action") == "auth_required":
                     logger.info("서버가 인증을 요구합니다 → 로그인 진행")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
         # 로그인 수행 (비밀번호가 설정되어 있다면 필요)
@@ -111,16 +110,16 @@ async def run(uri: str, prompt: str, provider: str, cleanup: bool = True, timeou
             "world": "테스트 세계",
             "situation": "간단 메시지 송수신 테스트",
             "user_character": "테스터",
-            "characters": [
-                {"name": "테스트봇", "description": "테스트용 캐릭터"}
-            ],
+            "characters": [{"name": "테스트봇", "description": "테스트용 캐릭터"}],
             "narrator_mode": "no_narrator",
             "adult_level": "safe",
             "ai_provider": provider,
         }
         await ws.send(json.dumps(set_ctx))
         set_ctx_res = json.loads(await ws.recv())
-        if set_ctx_res.get("action") != "set_context" or not set_ctx_res.get("data", {}).get("success"):
+        if set_ctx_res.get("action") != "set_context" or not set_ctx_res.get("data", {}).get(
+            "success"
+        ):
             logger.error(f"컨텍스트 설정 실패: {set_ctx_res}")
             return 3
         logger.info("컨텍스트 설정 완료")
@@ -140,7 +139,7 @@ async def run(uri: str, prompt: str, provider: str, cleanup: bool = True, timeou
         while True:
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=timeout_seconds)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.error("응답 타임아웃")
                 return 4
             data = json.loads(raw)
@@ -169,7 +168,7 @@ async def run(uri: str, prompt: str, provider: str, cleanup: bool = True, timeou
                     await _send_reset_sessions(ws, token)
                 return 0 if ok else 5
             elif action == "error":
-                logger.error(f"서버 에러: {data.get('data')}" )
+                logger.error(f"서버 에러: {data.get('data')}")
                 # 에러 시에도 세션 정리 시도
                 if cleanup:
                     await _send_reset_sessions(ws, token)
@@ -207,7 +206,9 @@ def main() -> int:
         # 콤마 구분 목록 지원
         providers = [p.strip() for p in args.provider.split(",") if p.strip()]
         if len(providers) == 1:
-            return asyncio.run(run(args.uri, args.prompt, providers[0], cleanup=True, timeout_seconds=args.timeout))
+            return asyncio.run(
+                run(args.uri, args.prompt, providers[0], cleanup=True, timeout_seconds=args.timeout)
+            )
         return asyncio.run(_run_all(args.uri, args.prompt, providers, args.timeout))
 
 
