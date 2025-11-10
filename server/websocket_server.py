@@ -2,30 +2,27 @@ import asyncio
 import json
 import logging
 import os
-import secrets
+import threading
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 from socketserver import TCPServer
-import threading
 
 import jwt
 import websockets
-
-from handlers.file_handler import FileHandler
-from handlers.git_handler import GitHandler
 from handlers.claude_handler import ClaudeCodeHandler
-from handlers.droid_handler import DroidHandler
-from handlers.gemini_handler import GeminiHandler
 from handlers.context_handler import ContextHandler
+from handlers.droid_handler import DroidHandler
+from handlers.file_handler import FileHandler
+from handlers.gemini_handler import GeminiHandler
+from handlers.git_handler import GitHandler
 from handlers.history_handler import HistoryHandler
-from handlers.workspace_handler import WorkspaceHandler
 from handlers.mode_handler import ModeHandler
+from handlers.workspace_handler import WorkspaceHandler
 
 # 로깅 설정
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -68,7 +65,10 @@ client_session_settings: dict = {}
 def initialize_client_state(websocket):
     """클라이언트별 세션/설정 초기값"""
     client_sessions[websocket] = {}
-    client_session_settings[websocket] = {"retention_enabled": False}
+    client_session_settings[websocket] = {
+        "retention_enabled": False,
+        "adult_consent": False,  # 성인 모드 동의 플래그(세션별)
+    }
 
 
 def clear_client_sessions(websocket):
@@ -109,12 +109,13 @@ def _parse_story_markdown(md: str) -> list[dict]:
             nonlocal buf, current_role
             if current_role and buf:
                 # 구분선 제거
-                text = "\n".join([ln for ln in buf if ln.strip() != '---']).strip()
+                text = "\n".join([ln for ln in buf if ln.strip() != "---"]).strip()
                 if text:
                     items.append({"role": current_role, "content": text})
             buf = []
 
         import re
+
         header_re = re.compile(r"^##\s+\d+\.\s*(.+?)\s*$")
 
         while i < len(lines):
@@ -140,6 +141,7 @@ def _parse_story_markdown(md: str) -> list[dict]:
     except Exception:
         # 파싱 실패 시 빈 배열
         return []
+
 
 def _issue_token(ttl_seconds: int, typ: str):
     """JWT 생성 공통 함수"""
@@ -186,19 +188,17 @@ def verify_token(token, expected_type: str = "access"):
 
 
 async def send_auth_required(websocket, reason="missing_token"):
-    await websocket.send(json.dumps({
-        "action": "auth_required",
-        "data": {"required": True, "reason": reason}
-    }))
+    await websocket.send(
+        json.dumps({"action": "auth_required", "data": {"required": True, "reason": reason}})
+    )
 
 
 async def handle_login_action(websocket, data):
     """로그인/토큰 검증 처리"""
     if not LOGIN_REQUIRED:
-        await websocket.send(json.dumps({
-            "action": "login",
-            "data": {"success": True, "token": None}
-        }))
+        await websocket.send(
+            json.dumps({"action": "login", "data": {"success": True, "token": None}})
+        )
         return
 
     client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
@@ -208,10 +208,18 @@ async def handle_login_action(websocket, data):
     recent_failures = sum(1 for ts, success in attempts if not success)
 
     if recent_failures >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
-        await websocket.send(json.dumps({
-            "action": "login",
-            "data": {"success": False, "error": "로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.", "code": "rate_limited"}
-        }))
+        await websocket.send(
+            json.dumps(
+                {
+                    "action": "login",
+                    "data": {
+                        "success": False,
+                        "error": "로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.",
+                        "code": "rate_limited",
+                    },
+                }
+            )
+        )
         return
 
     def record_attempt(success: bool):
@@ -227,59 +235,114 @@ async def handle_login_action(websocket, data):
         if error:
             if error == "token_expired":
                 try:
-                    unverified = jwt.decode(token, options={"verify_signature": False, "verify_exp": False})
+                    unverified = jwt.decode(
+                        token, options={"verify_signature": False, "verify_exp": False}
+                    )
                     exp = datetime.fromtimestamp(unverified.get("exp"))
                     if datetime.utcnow() - exp < TOKEN_EXPIRED_GRACE:
                         new_token, expires_at = issue_access_token()
                         # refresh 토큰은 회전하지 않음(명시적 refresh에서 회전)
-                        await websocket.send(json.dumps({
-                            "action": "login",
-                            "data": {"success": True, "token": new_token, "expires_at": expires_at, "renewed": True}
-                        }))
+                        await websocket.send(
+                            json.dumps(
+                                {
+                                    "action": "login",
+                                    "data": {
+                                        "success": True,
+                                        "token": new_token,
+                                        "expires_at": expires_at,
+                                        "renewed": True,
+                                    },
+                                }
+                            )
+                        )
                         record_attempt(True)
                         return
                 except Exception:
                     pass
 
-            await websocket.send(json.dumps({
-                "action": "login",
-                "data": {"success": False, "error": "토큰이 유효하지 않습니다.", "code": error}
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "action": "login",
+                        "data": {
+                            "success": False,
+                            "error": "토큰이 유효하지 않습니다.",
+                            "code": error,
+                        },
+                    }
+                )
+            )
             record_attempt(False)
             return
 
         new_token, expires_at = issue_access_token()
-        await websocket.send(json.dumps({
-            "action": "login",
-            "data": {"success": True, "token": new_token, "expires_at": expires_at, "renewed": True}
-        }))
+        await websocket.send(
+            json.dumps(
+                {
+                    "action": "login",
+                    "data": {
+                        "success": True,
+                        "token": new_token,
+                        "expires_at": expires_at,
+                        "renewed": True,
+                    },
+                }
+            )
+        )
         record_attempt(True)
         return
 
     # 사용자명 검사(설정된 경우)
     if LOGIN_USERNAME:
         if not username or username != LOGIN_USERNAME:
-            await websocket.send(json.dumps({
-                "action": "login",
-                "data": {"success": False, "error": "아이디가 일치하지 않습니다.", "code": "invalid_username"}
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "action": "login",
+                        "data": {
+                            "success": False,
+                            "error": "아이디가 일치하지 않습니다.",
+                            "code": "invalid_username",
+                        },
+                    }
+                )
+            )
             record_attempt(False)
             return
 
     if password and password == LOGIN_PASSWORD:
         issued, expires_at = issue_access_token()
         refresh, refresh_exp = issue_refresh_token()
-        await websocket.send(json.dumps({
-            "action": "login",
-            "data": {"success": True, "token": issued, "expires_at": expires_at, "refresh_token": refresh, "refresh_expires_at": refresh_exp, "renewed": False}
-        }))
+        await websocket.send(
+            json.dumps(
+                {
+                    "action": "login",
+                    "data": {
+                        "success": True,
+                        "token": issued,
+                        "expires_at": expires_at,
+                        "refresh_token": refresh,
+                        "refresh_expires_at": refresh_exp,
+                        "renewed": False,
+                    },
+                }
+            )
+        )
         record_attempt(True)
         return
 
-    await websocket.send(json.dumps({
-        "action": "login",
-        "data": {"success": False, "error": "비밀번호가 일치하지 않습니다.", "code": "invalid_password"}
-    }))
+    await websocket.send(
+        json.dumps(
+            {
+                "action": "login",
+                "data": {
+                    "success": False,
+                    "error": "비밀번호가 일치하지 않습니다.",
+                    "code": "invalid_password",
+                },
+            }
+        )
+    )
     record_attempt(False)
 
 
@@ -288,10 +351,9 @@ async def handle_token_refresh_action(websocket, data):
     refresh_token = data.get("refresh_token")
     payload, error = verify_token(refresh_token, expected_type="refresh")
     if error:
-        await websocket.send(json.dumps({
-            "action": "token_refresh",
-            "data": {"success": False, "error": error}
-        }))
+        await websocket.send(
+            json.dumps({"action": "token_refresh", "data": {"success": False, "error": error}})
+        )
         return
 
     new_access, access_exp = issue_access_token()
@@ -302,16 +364,20 @@ async def handle_token_refresh_action(websocket, data):
     else:
         new_refresh, refresh_exp = refresh_token, None
 
-    await websocket.send(json.dumps({
-        "action": "token_refresh",
-        "data": {
-            "success": True,
-            "token": new_access,
-            "expires_at": access_exp,
-            "refresh_token": new_refresh,
-            "refresh_expires_at": refresh_exp
-        }
-    }))
+    await websocket.send(
+        json.dumps(
+            {
+                "action": "token_refresh",
+                "data": {
+                    "success": True,
+                    "token": new_access,
+                    "expires_at": access_exp,
+                    "refresh_token": new_refresh,
+                    "refresh_expires_at": refresh_exp,
+                },
+            }
+        )
+    )
 
 
 async def handle_message(websocket, message):
@@ -378,54 +444,115 @@ async def handle_message(websocket, message):
             adult_level = data.get("adult_level", "explicit")
             narrative_separation = data.get("narrative_separation", False)
             ai_provider = data.get("ai_provider", "claude")
+            output_level = data.get("output_level")
+            narrator_drive = data.get("narrator_drive")
+            choice_policy = data.get("choice_policy")
+            choice_count = data.get("choice_count")
+            # 성인 모드 동의(선택): true가 오면 세션에 저장
+            if "adult_consent" in data:
+                try:
+                    client_session_settings.setdefault(websocket, {})["adult_consent"] = bool(
+                        data.get("adult_consent")
+                    )
+                except Exception:
+                    pass
 
+            prev_ctx = context_handler.get_context()
             context_handler.set_world(world)
             context_handler.set_situation(situation)
             context_handler.set_user_character(user_character)
-            context_handler.set_narrator(narrator_enabled, narrator_mode, narrator_description, user_is_narrator)
+            context_handler.set_narrator(
+                narrator_enabled, narrator_mode, narrator_description, user_is_narrator
+            )
             context_handler.set_adult_level(adult_level)
             context_handler.set_narrative_separation(narrative_separation)
             context_handler.set_ai_provider(ai_provider)
             context_handler.set_characters(characters)
+            if output_level is not None:
+                context_handler.set_output_level(output_level)
+            if narrator_drive is not None:
+                context_handler.set_narrator_drive(narrator_drive)
+            if choice_policy is not None:
+                context_handler.set_choice_policy(choice_policy)
+            if choice_count is not None:
+                context_handler.set_choice_count(choice_count)
 
-            await websocket.send(json.dumps({
-                "action": "set_context",
-                "data": {"success": True, "context": context_handler.get_context()}
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "action": "set_context",
+                        "data": {"success": True, "context": context_handler.get_context()},
+                    }
+                )
+            )
+
+            # 핵심 프롬프트 구성 키 변경 시 세션 초기화로 새 프롬프트 강제 적용
+            try:
+                new_ctx = context_handler.get_context()
+                keys = [
+                    "adult_level",
+                    "narrative_separation",
+                    "output_level",
+                    "narrator_drive",
+                    "narrator_enabled",
+                    "narrator_mode",
+                    "choice_policy",
+                    "choice_count",
+                ]
+                if any(prev_ctx.get(k) != new_ctx.get(k) for k in keys):
+                    clear_client_sessions(websocket)
+                    logger.info(
+                        "Context changed; provider sessions reset for fresh prompt application"
+                    )
+            except Exception:
+                pass
 
         # 컨텍스트 조회
         elif action == "get_context":
-            await websocket.send(json.dumps({
-                "action": "get_context",
-                "data": {"success": True, "context": context_handler.get_context()}
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "action": "get_context",
+                        "data": {"success": True, "context": context_handler.get_context()},
+                    }
+                )
+            )
 
         # 히스토리 초기화
         elif action == "clear_history":
             history_handler.clear()
             clear_client_sessions(websocket)
-            await websocket.send(json.dumps({
-                "action": "clear_history",
-                "data": {"success": True, "message": "대화 히스토리가 초기화되었습니다"}
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "action": "clear_history",
+                        "data": {"success": True, "message": "대화 히스토리가 초기화되었습니다"},
+                    }
+                )
+            )
 
         # 히스토리 설정 조회
         elif action == "get_history_settings":
-            await websocket.send(json.dumps({
-                "action": "get_history_settings",
-                "data": {
-                    "success": True,
-                    "max_turns": history_handler.max_turns
-                }
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "action": "get_history_settings",
+                        "data": {"success": True, "max_turns": history_handler.max_turns},
+                    }
+                )
+            )
 
         # 세션 리셋
         elif action == "reset_sessions":
             clear_client_sessions(websocket)
-            await websocket.send(json.dumps({
-                "action": "reset_sessions",
-                "data": {"success": True, "message": "프로바이더 세션이 초기화되었습니다."}
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "action": "reset_sessions",
+                        "data": {"success": True, "message": "프로바이더 세션이 초기화되었습니다."},
+                    }
+                )
+            )
 
         # 히스토리 길이 조정
         elif action == "set_history_limit":
@@ -436,29 +563,44 @@ async def handle_message(websocket, message):
                 else:
                     new_limit = int(requested)
                     if new_limit < 5 or new_limit > 1000:
-                        raise ValueError(f"맥락 길이는 5~1000 사이여야 합니다 (입력값: {new_limit})")
+                        raise ValueError(
+                            f"맥락 길이는 5~1000 사이여야 합니다 (입력값: {new_limit})"
+                        )
 
                 history_handler.set_max_turns(new_limit)
-                await websocket.send(json.dumps({
-                    "action": "set_history_limit",
-                    "data": {"success": True, "max_turns": history_handler.max_turns}
-                }))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "action": "set_history_limit",
+                            "data": {"success": True, "max_turns": history_handler.max_turns},
+                        }
+                    )
+                )
             except (ValueError, TypeError) as exc:
-                await websocket.send(json.dumps({
-                    "action": "set_history_limit",
-                    "data": {
-                        "success": False,
-                        "error": str(exc) if isinstance(exc, ValueError) else "올바른 숫자(5~1000) 또는 null을 입력하세요."
-                    }
-                }))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "action": "set_history_limit",
+                            "data": {
+                                "success": False,
+                                "error": (
+                                    str(exc)
+                                    if isinstance(exc, ValueError)
+                                    else "올바른 숫자(5~1000) 또는 null을 입력하세요."
+                                ),
+                            },
+                        }
+                    )
+                )
 
         # 세션 설정 조회
         elif action == "get_session_settings":
             settings = client_session_settings.get(websocket, {"retention_enabled": False})
-            await websocket.send(json.dumps({
-                "action": "get_session_settings",
-                "data": {"success": True, **settings}
-            }))
+            await websocket.send(
+                json.dumps(
+                    {"action": "get_session_settings", "data": {"success": True, **settings}}
+                )
+            )
 
         # 세션 유지 토글
         elif action == "set_session_retention":
@@ -466,18 +608,23 @@ async def handle_message(websocket, message):
             client_session_settings.setdefault(websocket, {})["retention_enabled"] = enabled
             if not enabled:
                 clear_client_sessions(websocket)
-            await websocket.send(json.dumps({
-                "action": "set_session_retention",
-                "data": {"success": True, "retention_enabled": enabled}
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "action": "set_session_retention",
+                        "data": {"success": True, "retention_enabled": enabled},
+                    }
+                )
+            )
 
         # 서사 가져오기 (마크다운)
         elif action == "get_narrative":
             narrative_md = history_handler.get_narrative_markdown()
-            await websocket.send(json.dumps({
-                "action": "get_narrative",
-                "data": {"success": True, "markdown": narrative_md}
-            }))
+            await websocket.send(
+                json.dumps(
+                    {"action": "get_narrative", "data": {"success": True, "markdown": narrative_md}}
+                )
+            )
 
         # 워크스페이스 파일 목록
         elif action == "list_workspace_files":
@@ -641,17 +788,20 @@ async def handle_message(websocket, message):
                 # 이전 구간 요약(옵션, 간단 요약)
                 summary_text = None
                 if summarize and len(all_msgs) > len(inject):
-                    prev = all_msgs[:len(all_msgs) - len(inject)]
+                    prev = all_msgs[: len(all_msgs) - len(inject)]
                     # 매우 단순한 요약: 각 메시지 첫 줄의 앞부분 1문장씩 최대 15줄
                     bullets = []
                     import re
+
                     for m in prev:
-                        text = (m.get("content") or '').splitlines()[0]
+                        text = (m.get("content") or "").splitlines()[0]
                         # 문장 단위로 자르기
                         parts = re.split(r"[\.\!\?。？！]", text)
                         first = parts[0].strip() if parts else text.strip()
                         if first:
-                            bullets.append(f"- {('사용자' if m['role']=='user' else 'AI')}: {first}")
+                            bullets.append(
+                                f"- {('사용자' if m['role']=='user' else 'AI')}: {first}"
+                            )
                         if len(bullets) >= 15:
                             break
                     if bullets:
@@ -668,46 +818,87 @@ async def handle_message(websocket, message):
                         history_handler.add_assistant_message(m["content"])
 
                 # 대략 토큰 추정
-                total_chars = sum(len(m["content"]) for m in inject) + (len(summary_text) if summary_text else 0)
+                total_chars = sum(len(m["content"]) for m in inject) + (
+                    len(summary_text) if summary_text else 0
+                )
                 approx_tokens = int(total_chars / 4)
 
-                await websocket.send(json.dumps({
-                    "action": "resume_from_story",
-                    "data": {
-                        "success": True,
-                        "injected_turns": len(inject),
-                        "summarized": bool(summary_text),
-                        "approx_tokens": approx_tokens
-                    }
-                }))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "action": "resume_from_story",
+                            "data": {
+                                "success": True,
+                                "injected_turns": len(inject),
+                                "summarized": bool(summary_text),
+                                "approx_tokens": approx_tokens,
+                            },
+                        }
+                    )
+                )
             except Exception as exc:
-                await websocket.send(json.dumps({
-                    "action": "resume_from_story",
-                    "data": {"success": False, "error": str(exc)}
-                }))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "action": "resume_from_story",
+                            "data": {"success": False, "error": str(exc)},
+                        }
+                    )
+                )
 
         # 히스토리 스냅샷 반환
         elif action == "get_history_snapshot":
             try:
                 snap = history_handler.get_history()
-                await websocket.send(json.dumps({
-                    "action": "get_history_snapshot",
-                    "data": {"success": True, "history": snap}
-                }))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "action": "get_history_snapshot",
+                            "data": {"success": True, "history": snap},
+                        }
+                    )
+                )
             except Exception as exc:
-                await websocket.send(json.dumps({
-                    "action": "get_history_snapshot",
-                    "data": {"success": False, "error": str(exc)}
-                }))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "action": "get_history_snapshot",
+                            "data": {"success": False, "error": str(exc)},
+                        }
+                    )
+                )
 
         # AI 채팅 (컨텍스트 + 히스토리 포함)
         elif action == "chat":
             prompt = data.get("prompt", "")
             # provider 파라미터 (없으면 컨텍스트의 기본값 사용)
-            provider = data.get("provider", context_handler.get_context().get("ai_provider", "claude"))
+            provider = data.get(
+                "provider", context_handler.get_context().get("ai_provider", "claude")
+            )
             provider_sessions = client_sessions.setdefault(websocket, {})
             retention_enabled = is_session_retention_enabled(websocket)
             provider_session_id = provider_sessions.get(provider) if retention_enabled else None
+
+            # 성인 모드 동의 확인(세션)
+            try:
+                ctx = context_handler.get_context()
+                level = (ctx.get("adult_level") or "").lower()
+                consent = client_session_settings.get(websocket, {}).get("adult_consent", False)
+                if level in {"enhanced", "extreme"} and not consent:
+                    await websocket.send(
+                        json.dumps(
+                            {
+                                "action": "consent_required",
+                                "data": {
+                                    "required": True,
+                                    "message": "성인 전용 기능입니다. 본인은 성인이며 이용에 따른 모든 책임은 사용자 본인에게 있음을 동의해야 합니다.",
+                                },
+                            }
+                        )
+                    )
+                    return
+            except Exception:
+                pass
 
             # 사용자 메시지를 히스토리에 추가
             history_handler.add_user_message(prompt)
@@ -720,10 +911,7 @@ async def handle_message(websocket, message):
 
             # 스트리밍 콜백: 각 JSON 라인을 클라이언트에 전송
             async def stream_callback(json_data):
-                await websocket.send(json.dumps({
-                    "action": "chat_stream",
-                    "data": json_data
-                }))
+                await websocket.send(json.dumps({"action": "chat_stream", "data": json_data}))
 
             # AI 제공자 선택
             if provider == "droid":
@@ -742,7 +930,7 @@ async def handle_message(websocket, message):
                     system_prompt=system_prompt,
                     callback=stream_callback,
                     session_id=provider_session_id,
-                    model=model
+                    model=model,
                 )
             elif provider == "droid":
                 # 혼선 방지를 위해 서버 기본 모델(DROID_MODEL)만 사용
@@ -751,7 +939,7 @@ async def handle_message(websocket, message):
                     system_prompt=system_prompt,
                     callback=stream_callback,
                     session_id=provider_session_id,
-                    model=None
+                    model=None,
                 )
             elif provider == "claude":
                 result = await claude_handler.send_message(
@@ -759,7 +947,7 @@ async def handle_message(websocket, message):
                     system_prompt=system_prompt,
                     callback=stream_callback,
                     session_id=provider_session_id,
-                    model=model
+                    model=model,
                 )
             else:
                 result = {"success": False, "error": f"Unknown provider: {provider}"}
@@ -775,29 +963,32 @@ async def handle_message(websocket, message):
             elif not retention_enabled:
                 provider_sessions.pop(provider, None)
 
-            await websocket.send(json.dumps({
-                "action": "chat_complete",
-                "data": {**result, "provider_used": provider}
-            }))
+            await websocket.send(
+                json.dumps(
+                    {"action": "chat_complete", "data": {**result, "provider_used": provider}}
+                )
+            )
 
         else:
-            await websocket.send(json.dumps({
-                "action": "error",
-                "data": {"success": False, "error": f"Unknown action: {action}"}
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "action": "error",
+                        "data": {"success": False, "error": f"Unknown action: {action}"},
+                    }
+                )
+            )
 
     except json.JSONDecodeError:
         logger.exception("Invalid JSON received")
-        await websocket.send(json.dumps({
-            "action": "error",
-            "data": {"success": False, "error": "Invalid JSON"}
-        }))
+        await websocket.send(
+            json.dumps({"action": "error", "data": {"success": False, "error": "Invalid JSON"}})
+        )
     except Exception as e:
         logger.exception("Error handling message")
-        await websocket.send(json.dumps({
-            "action": "error",
-            "data": {"success": False, "error": str(e)}
-        }))
+        await websocket.send(
+            json.dumps({"action": "error", "data": {"success": False, "error": str(e)}})
+        )
 
 
 async def websocket_handler(websocket):
@@ -809,14 +1000,18 @@ async def websocket_handler(websocket):
 
     try:
         # 환영 메시지
-        await websocket.send(json.dumps({
-            "action": "connected",
-            "data": {
-                "success": True,
-                "message": "Connected to Persona Chat WebSocket Server",
-                "login_required": LOGIN_REQUIRED
-            }
-        }))
+        await websocket.send(
+            json.dumps(
+                {
+                    "action": "connected",
+                    "data": {
+                        "success": True,
+                        "message": "Connected to Persona Chat WebSocket Server",
+                        "login_required": LOGIN_REQUIRED,
+                    },
+                }
+            )
+        )
 
         if LOGIN_REQUIRED:
             await send_auth_required(websocket)
@@ -836,6 +1031,7 @@ async def websocket_handler(websocket):
 def run_http_server():
     """HTTP 서버 실행 (정적 파일 서빙)"""
     import os
+
     # 현재 위치에서 상위 디렉토리의 web 폴더로 이동
     web_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
     os.chdir(web_dir)
@@ -843,7 +1039,7 @@ def run_http_server():
     app_config = {
         "ws_url": os.getenv("APP_PUBLIC_WS_URL", ""),
         "ws_port": int(os.getenv("WS_PORT", "8765")),
-        "login_required": LOGIN_REQUIRED
+        "login_required": LOGIN_REQUIRED,
     }
 
     class CustomHandler(SimpleHTTPRequestHandler):

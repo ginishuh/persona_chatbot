@@ -17,7 +17,7 @@ class HistoryHandler:
         """현재 설정에 맞는 window deque 생성"""
         if self.max_turns is None:
             return deque(snapshot)
-        return deque(snapshot[-self.max_turns:], maxlen=self.max_turns)
+        return deque(snapshot[-self.max_turns :], maxlen=self.max_turns)
 
     def set_max_turns(self, max_turns):
         """맥락 길이 설정 (None이면 무제한)"""
@@ -37,17 +37,11 @@ class HistoryHandler:
 
     def add_user_message(self, content):
         """사용자 메시지 추가"""
-        self._append_message({
-            "role": "user",
-            "content": content
-        })
+        self._append_message({"role": "user", "content": content})
 
     def add_assistant_message(self, content):
         """AI 응답 추가"""
-        self._append_message({
-            "role": "assistant",
-            "content": content
-        })
+        self._append_message({"role": "assistant", "content": content})
 
     def get_history(self):
         """현재 윈도우 히스토리 반환"""

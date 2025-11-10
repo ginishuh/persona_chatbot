@@ -26,10 +26,7 @@ class GeminiHandler:
             return
 
         try:
-            args = [
-                self.gemini_path,
-                "--output-format", "stream-json"
-            ]
+            args = [self.gemini_path, "--output-format", "stream-json"]
 
             # 모델 지정 (환경변수 또는 호출 파라미터)
             use_model = model or (self.default_model or None)
@@ -43,7 +40,7 @@ class GeminiHandler:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=str(self.chatbot_workspace)  # 챗봇 전용 디렉토리에서 실행
+                cwd=str(self.chatbot_workspace),  # 챗봇 전용 디렉토리에서 실행
             )
             logger.info(f"Gemini process started (cwd: {self.chatbot_workspace})")
         except Exception as e:
@@ -59,14 +56,16 @@ class GeminiHandler:
             self.process.terminate()
             await asyncio.wait_for(self.process.wait(), timeout=5.0)
             logger.info("Gemini process stopped")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self.process.kill()
             await self.process.wait()
             logger.warning("Gemini process killed (timeout)")
         finally:
             self.process = None
 
-    async def send_message(self, prompt, system_prompt=None, callback=None, session_id=None, model: str | None = None):
+    async def send_message(
+        self, prompt, system_prompt=None, callback=None, session_id=None, model: str | None = None
+    ):
         """
         Gemini에 메시지 전송 및 스트리밍 응답 수신
 
@@ -90,7 +89,7 @@ class GeminiHandler:
 
             # 프롬프트 전송
             prompt_with_newline = full_prompt + "\n"
-            self.process.stdin.write(prompt_with_newline.encode('utf-8'))
+            self.process.stdin.write(prompt_with_newline.encode("utf-8"))
             await self.process.stdin.drain()
             self.process.stdin.close()  # stdin 닫기 (중요!)
 
@@ -113,56 +112,60 @@ class GeminiHandler:
                 while True:
                     try:
                         line = await asyncio.wait_for(
-                            self.process.stdout.readline(),
-                            timeout=120.0  # 2분 타임아웃
+                            self.process.stdout.readline(), timeout=120.0  # 2분 타임아웃
                         )
 
                         if not line:
                             break
 
                         try:
-                            data = json.loads(line.decode('utf-8').strip())
+                            data = json.loads(line.decode("utf-8").strip())
 
                             # 세션 ID 저장 (있는 경우)
-                            if 'session_id' in data:
-                                current_session_id = data.get('session_id')
+                            if "session_id" in data:
+                                current_session_id = data.get("session_id")
                                 logger.info(f"Gemini Session ID: {current_session_id}")
                                 # 프론트엔드에 세션 시작 알림
                                 if callback:
-                                    await callback({
-                                        "type": "system",
-                                        "subtype": "gemini_init",
-                                        "session_id": current_session_id
-                                    })
+                                    await callback(
+                                        {
+                                            "type": "system",
+                                            "subtype": "gemini_init",
+                                            "session_id": current_session_id,
+                                        }
+                                    )
 
                             # 콜백 호출 (Claude 형식으로 변환)
                             if callback:
                                 # Gemini 형식: {"type":"message","role":"assistant","content":"...","delta":true}
-                                if data.get('type') == 'message' and data.get('role') == 'assistant':
-                                    content = data.get('content', '')
-                                    if content and data.get('delta'):
+                                if (
+                                    data.get("type") == "message"
+                                    and data.get("role") == "assistant"
+                                ):
+                                    content = data.get("content", "")
+                                    if content and data.get("delta"):
                                         # Claude 형식으로 변환: content_block_delta
                                         claude_format = {
                                             "type": "content_block_delta",
-                                            "delta": {"text": content}
+                                            "delta": {"text": content},
                                         }
                                         await callback(claude_format)
                                         assistant_message += content
 
-                        except json.JSONDecodeError as e:
+                        except json.JSONDecodeError:
                             # JSON이 아닌 일반 텍스트일 수 있음
-                            line_text = line.decode('utf-8').strip()
+                            line_text = line.decode("utf-8").strip()
                             if line_text and callback:
                                 claude_format = {
                                     "type": "content_block_delta",
-                                    "delta": {"text": line_text}
+                                    "delta": {"text": line_text},
                                 }
                                 await callback(claude_format)
                                 assistant_message += line_text
                             logger.debug(f"Non-JSON output: {line_text}")
                             continue
 
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         logger.error("Timeout waiting for Gemini response")
                         break
 
@@ -178,14 +181,10 @@ class GeminiHandler:
                 "success": True,
                 "message": assistant_message,
                 "token_info": None,
-                "session_id": current_session_id
+                "session_id": current_session_id,
             }
 
         except Exception as e:
             logger.error(f"Error sending message: {e}")
             await self.stop()
-            return {
-                "success": False,
-                "error": str(e),
-                "session_id": session_id
-            }
+            return {"success": False, "error": str(e), "session_id": session_id}

@@ -1,11 +1,17 @@
-import os
-import json
-import aiofiles
 import asyncio
+import json
+import os
 from pathlib import Path
 
+import aiofiles
+
+
 class WorkspaceHandler:
-    """세계관, 캐릭터, 상황 파일 관리 + 프리셋 관리"""
+    """세계관, 캐릭터, 상황 파일 관리 + 프리셋 관리
+
+    - 기존 MD 기반(world, situation, my_character, npc) 파일을 유지합니다.
+    - 캐릭터 템플릿(JSON)과 내 프로필(JSON)을 간단히 저장/로드하기 위한 경로를 추가합니다.
+    """
 
     def __init__(self, workspace_path="persona_data"):
         self.workspace_path = Path(workspace_path).resolve()
@@ -17,6 +23,11 @@ class WorkspaceHandler:
         self.stories_path = self.workspace_path / "stories"
         self.config_path = self.workspace_path / "config.json"
 
+        # 신규: JSON 캐릭터 템플릿/내 프로필
+        self.characters_dir = self.workspace_path / "characters"
+        self.char_templates_path = self.characters_dir / "templates"
+        self.my_profile_path = self.characters_dir / "my_profile.json"
+
         # 디렉토리 생성
         self.worlds_path.mkdir(parents=True, exist_ok=True)
         self.my_characters_path.mkdir(parents=True, exist_ok=True)
@@ -24,6 +35,8 @@ class WorkspaceHandler:
         self.situations_path.mkdir(parents=True, exist_ok=True)
         self.presets_path.mkdir(parents=True, exist_ok=True)
         self.stories_path.mkdir(parents=True, exist_ok=True)
+        self.characters_dir.mkdir(parents=True, exist_ok=True)
+        self.char_templates_path.mkdir(parents=True, exist_ok=True)
 
     def _get_base_path(self, file_type):
         """파일 타입에 따른 기본 경로 반환"""
@@ -31,7 +44,9 @@ class WorkspaceHandler:
             "world": self.worlds_path,
             "my_character": self.my_characters_path,
             "npc": self.npcs_path,
-            "situation": self.situations_path
+            "situation": self.situations_path,
+            # 신규: JSON 템플릿 디렉터리(파일 확장자만 다름)
+            "char_template": self.char_templates_path,
         }
         return paths.get(file_type)
 
@@ -42,6 +57,21 @@ class WorkspaceHandler:
             file_type: "world", "my_character", "npc", "situation"
         """
         try:
+            # 단일 파일 타입 처리(my_profile)
+            if file_type == "my_profile":
+                if self.my_profile_path.exists():
+                    return {
+                        "success": True,
+                        "files": [
+                            {
+                                "name": "my_profile",
+                                "filename": self.my_profile_path.name,
+                                "size": self.my_profile_path.stat().st_size,
+                            }
+                        ],
+                    }
+                return {"success": True, "files": []}
+
             base_path = self._get_base_path(file_type)
             if not base_path:
                 return {"success": False, "error": f"Unknown file type: {file_type}"}
@@ -49,18 +79,19 @@ class WorkspaceHandler:
             if not base_path.exists():
                 return {"success": True, "files": []}
 
-            # 모두 마크다운 파일
             files = []
-            for file_path in base_path.glob("*.md"):
-                files.append({
-                    "name": file_path.stem,  # 확장자 제외한 파일명
-                    "filename": file_path.name,
-                    "size": file_path.stat().st_size
-                })
+            # 확장자 분기: 템플릿은 .json, 나머지는 .md
+            pattern = "*.json" if file_type == "char_template" else "*.md"
+            for file_path in base_path.glob(pattern):
+                files.append(
+                    {
+                        "name": file_path.stem,  # 확장자 제외한 파일명
+                        "filename": file_path.name,
+                        "size": file_path.stat().st_size,
+                    }
+                )
 
-            # 이름순 정렬
             files.sort(key=lambda x: x["name"])
-
             return {"success": True, "files": files}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -73,13 +104,26 @@ class WorkspaceHandler:
             filename: 파일명 (확장자 포함 또는 미포함)
         """
         try:
+            # 단일 파일(my_profile)
+            if file_type == "my_profile":
+                full_path = self.my_profile_path
+                if not full_path.exists():
+                    return {"success": False, "error": "프로필이 존재하지 않습니다"}
+                async with aiofiles.open(full_path, encoding="utf-8") as f:
+                    content = await f.read()
+                return {"success": True, "content": content, "filename": full_path.name}
+
             base_path = self._get_base_path(file_type)
             if not base_path:
                 return {"success": False, "error": f"Unknown file type: {file_type}"}
 
-            # 모두 .md 확장자
-            if not filename.endswith(".md"):
-                filename = f"{filename}.md"
+            # 확장자 결정
+            if file_type == "char_template":
+                if not filename.endswith(".json"):
+                    filename = f"{filename}.json"
+            else:
+                if not filename.endswith(".md"):
+                    filename = f"{filename}.md"
 
             full_path = base_path / filename
 
@@ -90,7 +134,7 @@ class WorkspaceHandler:
             if not str(full_path.resolve()).startswith(str(base_path.resolve())):
                 return {"success": False, "error": "잘못된 경로입니다"}
 
-            async with aiofiles.open(full_path, 'r', encoding='utf-8') as f:
+            async with aiofiles.open(full_path, encoding="utf-8") as f:
                 content = await f.read()
 
             return {"success": True, "content": content, "filename": filename}
@@ -106,13 +150,26 @@ class WorkspaceHandler:
             content: 파일 내용
         """
         try:
+            # 단일 파일(my_profile)
+            if file_type == "my_profile":
+                full_path = self.my_profile_path
+                # 디렉터리 보장
+                full_path.parent.mkdir(parents=True, exist_ok=True)
+                async with aiofiles.open(full_path, "w", encoding="utf-8") as f:
+                    await f.write(content)
+                return {"success": True, "filename": full_path.name}
+
             base_path = self._get_base_path(file_type)
             if not base_path:
                 return {"success": False, "error": f"Unknown file type: {file_type}"}
 
-            # 모두 .md 확장자
-            if not filename.endswith(".md"):
-                filename = f"{filename}.md"
+            # 확장자 결정
+            if file_type == "char_template":
+                if not filename.endswith(".json"):
+                    filename = f"{filename}.json"
+            else:
+                if not filename.endswith(".md"):
+                    filename = f"{filename}.md"
 
             full_path = base_path / filename
 
@@ -120,7 +177,10 @@ class WorkspaceHandler:
             if not str(full_path.resolve()).startswith(str(base_path.resolve())):
                 return {"success": False, "error": "잘못된 경로입니다"}
 
-            async with aiofiles.open(full_path, 'w', encoding='utf-8') as f:
+            # 디렉터리 보장
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+
+            async with aiofiles.open(full_path, "w", encoding="utf-8") as f:
                 await f.write(content)
 
             return {"success": True, "filename": filename}
@@ -135,13 +195,24 @@ class WorkspaceHandler:
             filename: 파일명
         """
         try:
+            # 단일 파일(my_profile)
+            if file_type == "my_profile":
+                if self.my_profile_path.exists():
+                    self.my_profile_path.unlink()
+                    return {"success": True, "filename": self.my_profile_path.name}
+                return {"success": False, "error": "프로필이 존재하지 않습니다"}
+
             base_path = self._get_base_path(file_type)
             if not base_path:
                 return {"success": False, "error": f"Unknown file type: {file_type}"}
 
-            # 모두 .md 확장자
-            if not filename.endswith(".md"):
-                filename = f"{filename}.md"
+            # 확장자 결정
+            if file_type == "char_template":
+                if not filename.endswith(".json"):
+                    filename = f"{filename}.json"
+            else:
+                if not filename.endswith(".md"):
+                    filename = f"{filename}.md"
 
             full_path = base_path / filename
 
@@ -164,7 +235,7 @@ class WorkspaceHandler:
             if not self.config_path.exists():
                 return {"success": True, "config": {}}
 
-            async with aiofiles.open(self.config_path, 'r', encoding='utf-8') as f:
+            async with aiofiles.open(self.config_path, encoding="utf-8") as f:
                 content = await f.read()
                 config = json.loads(content)
 
@@ -175,7 +246,7 @@ class WorkspaceHandler:
     async def save_config(self, config):
         """설정 저장"""
         try:
-            async with aiofiles.open(self.config_path, 'w', encoding='utf-8') as f:
+            async with aiofiles.open(self.config_path, "w", encoding="utf-8") as f:
                 await f.write(json.dumps(config, ensure_ascii=False, indent=2))
 
             return {"success": True}
@@ -192,11 +263,13 @@ class WorkspaceHandler:
 
             files = []
             for file_path in self.presets_path.glob("*.json"):
-                files.append({
-                    "name": file_path.stem,
-                    "filename": file_path.name,
-                    "size": file_path.stat().st_size
-                })
+                files.append(
+                    {
+                        "name": file_path.stem,
+                        "filename": file_path.name,
+                        "size": file_path.stat().st_size,
+                    }
+                )
 
             files.sort(key=lambda x: x["name"])
             return {"success": True, "files": files}
@@ -220,7 +293,7 @@ class WorkspaceHandler:
             if not str(full_path.resolve()).startswith(str(self.presets_path.resolve())):
                 return {"success": False, "error": "잘못된 경로입니다"}
 
-            async with aiofiles.open(full_path, 'w', encoding='utf-8') as f:
+            async with aiofiles.open(full_path, "w", encoding="utf-8") as f:
                 await f.write(json.dumps(preset_data, ensure_ascii=False, indent=2))
 
             return {"success": True, "filename": filename}
@@ -246,7 +319,7 @@ class WorkspaceHandler:
             if not str(full_path.resolve()).startswith(str(self.presets_path.resolve())):
                 return {"success": False, "error": "잘못된 경로입니다"}
 
-            async with aiofiles.open(full_path, 'r', encoding='utf-8') as f:
+            async with aiofiles.open(full_path, encoding="utf-8") as f:
                 content = await f.read()
                 preset_data = json.loads(content)
 
@@ -298,40 +371,41 @@ class WorkspaceHandler:
             is_repo = git_dir.exists()
 
             if not is_repo:
-                return {
-                    "success": True,
-                    "is_repo": False,
-                    "message": "Git 레포지토리가 아닙니다"
-                }
+                return {"success": True, "is_repo": False, "message": "Git 레포지토리가 아닙니다"}
 
             # 로컬 변경 확인
             proc = await asyncio.create_subprocess_exec(
-                'git', 'status', '--porcelain',
+                "git",
+                "status",
+                "--porcelain",
                 cwd=str(self.workspace_path),
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             st_stdout, st_stderr = await proc.communicate()
             if proc.returncode != 0:
                 return {
                     "success": False,
                     "is_repo": True,
-                    "error": (st_stderr or st_stdout).decode()
+                    "error": (st_stderr or st_stdout).decode(),
                 }
-            status_text = (st_stdout or b'').decode()
+            status_text = (st_stdout or b"").decode()
             has_changes = len(status_text.strip()) > 0
 
             # 현재 브랜치
             branch = None
             try:
                 proc_b = await asyncio.create_subprocess_exec(
-                    'git', 'rev-parse', '--abbrev-ref', 'HEAD',
+                    "git",
+                    "rev-parse",
+                    "--abbrev-ref",
+                    "HEAD",
                     cwd=str(self.workspace_path),
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 b_out, _ = await proc_b.communicate()
-                branch = (b_out or b'').decode().strip() or None
+                branch = (b_out or b"").decode().strip() or None
             except Exception:
                 branch = None
 
@@ -339,14 +413,18 @@ class WorkspaceHandler:
             upstream = None
             try:
                 proc_u = await asyncio.create_subprocess_exec(
-                    'git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}',
+                    "git",
+                    "rev-parse",
+                    "--abbrev-ref",
+                    "--symbolic-full-name",
+                    "@{u}",
                     cwd=str(self.workspace_path),
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 u_out, u_err = await proc_u.communicate()
                 if proc_u.returncode == 0:
-                    upstream = (u_out or b'').decode().strip() or None
+                    upstream = (u_out or b"").decode().strip() or None
             except Exception:
                 upstream = None
 
@@ -357,14 +435,18 @@ class WorkspaceHandler:
                 try:
                     # @{u}...HEAD 형태: left(behind), right(ahead)
                     proc_ab = await asyncio.create_subprocess_exec(
-                        'git', 'rev-list', '--left-right', '--count', '@{u}...HEAD',
+                        "git",
+                        "rev-list",
+                        "--left-right",
+                        "--count",
+                        "@{u}...HEAD",
                         cwd=str(self.workspace_path),
                         stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
+                        stderr=asyncio.subprocess.PIPE,
                     )
                     ab_out, ab_err = await asyncio.wait_for(proc_ab.communicate(), timeout=2.0)
                     if proc_ab.returncode == 0:
-                        parts = (ab_out or b'').decode().strip().split()
+                        parts = (ab_out or b"").decode().strip().split()
                         if len(parts) >= 2:
                             behind = int(parts[0])
                             ahead = int(parts[1])
@@ -380,7 +462,7 @@ class WorkspaceHandler:
                 "behind": behind,
                 "branch": branch,
                 "upstream": upstream,
-                "status": status_text
+                "status": status_text,
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -390,10 +472,11 @@ class WorkspaceHandler:
         try:
             # git init
             proc = await asyncio.create_subprocess_exec(
-                'git', 'init',
+                "git",
+                "init",
                 cwd=str(self.workspace_path),
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await proc.communicate()
 
@@ -403,13 +486,10 @@ class WorkspaceHandler:
             # .gitignore 생성 (선택사항)
             gitignore_path = self.workspace_path / ".gitignore"
             if not gitignore_path.exists():
-                async with aiofiles.open(gitignore_path, 'w', encoding='utf-8') as f:
+                async with aiofiles.open(gitignore_path, "w", encoding="utf-8") as f:
                     await f.write("# OS files\n.DS_Store\nThumbs.db\n")
 
-            return {
-                "success": True,
-                "message": "Git 레포지토리가 초기화되었습니다"
-            }
+            return {"success": True, "message": "Git 레포지토리가 초기화되었습니다"}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -421,14 +501,17 @@ class WorkspaceHandler:
             # 기본 커밋 메시지
             if not commit_message:
                 from datetime import datetime
+
                 commit_message = f"Auto sync - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
             # git add .
             proc = await asyncio.create_subprocess_exec(
-                'git', 'add', '.',
+                "git",
+                "add",
+                ".",
                 cwd=str(self.workspace_path),
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             add_stdout, add_stderr = await proc.communicate()
 
@@ -436,23 +519,26 @@ class WorkspaceHandler:
                 # add 실패 사유를 그대로 노출해 진단 용이성 향상
                 return {
                     "success": False,
-                    "error": f"git add 실패: {(add_stderr or add_stdout).decode().strip()}"
+                    "error": f"git add 실패: {(add_stderr or add_stdout).decode().strip()}",
                 }
 
             committed = False  # 커밋 여부 추적
             # git commit
             proc = await asyncio.create_subprocess_exec(
-                'git', 'commit', '-m', commit_message,
+                "git",
+                "commit",
+                "-m",
+                commit_message,
                 cwd=str(self.workspace_path),
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             commit_stdout, commit_stderr = await proc.communicate()
 
             # 커밋할 내용이 없는 경우: git은 종료코드 1을 반환하고 메시지는 보통 stdout에 기록됨
             if proc.returncode != 0:
-                out = (commit_stdout or b'').decode()
-                err = (commit_stderr or b'').decode()
+                out = (commit_stdout or b"").decode()
+                err = (commit_stderr or b"").decode()
                 combined = f"{out}\n{err}".lower()
                 if "nothing to commit" in combined or "no changes added to commit" in combined:
                     # 호스트 모드면 푸시 트리거 생성 후 종료, 컨테이너 모드면 pull/push 진행
@@ -461,26 +547,26 @@ class WorkspaceHandler:
                         return {
                             "success": True,
                             "message": "커밋할 변경 없음 (호스트에 pull/push 위임)",
-                            "warning": "컨테이너 푸시는 비활성화되어 호스트로 위임됩니다."
+                            "warning": "컨테이너 푸시는 비활성화되어 호스트로 위임됩니다.",
                         }
                     committed = False
                 else:
-                    return {
-                        "success": False,
-                        "error": (err or out).strip()
-                    }
+                    return {"success": False, "error": (err or out).strip()}
 
             # 커밋된 경우 커밋 SHA 추출 (호스트 위임 시 트리거에 기록)
             commit_sha = None
             try:
                 proc_sha = await asyncio.create_subprocess_exec(
-                    'git', 'rev-parse', '--short', 'HEAD',
+                    "git",
+                    "rev-parse",
+                    "--short",
+                    "HEAD",
                     cwd=str(self.workspace_path),
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 sha_out, _ = await proc_sha.communicate()
-                commit_sha = (sha_out or b'').decode().strip() or None
+                commit_sha = (sha_out or b"").decode().strip() or None
             except Exception:
                 commit_sha = None
 
@@ -490,34 +576,43 @@ class WorkspaceHandler:
                 return {
                     "success": True,
                     "message": "커밋 완료 (호스트 푸시 트리거 전송)",
-                    "warning": "컨테이너 푸시는 비활성화되어 호스트로 위임됩니다."
+                    "warning": "컨테이너 푸시는 비활성화되어 호스트로 위임됩니다.",
                 }
 
             # 컨테이너 모드: 원격 변경이 있으면 pull --rebase 먼저 수행
             try:
                 proc_u = await asyncio.create_subprocess_exec(
-                    'git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}',
+                    "git",
+                    "rev-parse",
+                    "--abbrev-ref",
+                    "--symbolic-full-name",
+                    "@{u}",
                     cwd=str(self.workspace_path),
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 u_out, _ = await proc_u.communicate()
                 if proc_u.returncode == 0:
                     # 업스트림 존재 → 리베이스 pull (네트워크 호출은 사용자 동작에서만 수행)
                     proc_pull = await asyncio.create_subprocess_exec(
-                        'git', 'pull', '--rebase',
+                        "git",
+                        "pull",
+                        "--rebase",
                         cwd=str(self.workspace_path),
                         stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
+                        stderr=asyncio.subprocess.PIPE,
                     )
                     try:
-                        pull_out, pull_err = await asyncio.wait_for(proc_pull.communicate(), timeout=20.0)
-                    except asyncio.TimeoutError:
+                        pull_out, pull_err = await asyncio.wait_for(
+                            proc_pull.communicate(), timeout=20.0
+                        )
+                    except TimeoutError:
                         return {"success": False, "error": "git pull --rebase 타임아웃"}
                     if proc_pull.returncode != 0:
                         return {
                             "success": False,
-                            "error": (pull_err or pull_out).decode().strip() or 'git pull --rebase 실패'
+                            "error": (pull_err or pull_out).decode().strip()
+                            or "git pull --rebase 실패",
                         }
             except Exception:
                 # pull 시도 중 오류는 이후 push 단계에서 재확인되므로 조용히 무시
@@ -525,23 +620,24 @@ class WorkspaceHandler:
 
             # git push
             proc = await asyncio.create_subprocess_exec(
-                'git', 'push',
+                "git",
+                "push",
                 cwd=str(self.workspace_path),
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             push_stdout, push_stderr = await proc.communicate()
 
             if proc.returncode != 0:
-                stderr_text = (push_stderr or b'').decode()
-                stdout_text = (push_stdout or b'').decode()
+                stderr_text = (push_stderr or b"").decode()
+                stdout_text = (push_stdout or b"").decode()
                 combined = f"{stdout_text}\n{stderr_text}"
                 # 원격 레포 설정 안 된 경우
                 if "No configured push destination" in stderr_text or "no upstream" in stderr_text:
                     return {
                         "success": True,
                         "message": "커밋 완료 (원격 레포 미설정)",
-                        "warning": "원격 레포지토리를 설정하세요: git remote add origin <URL>"
+                        "warning": "원격 레포지토리를 설정하세요: git remote add origin <URL>",
                     }
                 return {"success": False, "error": combined.strip()}
 
@@ -549,7 +645,9 @@ class WorkspaceHandler:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _write_host_push_trigger(self, commit_message: str | None, commit_sha: str | None = None):
+    async def _write_host_push_trigger(
+        self, commit_message: str | None, commit_sha: str | None = None
+    ):
         """호스트 측 푸시를 유도하기 위한 트리거 파일 작성.
 
         컨테이너와 호스트가 공유하는 `persona_data/.sync/` 디렉토리에
@@ -557,19 +655,20 @@ class WorkspaceHandler:
         """
         try:
             from datetime import datetime
+
             sync_dir = self.workspace_path / ".sync"
             sync_dir.mkdir(parents=True, exist_ok=True)
-            ts = datetime.now().strftime('%Y%m%d%H%M%S')
+            ts = datetime.now().strftime("%Y%m%d%H%M%S")
             trigger_path = sync_dir / f"push_{ts}.json"
 
             payload = {
                 "action": "push",
                 "timestamp": ts,
                 "commit": commit_sha,
-                "message": commit_message or ""
+                "message": commit_message or "",
             }
 
-            async with aiofiles.open(trigger_path, 'w', encoding='utf-8') as f:
+            async with aiofiles.open(trigger_path, "w", encoding="utf-8") as f:
                 await f.write(json.dumps(payload, ensure_ascii=False))
 
             return str(trigger_path)
@@ -581,10 +680,11 @@ class WorkspaceHandler:
         """Git pull (원격에서 가져오기)"""
         try:
             proc = await asyncio.create_subprocess_exec(
-                'git', 'pull',
+                "git",
+                "pull",
                 cwd=str(self.workspace_path),
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await proc.communicate()
 
@@ -592,11 +692,7 @@ class WorkspaceHandler:
                 stderr_text = stderr.decode()
                 return {"success": False, "error": stderr_text}
 
-            return {
-                "success": True,
-                "message": "Pull 완료",
-                "output": stdout.decode()
-            }
+            return {"success": True, "message": "Pull 완료", "output": stdout.decode()}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -610,12 +706,14 @@ class WorkspaceHandler:
 
             files = []
             for file_path in self.stories_path.glob("*.md"):
-                files.append({
-                    "name": file_path.stem,
-                    "filename": file_path.name,
-                    "size": file_path.stat().st_size,
-                    "modified": file_path.stat().st_mtime
-                })
+                files.append(
+                    {
+                        "name": file_path.stem,
+                        "filename": file_path.name,
+                        "size": file_path.stat().st_size,
+                        "modified": file_path.stat().st_mtime,
+                    }
+                )
 
             # 수정시간 역순 정렬 (최신순)
             files.sort(key=lambda x: x["modified"], reverse=True)
@@ -643,16 +741,20 @@ class WorkspaceHandler:
 
             # 덧붙이기: 기존 파일이 있고, 새 본문이 기존의 확장이라면 delta만 추가
             if append and full_path.exists():
-                async with aiofiles.open(full_path, 'r', encoding='utf-8') as rf:
+                async with aiofiles.open(full_path, encoding="utf-8") as rf:
                     existing = await rf.read()
 
                 new_full = content or ""
                 # 정확한 접두 검사: 기존 본문이 새 본문의 앞부분이면 delta만 추가
                 if new_full.startswith(existing):
-                    delta = new_full[len(existing):]
+                    delta = new_full[len(existing) :]
                     if not delta.strip():
-                        return {"success": True, "filename": filename, "message": "변경사항이 없습니다"}
-                    async with aiofiles.open(full_path, 'a', encoding='utf-8') as af:
+                        return {
+                            "success": True,
+                            "filename": filename,
+                            "message": "변경사항이 없습니다",
+                        }
+                    async with aiofiles.open(full_path, "a", encoding="utf-8") as af:
                         await af.write(delta)
                     return {"success": True, "filename": filename, "appended": True}
 
@@ -663,7 +765,7 @@ class WorkspaceHandler:
                     stripped = to_append.lstrip()
                     idx = stripped.find("\n")
                     if idx != -1:
-                        stripped = stripped[idx+1:]
+                        stripped = stripped[idx + 1 :]
                         # 다음 빈 줄 하나 더 제거
                         if stripped.startswith("\n"):
                             stripped = stripped[1:]
@@ -673,12 +775,12 @@ class WorkspaceHandler:
                 if not existing.endswith("\n"):
                     to_append = "\n" + to_append
 
-                async with aiofiles.open(full_path, 'a', encoding='utf-8') as af:
+                async with aiofiles.open(full_path, "a", encoding="utf-8") as af:
                     await af.write(to_append)
                 return {"success": True, "filename": filename, "appended": True}
 
             # 기본: 새 파일 생성 또는 덮어쓰기
-            async with aiofiles.open(full_path, 'w', encoding='utf-8') as f:
+            async with aiofiles.open(full_path, "w", encoding="utf-8") as f:
                 await f.write(content)
 
             return {"success": True, "filename": filename, "appended": False}
@@ -704,7 +806,7 @@ class WorkspaceHandler:
             if not str(full_path.resolve()).startswith(str(self.stories_path.resolve())):
                 return {"success": False, "error": "잘못된 경로입니다"}
 
-            async with aiofiles.open(full_path, 'r', encoding='utf-8') as f:
+            async with aiofiles.open(full_path, encoding="utf-8") as f:
                 content = await f.read()
 
             return {"success": True, "content": content, "filename": filename}

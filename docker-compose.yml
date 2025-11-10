@@ -31,5 +31,6 @@ services:
       - APP_JWT_TTL=${APP_JWT_TTL:-604800}
       - APP_BIND_HOST=${APP_BIND_HOST:-0.0.0.0}
       - FACTORY_AUTO_UPDATE=0
+      - APP_GIT_SYNC_MODE=host
     stdin_open: true
     tty: true

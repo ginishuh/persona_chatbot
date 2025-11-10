@@ -56,5 +56,27 @@
 
 ## Security & Configuration Tips
 - Do not commit secrets. Copy `.env.example` to `.env` for Docker workflows; local run uses ports hardcoded in `websocket_server.py`.
-- Mode switching: `server/handlers/mode_handler.py` can rename `AGENTS.md`/`CLAUDE.md` to `*.bak` in “chatbot” mode. Make edits and commits in “coding” mode.
+- Mode switching: UI control has been removed. The backend helper `server/handlers/mode_handler.py` still exists for scripted or manual use (renames `AGENTS.md`/`CLAUDE.md` to `*.bak`). Prefer doing edits/commits in “coding” mode if you use it manually.
  - For container push, prefer SSH credentials mounted read-only (e.g., `~/.ssh:/home/node/.ssh:ro`). Host-push mode avoids credentials inside the container entirely.
+
+## Current Status & Smoke Test
+
+- As of 2025-11-10, all providers are verified working end-to-end: Claude ✅, Droid ✅, Gemini ✅ (both Docker and local runs).
+- Quick smoke test script is provided at `scripts/ws_chat_test.py` (handles login, context setup, chat stream, and completion).
+
+Examples:
+
+```bash
+# Start containers
+docker compose up --build -d
+
+# WebSocket smoke tests
+python scripts/ws_chat_test.py --provider claude --prompt "Smoke: Claude"
+python scripts/ws_chat_test.py --provider droid  --prompt "Smoke: Droid"
+python scripts/ws_chat_test.py --provider gemini --prompt "Smoke: Gemini"
+```
+
+Notes:
+- When `APP_LOGIN_PASSWORD` is set, ensure `APP_JWT_SECRET` is also set; the server enforces this at startup.
+- For Docker, prefer host-absolute auth directories in `.env`:
+  - `FACTORY_AUTH_DIR=$HOME/.factory`, `CLAUDE_AUTH_DIR=$HOME/.claude`, `GEMINI_AUTH_DIR=$HOME/.gemini`.

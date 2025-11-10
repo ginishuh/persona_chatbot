@@ -1,0 +1,48 @@
+exclude: ^persona_data/
+repos:
+  # 기본 위생 검사
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+      - id: check-merge-conflict
+
+  # Python 포맷터 (Black)
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks:
+      - id: black
+        args: ["--line-length", "100"]
+
+  # Python 린터 (Ruff: flake8 + isort 대체)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+
+  # Python 보안 스캔 (Bandit) — 초기 도입 시 실패 방지를 위해 exit-zero 사용
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.9
+    hooks:
+      - id: bandit
+        args: ["-q", "-r", "server", "scripts", "-x", "tests", "--exit-zero", "-c", "bandit.yaml"]
+        pass_filenames: false
+
+  # 시크릿 스캔 (detect-secrets) - baseline 기반으로 신규 시크릿 차단
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        name: detect-secrets (pre-commit)
+        args: ["--baseline", ".secrets.baseline", "--exclude-files", "^persona_data/"]
+
+  # 웹 자산 포맷터 (Prettier) — 선택: 필요 시 주석 해제 후 `rev`는 최신으로 조정
+  # - repo: https://github.com/pre-commit/mirrors-prettier
+  #   rev: v3.2.5
+  #   hooks:
+  #     - id: prettier
+  #       files: ^web/.*\.(js|css|html)$

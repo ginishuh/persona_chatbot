@@ -17,7 +17,6 @@ const chatInput = document.getElementById('chatInput');
 const sendChatBtn = document.getElementById('sendChatBtn');
 
 // 컨텍스트 패널 요소
-const toggleContextBtn = document.getElementById('toggleContextBtn');
 const contextContent = document.getElementById('contextContent');
 const worldInput = document.getElementById('worldInput');
 const situationInput = document.getElementById('situationInput');
@@ -29,10 +28,16 @@ const narratorMode = document.getElementById('narratorMode');
 const narratorDescription = document.getElementById('narratorDescription');
 const charactersList = document.getElementById('charactersList');
 const addCharacterBtn = document.getElementById('addCharacterBtn');
+const applyCharactersBtn = document.getElementById('applyCharactersBtn');
 const aiProvider = document.getElementById('aiProvider');
 const modelSelect = document.getElementById('modelSelect');
 const adultLevel = document.getElementById('adultLevel');
+const adultConsent = document.getElementById('adultConsent');
 const narrativeSeparation = document.getElementById('narrativeSeparation');
+const narratorDrive = document.getElementById('narratorDrive');
+const outputLevel = document.getElementById('outputLevel');
+const forceChoices = document.getElementById('forceChoices');
+const choiceCount = document.getElementById('choiceCount');
 const saveContextBtn = document.getElementById('saveContextBtn');
 const historyLengthSlider = document.getElementById('historyLengthSlider');
 const historyLengthValue = document.getElementById('historyLengthValue');
@@ -48,6 +53,9 @@ const deleteSituationBtn = document.getElementById('deleteSituationBtn');
 const myCharacterSelect = document.getElementById('myCharacterSelect');
 const saveMyCharacterBtn = document.getElementById('saveMyCharacterBtn');
 const deleteMyCharacterBtn = document.getElementById('deleteMyCharacterBtn');
+const userCharacterAgeInput = document.getElementById('userCharacterAge');
+const loadProfileJsonBtn = document.getElementById('loadProfileJsonBtn');
+const saveProfileJsonBtn = document.getElementById('saveProfileJsonBtn');
 
 // 프리셋 관리 요소
 const presetSelect = document.getElementById('presetSelect');
@@ -56,7 +64,7 @@ const loadPresetBtn = document.getElementById('loadPresetBtn');
 const deletePresetBtn = document.getElementById('deletePresetBtn');
 
 // 헤더 버튼
-const modeSwitchBtn = document.getElementById('modeSwitchBtn');
+// 모드 전환 UI 제거됨: 잔여 참조 방지를 위해 버튼 조회 삭제
 const gitSyncBtn = document.getElementById('gitSyncBtn');
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 const resetSessionsBtn = document.getElementById('resetSessionsBtn');
@@ -88,6 +96,8 @@ let characterColors = {}; // 캐릭터별 색상 매핑
 let authRequired = false;
 let isAuthenticated = false;
 let currentProvider = 'claude'; // 최근 전송에 사용한 프로바이더
+let participants = []; // 현재 대화 참여자 목록
+let pendingConsentResend = false; // 성인 동의 직후 직전 요청 재전송
 
 const AUTH_TOKEN_KEY = 'persona_auth_token';
 const AUTH_EXP_KEY = 'persona_auth_exp';
@@ -106,7 +116,7 @@ const RETRY_ACTIONS = new Set([
     'save_workspace_file', 'delete_workspace_file',
     'save_preset', 'delete_preset', 'load_preset',
     'set_history_limit',
-    'mode_switch_chatbot', 'mode_switch_coding',
+    // 모드 전환 액션 제거됨
     'git_sync', 'git_pull',
     'clear_history', 'reset_sessions'
 ]);
@@ -274,6 +284,29 @@ if (aiProvider) {
     aiProvider.addEventListener('change', () => updateModelOptions(aiProvider.value));
 }
 
+// 주도권 ↔ 선택지 연동: describe=선택지X, guide=선택지ON, direct=선택지X(강제)
+if (narratorDrive) {
+    const syncChoiceControls = () => {
+        const mode = narratorDrive.value;
+        if (!forceChoices || !choiceCount) return;
+        if (mode === 'guide') {
+            forceChoices.checked = true;
+            forceChoices.disabled = false;
+            choiceCount.disabled = false;
+        } else if (mode === 'direct') {
+            forceChoices.checked = false;
+            forceChoices.disabled = true;
+            choiceCount.disabled = true;
+        } else { // describe
+            forceChoices.checked = false;
+            forceChoices.disabled = false; // 사용자가 원하면 켤 수는 있게 둠
+            choiceCount.disabled = !forceChoices.checked;
+        }
+    };
+    narratorDrive.addEventListener('change', syncChoiceControls);
+    syncChoiceControls();
+}
+
 // 상태 업데이트
 function updateStatus(status, text) {
     statusIndicator.className = `status-indicator ${status}`;
@@ -325,7 +358,6 @@ function initializeAppData() {
     loadPresetList();
     loadStoryList();
     checkGitStatus();
-    checkModeStatus();
 }
 
 // ===== 맥락 길이 슬라이더 =====
@@ -695,6 +727,11 @@ function handleMessage(msg) {
             if (data.success) {
                 log('컨텍스트 저장 완료', 'success');
                 if (saveContextBtn) saveContextBtn.disabled = false;
+                if (pendingConsentResend && lastRequest) {
+                    const payload = { ...lastRequest };
+                    pendingConsentResend = false;
+                    sendMessage(payload, { skipRetry: true });
+                }
             }
             break;
 
@@ -749,6 +786,19 @@ function handleMessage(msg) {
                 sendMessage({ action: 'get_session_settings' });
             }
             break;
+
+        case 'consent_required': {
+            const msg = (data && data.message) || '성인 전용 기능입니다. 성인임을 확인하고 동의해야 합니다.';
+            const agree = confirm(msg + '\n\n동의하시겠습니까?');
+            if (agree) {
+                pendingConsentResend = true;
+                if (adultConsent) adultConsent.checked = true;
+                sendMessage({ action: 'set_context', adult_consent: true });
+            } else {
+                log('성인 동의가 거부되어 요청이 취소되었습니다.', 'warning');
+            }
+            break;
+        }
 
         case 'reset_sessions':
             if (data.success) {
@@ -870,29 +920,7 @@ function handleMessage(msg) {
             }
             break;
 
-        case 'mode_check':
-            handleModeStatus(data);
-            break;
-
-        case 'mode_switch_chatbot':
-            if (data.success) {
-                log(data.message, 'success');
-                alert('⚠️ 챗봇 전용 모드로 전환되었습니다.\n\n브라우저를 새로고침(F5 또는 Ctrl+R)하세요!');
-                checkModeStatus(); // 상태 재확인
-            } else {
-                log(`모드 전환 실패: ${data.error}`, 'error');
-            }
-            break;
-
-        case 'mode_switch_coding':
-            if (data.success) {
-                log(data.message, 'success');
-                alert('⚠️ 에이전트 지침이 복구되었습니다.\n\n브라우저를 새로고침(F5 또는 Ctrl+R)하세요!');
-                checkModeStatus(); // 상태 재확인
-            } else {
-                log(`모드 전환 실패: ${data.error}`, 'error');
-            }
-            break;
+        // 모드 전환 관련 메시지 제거됨
 
         case 'list_stories':
             if (data.success) {
@@ -1289,17 +1317,6 @@ function addCharacterMessage(characterName, text) {
 
 // ===== 컨텍스트 관리 =====
 
-// 컨텍스트 패널 토글
-toggleContextBtn.addEventListener('click', () => {
-    if (contextContent.style.display === 'none') {
-        contextContent.style.display = 'block';
-        toggleContextBtn.textContent = '▼';
-    } else {
-        contextContent.style.display = 'none';
-        toggleContextBtn.textContent = '▶';
-    }
-});
-
 // 진행자 활성화 토글
 narratorEnabled.addEventListener('change', () => {
     if (narratorEnabled.checked) {
@@ -1320,162 +1337,301 @@ userIsNarrator.addEventListener('change', () => {
     }
 });
 
-// 캐릭터 추가
+// 캐릭터 추가: 빠른 편집 모달로 바로 열기(설정 화면 열지 않음)
 addCharacterBtn.addEventListener('click', () => {
-    addCharacterInput();
+    openParticipantEditor(-1);
 });
 
-function addCharacterInput(name = '', description = '') {
+function addCharacterInput(name = '', gender = '', description = '', age = '') {
     const characterDiv = document.createElement('div');
     characterDiv.className = 'character-item';
 
     const header = document.createElement('div');
     header.className = 'character-item-header';
 
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.className = 'character-name-input';
-    nameInput.placeholder = '이름';
-    nameInput.value = name;
-    nameInput.style.flex = '0 1 100px';
-    nameInput.style.minWidth = '60px';
+    // 요약/버튼 영역
+    const controls = document.createElement('div');
+    controls.style.display = 'flex';
+    controls.style.gap = '0.25rem';
+    controls.style.alignItems = 'center';
+    controls.style.justifyContent = 'flex-end';
 
-    // NPC 파일 관리 버튼들
-    const fileControls = document.createElement('div');
-    fileControls.style.display = 'flex';
-    fileControls.style.gap = '0.25rem';
-    fileControls.style.alignItems = 'center';
-    fileControls.style.flex = '1';
-    fileControls.style.justifyContent = 'flex-end';
-
-    const npcSelect = document.createElement('select');
-    npcSelect.className = 'npc-select select-input';
-    npcSelect.style.fontSize = '0.7rem';
-    npcSelect.style.padding = '0.2rem 0.3rem';
-    npcSelect.style.minWidth = '70px';
-    npcSelect.style.maxWidth = '100px';
-    npcSelect.innerHTML = '<option value="">📂</option>';
-
-    const saveNPCBtn = document.createElement('button');
-    saveNPCBtn.className = 'btn btn-sm';
-    saveNPCBtn.textContent = '💾';
-    saveNPCBtn.title = 'NPC 저장';
-    saveNPCBtn.style.padding = '0.2rem 0.3rem';
-    saveNPCBtn.onclick = () => saveNPC(characterDiv);
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-sm';
+    editBtn.textContent = '✏️ 편집';
+    editBtn.title = '캐릭터 편집';
+    editBtn.onclick = () => openCharacterEditor(characterDiv);
 
     const removeBtn = document.createElement('button');
-    removeBtn.className = 'btn-remove';
+    removeBtn.className = 'btn btn-sm';
     removeBtn.textContent = '❌';
     removeBtn.title = '제거';
-    removeBtn.style.padding = '0.2rem 0.3rem';
     removeBtn.onclick = () => characterDiv.remove();
 
-    fileControls.appendChild(npcSelect);
-    fileControls.appendChild(saveNPCBtn);
-    fileControls.appendChild(removeBtn);
+    controls.appendChild(editBtn);
+    controls.appendChild(removeBtn);
+    header.appendChild(controls);
 
-    header.appendChild(nameInput);
-    header.appendChild(fileControls);
+    // 이름 필드
+    const nameRow = document.createElement('div');
+    nameRow.style.marginBottom = '0.5rem';
 
-    // NPC 선택 시 로드
-    npcSelect.onchange = () => {
-        if (npcSelect.value) {
-            window.pendingNPCItem = characterDiv;
-            loadFile('npc', npcSelect.value);
-        }
-    };
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'character-name-input character-name-field';
+    nameInput.placeholder = '이름';
+    nameInput.value = name;
+    nameInput.style.width = '100%';
+
+    nameRow.appendChild(nameInput);
+
+    // 성별 필드
+    const genderRow = document.createElement('div');
+    genderRow.style.marginBottom = '0.5rem';
+
+    const genderSelect = document.createElement('select');
+    genderSelect.className = 'character-gender-input character-gender-field';
+    genderSelect.style.width = '100%';
+    genderSelect.innerHTML = `
+        <option value="">성별</option>
+        <option value="남성">남성</option>
+        <option value="여성">여성</option>
+        <option value="기타">기타</option>
+    `;
+    genderSelect.value = gender;
+
+    genderRow.appendChild(genderSelect);
+
+    // 나이 필드
+    const ageRow = document.createElement('div');
+    ageRow.style.marginBottom = '0.5rem';
+    const ageInput = document.createElement('input');
+    ageInput.type = 'text';
+    ageInput.className = 'character-age-input character-age-field';
+    ageInput.placeholder = '나이(숫자 또는 예: 20대)';
+    ageInput.value = age;
+    ageInput.style.width = '100%';
+    ageRow.appendChild(ageInput);
 
     const descTextarea = document.createElement('textarea');
     descTextarea.className = 'character-description-input';
-    descTextarea.placeholder = '캐릭터 설명 (성격, 말투, 배경 등)';
+    descTextarea.placeholder = '성격, 말투, 배경, 외모 등...';
     descTextarea.value = description;
 
+    // 표시용 요약 바
+    const summaryBar = document.createElement('div');
+    summaryBar.className = 'character-summary';
+    summaryBar.style.fontSize = '0.9rem';
+    summaryBar.style.color = '#475569';
+    summaryBar.style.margin = '0.25rem 0 0.5rem 0';
+
+    function updateSummary() {
+        const nm = nameInput.value || '이름 없음';
+        const gd = genderSelect.value || '-';
+        const ag = ageInput.value || '-';
+        const snip = (descTextarea.value || '').slice(0, 40).replace(/\n/g, ' ');
+        summaryBar.textContent = `${nm} · ${gd} · ${ag} — ${snip}`;
+    }
+
+    // 내부 입력은 모달 전용 저장소로만 쓰고 숨김
+    nameRow.style.display = 'none';
+    genderRow.style.display = 'none';
+    ageRow.style.display = 'none';
+    descTextarea.style.display = 'none';
+
     characterDiv.appendChild(header);
+    characterDiv.appendChild(summaryBar);
+    characterDiv.appendChild(nameRow);
+    characterDiv.appendChild(genderRow);
+    characterDiv.appendChild(ageRow);
     characterDiv.appendChild(descTextarea);
     charactersList.appendChild(characterDiv);
 
-    // NPC 목록 로드
-    loadNPCList(npcSelect);
+    updateSummary();
+    // 요약은 값 변경 시 갱신되도록 이벤트 연결
+    [nameInput, genderSelect, ageInput, descTextarea].forEach(el => {
+        el.addEventListener('input', updateSummary);
+        el.addEventListener('change', updateSummary);
+    });
 }
 
-// NPC 저장
-function saveNPC(characterDiv) {
-    const nameInput = characterDiv.querySelector('.character-name-input');
-    const descInput = characterDiv.querySelector('.character-description-input');
+// 템플릿 목록 로드
+function loadCharTemplateList(selectElement) {
+    sendMessage({ action: 'list_workspace_files', file_type: 'char_template' });
+    window.pendingTemplateSelect = selectElement;
+}
 
-    const name = nameInput.value.trim();
-    const desc = descInput.value.trim();
-
-    if (!name) {
-        alert('NPC 이름을 입력하세요');
-        return;
-    }
-    if (!desc) {
-        alert('NPC 설명을 입력하세요');
-        return;
-    }
-
-    const filename = prompt('저장할 파일명:', name);
+// 캐릭터 템플릿 저장(JSON)
+// 편집 모달 내 템플릿 저장에서 사용
+function saveCharacterTemplateFromModal() {
+    const name = document.getElementById('ceName').value.trim();
+    const gender = document.getElementById('ceGender').value.trim();
+    const age = document.getElementById('ceAge').value.trim();
+    const summary = document.getElementById('ceSummary').value.trim();
+    const traits = document.getElementById('ceTraits').value.trim();
+    const goals = document.getElementById('ceGoals').value.trim();
+    const boundaries = document.getElementById('ceBoundaries').value.trim();
+    const examples = document.getElementById('ceExamples').value.trim().split('\n').filter(Boolean);
+    const tags = document.getElementById('ceTags').value.split(',').map(s => s.trim()).filter(Boolean);
+    if (!name) { alert('이름을 입력하세요'); return; }
+    const filename = prompt('템플릿 파일명(확장자 제외):', slugify(name));
     if (!filename) return;
-
-    sendMessage({
-        action: 'save_workspace_file',
-        file_type: 'npc',
-        filename: filename,
-        content: desc
-    });
-
-    // 저장 후 목록 새로고침
+    const payload = { name, role: 'npc', gender, age, summary, traits, goals, boundaries, examples, tags };
+    sendMessage({ action: 'save_workspace_file', file_type: 'char_template', filename, content: JSON.stringify(payload, null, 2) });
+    // 모달의 템플릿 목록 갱신
     setTimeout(() => {
-        const npcSelect = characterDiv.querySelector('.npc-select');
-        if (npcSelect) {
-            loadNPCList(npcSelect);
-        }
+        const sel = document.getElementById('ceTemplateSelect');
+        if (sel) loadCharTemplateList(sel);
     }, 500);
 }
 
-// NPC 목록 로드
-function loadNPCList(selectElement) {
-    sendMessage({ action: 'list_workspace_files', file_type: 'npc' });
-    window.pendingNPCSelect = selectElement;
+function slugify(str) {
+    return (str || '')
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9\-]/g, '')
+        .replace(/\-+/g, '-')
+        .replace(/^\-+|\-+$/g, '') || 'character';
+}
+
+function composeDescription(base, gender, age, traits, goals, boundaries, examples, tags) {
+    const lines = [];
+    const meta = [];
+    if (gender) meta.push(`성별: ${gender}`);
+    if (age) meta.push(`나이: ${age}`);
+    if (meta.length) lines.push(meta.join(', '));
+    if (base) lines.push(base);
+    if (traits) lines.push(`성격: ${traits}`);
+    if (goals) lines.push(`목표: ${goals}`);
+    if (boundaries) lines.push(`금지선: ${boundaries}`);
+    if (Array.isArray(examples) && examples.length) {
+        lines.push('예시 대사:');
+        examples.forEach(e => lines.push(`- ${e}`));
+    }
+    if (tags) lines.push(`태그: ${tags}`);
+    return lines.join('\n');
+}
+
+function collectCharacterFromItem(item) {
+    const name = item.querySelector('.character-name-input').value.trim();
+    const gender = item.querySelector('.character-gender-input').value.trim();
+    const age = item.querySelector('.character-age-input').value.trim();
+    const base = item.querySelector('.character-description-input').value.trim();
+    if (!name || !base) return null;
+    const traits = (item.dataset.traits || '').trim();
+    const goals = (item.dataset.goals || '').trim();
+    const boundaries = (item.dataset.boundaries || '').trim();
+    const tags = (item.dataset.tags || '').trim();
+    let examples = [];
+    try { examples = JSON.parse(item.dataset.examples || '[]'); } catch (_) { examples = []; }
+    const description = composeDescription(base, gender, age, traits, goals, boundaries, examples, tags);
+    const obj = { name, gender, description };
+    if (age) obj.age = age;
+    return obj;
 }
 
 // 컨텍스트 저장
 saveContextBtn.addEventListener('click', () => {
     if (saveContextBtn) saveContextBtn.disabled = true;
-    const characters = [];
-    const characterItems = charactersList.querySelectorAll('.character-item');
+    const characters = Array.isArray(participants) ? participants : [];
 
-    characterItems.forEach(item => {
-        const name = item.querySelector('input').value.trim();
-        const description = item.querySelector('textarea').value.trim();
-        if (name && description) {
-            characters.push({ name, description });
-        }
-    });
+    // 사용자 캐릭터 정보 수집
+    const userName = document.getElementById('userCharacterName').value.trim();
+    const userGender = document.getElementById('userCharacterGender').value.trim();
+    const userDesc = userCharacterInput.value.trim();
+    const userAge = (userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '');
+
+    // 사용자 캐릭터 정보를 하나의 문자열로 결합
+    let userCharacterData = '';
+    if (userName) {
+        userCharacterData = `이름: ${userName}`;
+        if (userGender) userCharacterData += `, 성별: ${userGender}`;
+        if (userAge) userCharacterData += `, 나이: ${userAge}`;
+        if (userDesc) userCharacterData += `\n${userDesc}`;
+    } else if (userDesc) {
+        userCharacterData = userDesc;
+    }
 
     sendMessage({
         action: 'set_context',
         world: worldInput.value.trim(),
         situation: situationInput.value.trim(),
-        user_character: userCharacterInput.value.trim(),
+        user_character: userCharacterData,
         narrator_enabled: narratorEnabled.checked,
         narrator_mode: narratorMode.value,
         narrator_description: narratorDescription.value.trim(),
         user_is_narrator: userIsNarrator.checked,
         ai_provider: aiProvider.value,
         adult_level: adultLevel.value,
+        adult_consent: adultConsent ? !!adultConsent.checked : undefined,
         narrative_separation: narrativeSeparation.checked,
-        characters: characters
+        narrator_drive: narratorDrive ? narratorDrive.value : undefined,
+        output_level: outputLevel ? outputLevel.value : undefined,
+        characters: characters,
+        choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
+        choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
     });
     setTimeout(() => { if (saveContextBtn) saveContextBtn.disabled = false; }, 5000);
 });
+
+// 캐릭터 적용 (왼쪽 패널용)
+if (applyCharactersBtn) {
+    applyCharactersBtn.addEventListener('click', () => {
+        applyCharactersBtn.disabled = true;
+        const characters = Array.isArray(participants) ? participants : [];
+
+        // 사용자 캐릭터 정보 수집
+        const userName = document.getElementById('userCharacterName').value.trim();
+        const userGender = document.getElementById('userCharacterGender').value.trim();
+        const userDesc = userCharacterInput.value.trim();
+        const userAge = (userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '');
+
+        // 사용자 캐릭터 정보를 하나의 문자열로 결합
+        let userCharacterData = '';
+        if (userName) {
+            userCharacterData = `이름: ${userName}`;
+            if (userGender) userCharacterData += `, 성별: ${userGender}`;
+            if (userAge) userCharacterData += `, 나이: ${userAge}`;
+            if (userDesc) userCharacterData += `\n${userDesc}`;
+        } else if (userDesc) {
+            userCharacterData = userDesc;
+        }
+
+        sendMessage({
+            action: 'set_context',
+            world: worldInput.value.trim(),
+            situation: situationInput.value.trim(),
+            user_character: userCharacterData,
+            narrator_enabled: narratorEnabled.checked,
+            narrator_mode: narratorMode.value,
+            narrator_description: narratorDescription.value.trim(),
+            user_is_narrator: userIsNarrator.checked,
+            ai_provider: aiProvider.value,
+            adult_level: adultLevel.value,
+            adult_consent: adultConsent ? !!adultConsent.checked : undefined,
+            narrative_separation: narrativeSeparation.checked,
+            narrator_drive: narratorDrive ? narratorDrive.value : undefined,
+            output_level: outputLevel ? outputLevel.value : undefined,
+            characters: characters,
+            choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
+            choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
+        });
+        setTimeout(() => { applyCharactersBtn.disabled = false; }, 5000);
+    });
+}
 
 // 컨텍스트 로드
 function loadContext(context) {
     worldInput.value = context.world || '';
     situationInput.value = context.situation || '';
-    userCharacterInput.value = context.user_character || '';
+
+    // 사용자 캐릭터 정보 파싱
+    const userChar = context.user_character || '';
+    userCharacterInput.value = userChar;
+    // 이름/성별 필드는 비워둠 (향후 개선 시 파싱 가능)
+    document.getElementById('userCharacterName').value = '';
+    document.getElementById('userCharacterGender').value = '';
+
     narratorEnabled.checked = context.narrator_enabled || false;
     narratorMode.value = context.narrator_mode || 'moderate';
     narratorDescription.value = context.narrator_description || '';
@@ -1483,20 +1639,21 @@ function loadContext(context) {
     aiProvider.value = context.ai_provider || 'claude';
     adultLevel.value = context.adult_level || 'explicit';
     narrativeSeparation.checked = context.narrative_separation || false;
+    if (narratorDrive) narratorDrive.value = context.narrator_drive || 'guide';
+    if (outputLevel) outputLevel.value = context.output_level || 'normal';
+    if (adultConsent) adultConsent.checked = false; // 세션 보관값은 서버 측, UI는 기본 해제
+    if (forceChoices) forceChoices.checked = (context.choice_policy || 'off') === 'require';
+    if (choiceCount) choiceCount.value = String(context.choice_count || 3);
 
     // 진행자 설정 표시/숨김
     if (narratorEnabled.checked) {
         narratorSettings.style.display = 'block';
     }
 
-    // 캐릭터 로드
-    charactersList.innerHTML = '';
-    if (context.characters && context.characters.length > 0) {
-        context.characters.forEach(char => {
-            addCharacterInput(char.name, char.description);
-        });
-    }
-    // 빈 상태로 시작 (사용자가 직접 추가)
+    // 참여자 로드 및 렌더링
+    participants = Array.isArray(context.characters) ? [...context.characters] : [];
+    renderParticipantsLeftPanel();
+    renderParticipantsManagerList();
 }
 
 // ===== 히스토리 초기화 =====
@@ -1632,21 +1789,33 @@ chatInput.addEventListener('keydown', (e) => {
 
 // ===== 탭 전환 =====
 
-// 탭 버튼들
-document.querySelectorAll('.tab-button').forEach(button => {
-    button.addEventListener('click', () => {
-        const tabName = button.dataset.tab;
+// ===== 설정 모달 =====
 
-        // 모든 탭 버튼 비활성화
-        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-        // 모든 탭 컨텐츠 숨기기
-        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+const settingsModal = document.getElementById('settingsModal');
+const settingsBtn = document.getElementById('settingsBtn');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+const settingsModalOverlay = document.querySelector('.settings-modal-overlay');
 
-        // 클릭한 탭 활성화
-        button.classList.add('active');
-        document.getElementById(`tab-${tabName}`).classList.add('active');
+// 설정 모달 열기
+if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+        settingsModal.classList.remove('hidden');
     });
-});
+}
+
+// 설정 모달 닫기
+if (closeSettingsBtn) {
+    closeSettingsBtn.addEventListener('click', () => {
+        settingsModal.classList.add('hidden');
+    });
+}
+
+// 오버레이 클릭 시 모달 닫기
+if (settingsModalOverlay) {
+    settingsModalOverlay.addEventListener('click', () => {
+        settingsModal.classList.add('hidden');
+    });
+}
 
 // ===== 파일 관리 =====
 
@@ -1656,17 +1825,17 @@ function handleFileList(data) {
         updateFileList(window.pendingFileListSelect, data.files);
         window.pendingFileListSelect = null;
         window.pendingFileListType = null;
-    } else if (window.pendingNPCSelect) {
-        // NPC 목록 업데이트
-        updateNPCList(window.pendingNPCSelect, data.files);
-        window.pendingNPCSelect = null;
+    } else if (window.pendingTemplateSelect) {
+        // 캐릭터 템플릿 목록 업데이트
+        updateTemplateList(window.pendingTemplateSelect, data.files);
+        window.pendingTemplateSelect = null;
     }
 }
 
 // NPC 목록 업데이트
-function updateNPCList(selectElement, files) {
+function updateTemplateList(selectElement, files) {
     const currentValue = selectElement.value;
-    selectElement.innerHTML = '<option value="">불러오기...</option>';
+    selectElement.innerHTML = '<option value="">📂 템플릿</option>';
 
     files.forEach(file => {
         const option = document.createElement('option');
@@ -1721,19 +1890,74 @@ function handleFileLoad(data) {
     } else if (window.pendingLoadType === 'my_character') {
         userCharacterInput.value = content;
         myCharacterSelect.value = filename.replace('.md', '');
-    } else if (window.pendingLoadType === 'npc') {
-        // NPC 로드는 addCharacterInput 시 처리
-        if (window.pendingNPCItem) {
-            const nameInput = window.pendingNPCItem.querySelector('.character-name-input');
-            const descInput = window.pendingNPCItem.querySelector('.character-description-input');
-            const npcSelect = window.pendingNPCItem.querySelector('.npc-select');
-
-            descInput.value = content;
-            if (npcSelect) {
-                npcSelect.value = filename.replace('.md', '');
+    } else if (window.pendingLoadType === 'char_template') {
+        // 템플릿(JSON) 로드 → 모달 또는 캐릭터 아이템에 반영
+        try {
+            const obj = JSON.parse(content || '{}');
+            if (window.pendingAddFromTemplate) {
+                const name = obj.name || '';
+                const gender = obj.gender || '';
+                const age = (obj.age !== undefined && obj.age !== null) ? String(obj.age) : '';
+                const summary = obj.summary || obj.description || '';
+                const traits = obj.traits || '';
+                const goals = obj.goals || '';
+                const boundaries = obj.boundaries || '';
+                const examples = Array.isArray(obj.examples) ? obj.examples : [];
+                const tags = Array.isArray(obj.tags) ? obj.tags.join(', ') : '';
+                const desc = composeDescription(summary, gender, age, traits, goals, boundaries, examples, tags);
+                participants.push({ name, gender, age, description: desc });
+                renderParticipantsLeftPanel();
+                renderParticipantsManagerList();
+            } else if (window.pendingTemplateModal) {
+                const ceName = document.getElementById('ceName');
+                const ceGender = document.getElementById('ceGender');
+                const ceAge = document.getElementById('ceAge');
+                const ceSummary = document.getElementById('ceSummary');
+                const ceTraits = document.getElementById('ceTraits');
+                const ceGoals = document.getElementById('ceGoals');
+                const ceBoundaries = document.getElementById('ceBoundaries');
+                const ceExamples = document.getElementById('ceExamples');
+                const ceTags = document.getElementById('ceTags');
+                ceName.value = obj.name || '';
+                ceGender.value = obj.gender || '';
+                ceAge.value = (obj.age !== undefined && obj.age !== null) ? String(obj.age) : '';
+                ceSummary.value = obj.summary || obj.description || '';
+                ceTraits.value = obj.traits || '';
+                ceGoals.value = obj.goals || '';
+                ceBoundaries.value = obj.boundaries || '';
+                ceExamples.value = Array.isArray(obj.examples) ? obj.examples.join('\n') : '';
+                ceTags.value = Array.isArray(obj.tags) ? obj.tags.join(', ') : '';
+            } else if (window.pendingTemplateItem) {
+                const nameInput = window.pendingTemplateItem.querySelector('.character-name-input');
+                const genderSelect = window.pendingTemplateItem.querySelector('.character-gender-input');
+                const ageInput = window.pendingTemplateItem.querySelector('.character-age-input');
+                const descInput = window.pendingTemplateItem.querySelector('.character-description-input');
+                if (obj.name) nameInput.value = obj.name;
+                if (obj.gender !== undefined) genderSelect.value = obj.gender;
+                if (obj.age !== undefined) ageInput.value = obj.age;
+                if (obj.description !== undefined) descInput.value = obj.description;
+                else if (obj.summary !== undefined) descInput.value = obj.summary;
             }
-
-            window.pendingNPCItem = null;
+        } catch (e) {
+            log('템플릿 JSON 파싱 실패', 'error');
+        }
+        window.pendingTemplateItem = null;
+        window.pendingTemplateModal = false;
+        window.pendingAddFromTemplate = false;
+    } else if (window.pendingLoadType === 'my_profile') {
+        try {
+            const obj = JSON.parse(content || '{}');
+            if (loginModal) { /* noop */ }
+            const nameEl = document.getElementById('userCharacterName');
+            const genderEl = document.getElementById('userCharacterGender');
+            const ageEl = document.getElementById('userCharacterAge');
+            if (nameEl) nameEl.value = obj.name || '';
+            if (genderEl) genderEl.value = obj.gender || '';
+            if (ageEl) ageEl.value = (obj.age !== undefined && obj.age !== null) ? String(obj.age) : '';
+            userCharacterInput.value = obj.description || obj.summary || '';
+            log('내 프로필을 불러왔습니다.', 'success');
+        } catch (e) {
+            log('내 프로필 JSON 파싱 실패', 'error');
         }
     }
 }
@@ -1841,6 +2065,295 @@ deleteMyCharacterBtn.addEventListener('click', () => {
     deleteFile('my_character', myCharacterSelect);
 });
 
+// 내 프로필(JSON) 저장/불러오기
+if (saveProfileJsonBtn) {
+    saveProfileJsonBtn.addEventListener('click', () => {
+        const name = document.getElementById('userCharacterName').value.trim();
+        const gender = document.getElementById('userCharacterGender').value.trim();
+        const age = userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '';
+        const description = userCharacterInput.value.trim();
+        const payload = { name, role: 'user', gender, age, description };
+        sendMessage({
+            action: 'save_workspace_file',
+            file_type: 'my_profile',
+            filename: 'my_profile',
+            content: JSON.stringify(payload, null, 2)
+        });
+        log('내 프로필(JSON) 저장 요청', 'info');
+    });
+}
+
+if (loadProfileJsonBtn) {
+    loadProfileJsonBtn.addEventListener('click', () => {
+        window.pendingLoadType = 'my_profile';
+        sendMessage({
+            action: 'load_workspace_file',
+            file_type: 'my_profile',
+            filename: 'my_profile'
+        });
+    });
+}
+
+// ===== 캐릭터 편집 모달 =====
+
+let currentEditingCharacterItem = null;
+
+function openCharacterEditor(characterDiv) {
+    currentEditingCharacterItem = characterDiv;
+    const modal = document.getElementById('characterEditorModal');
+    const ceName = document.getElementById('ceName');
+    const ceGender = document.getElementById('ceGender');
+    const ceAge = document.getElementById('ceAge');
+    const ceSummary = document.getElementById('ceSummary');
+    const ceTraits = document.getElementById('ceTraits');
+    const ceGoals = document.getElementById('ceGoals');
+    const ceBoundaries = document.getElementById('ceBoundaries');
+    const ceExamples = document.getElementById('ceExamples');
+    const ceTags = document.getElementById('ceTags');
+    const nameInput = characterDiv.querySelector('.character-name-input');
+    const genderInput = characterDiv.querySelector('.character-gender-input');
+    const ageInput = characterDiv.querySelector('.character-age-input');
+    const descInput = characterDiv.querySelector('.character-description-input');
+
+    // 값 채우기
+    ceName.value = nameInput.value || '';
+    ceGender.value = genderInput.value || '';
+    ceAge.value = ageInput.value || '';
+    ceSummary.value = descInput.value || '';
+    ceTraits.value = characterDiv.dataset.traits || '';
+    ceGoals.value = characterDiv.dataset.goals || '';
+    ceBoundaries.value = characterDiv.dataset.boundaries || '';
+    ceExamples.value = characterDiv.dataset.examples ? JSON.parse(characterDiv.dataset.examples).join('\n') : '';
+    ceTags.value = characterDiv.dataset.tags || '';
+
+    // 템플릿 목록 갱신
+    loadCharTemplateList(document.getElementById('ceTemplateSelect'));
+
+    modal.classList.remove('hidden');
+}
+
+function closeCharacterEditor() {
+    const modal = document.getElementById('characterEditorModal');
+    modal.classList.add('hidden');
+    currentEditingCharacterItem = null;
+}
+
+function applyCharacterEditorToItem() {
+    if (!currentEditingCharacterItem) return;
+    const ceName = document.getElementById('ceName');
+    const ceGender = document.getElementById('ceGender');
+    const ceAge = document.getElementById('ceAge');
+    const ceSummary = document.getElementById('ceSummary');
+    const ceTraits = document.getElementById('ceTraits');
+    const ceGoals = document.getElementById('ceGoals');
+    const ceBoundaries = document.getElementById('ceBoundaries');
+    const ceExamples = document.getElementById('ceExamples');
+    const ceTags = document.getElementById('ceTags');
+
+    const nameInput = currentEditingCharacterItem.querySelector('.character-name-input');
+    const genderInput = currentEditingCharacterItem.querySelector('.character-gender-input');
+    const ageInput = currentEditingCharacterItem.querySelector('.character-age-input');
+    const descInput = currentEditingCharacterItem.querySelector('.character-description-input');
+
+    nameInput.value = ceName.value.trim();
+    genderInput.value = ceGender.value.trim();
+    ageInput.value = ceAge.value.trim();
+    descInput.value = ceSummary.value.trim();
+
+    // 확장 필드 저장 (dataset)
+    currentEditingCharacterItem.dataset.traits = ceTraits.value.trim();
+    currentEditingCharacterItem.dataset.goals = ceGoals.value.trim();
+    currentEditingCharacterItem.dataset.boundaries = ceBoundaries.value.trim();
+    const examplesArr = ceExamples.value.split('\n').map(s => s.trim()).filter(Boolean);
+    currentEditingCharacterItem.dataset.examples = JSON.stringify(examplesArr);
+    currentEditingCharacterItem.dataset.tags = ceTags.value.trim();
+
+    // 요약 갱신
+    const summaryBar = currentEditingCharacterItem.querySelector('.character-summary');
+    if (summaryBar) {
+        const nm = nameInput.value || '이름 없음';
+        const gd = genderInput.value || '-';
+        const ag = ageInput.value || '-';
+        const snip = (descInput.value || '').slice(0, 40).replace(/\n/g, ' ');
+        summaryBar.textContent = `${nm} · ${gd} · ${ag} — ${snip}`;
+    }
+
+    closeCharacterEditor();
+}
+
+// 모달 버튼 이벤트
+document.getElementById('ceCloseBtn')?.addEventListener('click', closeCharacterEditor);
+document.getElementById('ceCancelBtn')?.addEventListener('click', closeCharacterEditor);
+document.getElementById('ceSaveBtn')?.addEventListener('click', applyCharacterEditorToItem);
+document.getElementById('ceSaveTemplateBtn')?.addEventListener('click', saveCharacterTemplateFromModal);
+
+// 모달 템플릿 선택 시 로드
+document.getElementById('ceTemplateSelect')?.addEventListener('change', (e) => {
+    const sel = e.target;
+    if (sel.value) {
+        window.pendingLoadType = 'char_template';
+        window.pendingTemplateModal = true;
+        sendMessage({ action: 'load_workspace_file', file_type: 'char_template', filename: sel.value });
+    }
+});
+
+// ===== 참여자 관리 (전용 모달) =====
+
+function openParticipantsModal() {
+    const modal = document.getElementById('participantsModal');
+    if (!modal) return;
+    // 템플릿 목록 갱신 및 참여자 목록 렌더
+    loadCharTemplateList(document.getElementById('pmTemplateSelect'));
+    renderParticipantsManagerList();
+    modal.classList.remove('hidden');
+}
+
+function closeParticipantsModal() {
+    const modal = document.getElementById('participantsModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function renderParticipantsLeftPanel() {
+    charactersList.innerHTML = '';
+    if (!Array.isArray(participants) || participants.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'placeholder';
+        p.textContent = '현재 참여자가 없습니다. “참여자 추가”를 눌러 추가하세요.';
+        charactersList.appendChild(p);
+        return;
+    }
+    participants.forEach((c, idx) => {
+        const row = document.createElement('div');
+        row.className = 'character-chip';
+        row.style.padding = '6px 8px';
+        row.style.marginBottom = '6px';
+        row.style.border = '1px solid #e8ecef';
+        row.style.borderRadius = '8px';
+        row.style.background = '#fff';
+        const nm = c.name || '이름 없음';
+        const gd = c.gender || '-';
+        const ag = c.age || '-';
+        const snip = (c.description || '').slice(0, 40).replace(/\n/g, ' ');
+        row.textContent = `${nm} · ${gd} · ${ag} — ${snip}`;
+        charactersList.appendChild(row);
+    });
+}
+
+function renderParticipantsManagerList() {
+    const wrap = document.getElementById('participantsManagerList');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!Array.isArray(participants) || participants.length === 0) {
+        wrap.innerHTML = '<p class="placeholder">참여자가 없습니다.</p>';
+        return;
+    }
+    participants.forEach((c, idx) => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '0.5rem';
+        row.style.margin = '4px 0';
+        const info = document.createElement('div');
+        info.style.flex = '1';
+        info.textContent = `${c.name || '이름 없음'} · ${c.gender || '-'} · ${c.age || '-'} — ${(c.description||'').slice(0,40).replace(/\n/g,' ')}`;
+        const edit = document.createElement('button');
+        edit.className = 'btn btn-sm';
+        edit.textContent = '✏️ 편집';
+        edit.onclick = () => openParticipantEditor(idx);
+        const del = document.createElement('button');
+        del.className = 'btn btn-sm btn-remove';
+        del.textContent = '🗑️';
+        del.onclick = () => { participants.splice(idx,1); renderParticipantsLeftPanel(); renderParticipantsManagerList(); };
+        row.appendChild(info);
+        row.appendChild(edit);
+        row.appendChild(del);
+        wrap.appendChild(row);
+    });
+}
+
+function openParticipantEditor(index) {
+    // 참여자 모달이 열려 있으면 닫고(오버레이 제거) 편집 모달을 연다
+    closeParticipantsModal();
+    // 채우고 모달 오픈
+    const c = (index != null && index >=0) ? participants[index] : { name:'', gender:'', age:'', description:'', traits:'', goals:'', boundaries:'', examples:[], tags:[] };
+    const modal = document.getElementById('characterEditorModal');
+    document.getElementById('ceName').value = c.name || '';
+    document.getElementById('ceGender').value = c.gender || '';
+    document.getElementById('ceAge').value = c.age || '';
+    document.getElementById('ceSummary').value = c.description || '';
+    document.getElementById('ceTraits').value = c.traits || '';
+    document.getElementById('ceGoals').value = c.goals || '';
+    document.getElementById('ceBoundaries').value = c.boundaries || '';
+    document.getElementById('ceExamples').value = Array.isArray(c.examples)? c.examples.join('\n'): '';
+    document.getElementById('ceTags').value = Array.isArray(c.tags)? c.tags.join(', '): (c.tags || '');
+    loadCharTemplateList(document.getElementById('ceTemplateSelect'));
+    modal.classList.remove('hidden');
+    // 저장 핸들러 재바인딩
+    const saveBtn = document.getElementById('ceSaveBtn');
+    saveBtn.onclick = () => {
+        const name = document.getElementById('ceName').value.trim();
+        const gender = document.getElementById('ceGender').value.trim();
+        const age = document.getElementById('ceAge').value.trim();
+        const summary = document.getElementById('ceSummary').value.trim();
+        const traits = document.getElementById('ceTraits').value.trim();
+        const goals = document.getElementById('ceGoals').value.trim();
+        const boundaries = document.getElementById('ceBoundaries').value.trim();
+        const examples = document.getElementById('ceExamples').value.split('\n').map(s=>s.trim()).filter(Boolean);
+        const tags = document.getElementById('ceTags').value.split(',').map(s=>s.trim()).filter(Boolean);
+        const desc = composeDescription(summary, gender, age, traits, goals, boundaries, examples, tags.join(', '));
+        const obj = { name, gender, age, description: desc };
+        if (index != null && index >= 0) participants[index] = obj; else participants.push(obj);
+        renderParticipantsLeftPanel();
+        renderParticipantsManagerList();
+        closeCharacterEditor();
+    };
+}
+
+// 설정 모달: 참여자 추가/템플릿 추가
+document.getElementById('participantsBtn')?.addEventListener('click', openParticipantsModal);
+document.getElementById('pmCloseBtn')?.addEventListener('click', closeParticipantsModal);
+document.querySelector('#participantsModal .settings-modal-overlay')?.addEventListener('click', closeParticipantsModal);
+document.getElementById('pmApplyBtn')?.addEventListener('click', () => {
+    // participants 를 서버 컨텍스트에 즉시 적용
+    const userName = document.getElementById('userCharacterName').value.trim();
+    const userGender = document.getElementById('userCharacterGender').value.trim();
+    const userDesc = userCharacterInput.value.trim();
+    const userAge = (userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '');
+    let userCharacterData = '';
+    if (userName) {
+        userCharacterData = `이름: ${userName}`;
+        if (userGender) userCharacterData += `, 성별: ${userGender}`;
+        if (userAge) userCharacterData += `, 나이: ${userAge}`;
+        if (userDesc) userCharacterData += `\n${userDesc}`;
+    } else if (userDesc) {
+        userCharacterData = userDesc;
+    }
+    sendMessage({
+        action: 'set_context',
+        world: worldInput.value.trim(),
+        situation: situationInput.value.trim(),
+        user_character: userCharacterData,
+        narrator_enabled: narratorEnabled.checked,
+        narrator_mode: narratorMode.value,
+        narrator_description: narratorDescription.value.trim(),
+        user_is_narrator: userIsNarrator.checked,
+        ai_provider: aiProvider.value,
+        adult_level: adultLevel.value,
+        narrative_separation: narrativeSeparation.checked,
+        characters: Array.isArray(participants) ? participants : []
+    });
+});
+
+document.getElementById('pmAddNewBtn')?.addEventListener('click', () => openParticipantEditor(-1));
+document.getElementById('pmAddFromTemplateBtn')?.addEventListener('click', () => {
+    const sel = document.getElementById('pmTemplateSelect');
+    if (sel && sel.value) {
+        window.pendingLoadType = 'char_template';
+        window.pendingAddFromTemplate = true;
+        sendMessage({ action: 'load_workspace_file', file_type: 'char_template', filename: sel.value });
+    }
+});
+
 // ===== 프리셋 관리 =====
 
 // 프리셋 목록 로드
@@ -1870,15 +2383,8 @@ function savePreset() {
     const filename = prompt('프리셋 이름을 입력하세요:');
     if (!filename) return;
 
-    // 현재 모든 캐릭터 수집
-    const characters = [];
-    document.querySelectorAll('.character-item').forEach(item => {
-        const name = item.querySelector('.character-name-input').value;
-        const description = item.querySelector('.character-description-input').value;
-        if (name) {
-            characters.push({ name, description });
-        }
-    });
+    // 현재 참여자 수집
+    const characters = Array.isArray(participants) ? participants : [];
 
     // 전체 설정 데이터
     const preset = {
@@ -1908,13 +2414,10 @@ function applyPreset(preset) {
     situationInput.value = preset.situation || '';
     userCharacterInput.value = preset.user_character || '';
 
-    // 캐릭터 초기화 및 로드
-    charactersList.innerHTML = '';
-    if (preset.characters && preset.characters.length > 0) {
-        preset.characters.forEach(char => {
-            addCharacterInput(char.name, char.description);
-        });
-    }
+    // 참여자 초기화 및 로드
+    participants = Array.isArray(preset.characters) ? [...preset.characters] : [];
+    renderParticipantsLeftPanel();
+    renderParticipantsManagerList();
 
     // 진행자 설정
     narratorEnabled.checked = preset.narrator_enabled || false;
@@ -2038,66 +2541,7 @@ gitSyncBtn.addEventListener('click', () => {
     }, 100);
 });
 
-// ===== 모드 관리 (챗봇 ↔ 코딩) =====
-
-// 모드 상태 확인
-function checkModeStatus() {
-    sendMessage({ action: 'mode_check' });
-}
-
-// 모드 상태 처리
-function handleModeStatus(data) {
-    if (!data.success) {
-        modeSwitchBtn.textContent = '💬 모드';
-        modeSwitchBtn.title = '모드 확인 실패';
-        return;
-    }
-
-    const mode = data.mode;
-
-    if (mode === 'chatbot') {
-        // 챗봇 전용 모드
-        modeSwitchBtn.textContent = '💬 챗봇';
-        modeSwitchBtn.title = '현재: 챗봇 전용 모드 (클릭: 에이전트 지침 복구)';
-    } else if (mode === 'coding') {
-        // 코딩 모드
-        modeSwitchBtn.textContent = '⚙️ 코딩';
-        modeSwitchBtn.title = '현재: 코딩 모드 (클릭: 챗봇 전용 전환)';
-    } else if (mode === 'none') {
-        // 파일 없음
-        modeSwitchBtn.textContent = '💬 모드';
-        modeSwitchBtn.title = 'CLAUDE.md 파일 없음';
-    } else {
-        // 혼재 상태
-        modeSwitchBtn.textContent = '⚠️ 혼재';
-        modeSwitchBtn.title = '.md와 .md.bak가 혼재되어 있습니다';
-    }
-}
-
-// 모드 전환 버튼 클릭
-modeSwitchBtn.addEventListener('click', () => {
-    // 현재 모드 확인
-    sendMessage({ action: 'mode_check' });
-
-    // 잠시 후 실제 처리
-    setTimeout(() => {
-        const btnText = modeSwitchBtn.textContent;
-
-        if (btnText.includes('챗봇')) {
-            // 챗봇 → 코딩
-            if (confirm('에이전트 지침을 복구하시겠습니까?\n(CLAUDE.md 파일 복원)')) {
-                sendMessage({ action: 'mode_switch_coding' });
-            }
-        } else if (btnText.includes('코딩')) {
-            // 코딩 → 챗봇
-            if (confirm('챗봇 전용 모드로 전환하시겠습니까?\n(CLAUDE.md 파일 비활성화)')) {
-                sendMessage({ action: 'mode_switch_chatbot' });
-            }
-        } else {
-            alert('모드를 확인할 수 없습니다');
-        }
-    }, 100);
-});
+// (제거됨) 모드 관리 UI/로직은 더 이상 사용하지 않습니다.
 
 // ===== 서사 관리 =====
 
@@ -2226,13 +2670,232 @@ if (injectStoryBtn) {
     });
 }
 
+// ===== 햄버거 메뉴 (모바일) =====
+
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const narrativeMenuBtn = document.getElementById('narrativeMenuBtn');
+const moreMenuBtn = document.getElementById('moreMenuBtn');
+const moreMenuDropdown = document.getElementById('moreMenuDropdown');
+const mobileOverlay = document.getElementById('mobileOverlay');
+const leftPanel = document.querySelector('.left-panel');
+const rightPanel = document.querySelector('.right-panel');
+
+let currentMobilePanel = null; // 'left' or 'right' or null
+
+if (hamburgerBtn) {
+    hamburgerBtn.addEventListener('click', () => {
+        if (currentMobilePanel === 'left') {
+            // 이미 좌측 패널이 열려 있으면 닫기
+            closeMobilePanel();
+        } else {
+            // 좌측 패널 열기
+            openMobilePanel('left');
+        }
+    });
+}
+
+if (narrativeMenuBtn) {
+    narrativeMenuBtn.addEventListener('click', () => {
+        if (currentMobilePanel === 'right') {
+            // 이미 우측 패널이 열려 있으면 닫기
+            closeMobilePanel();
+        } else {
+            // 우측 패널 열기
+            openMobilePanel('right');
+        }
+    });
+}
+
+// 더보기 메뉴 토글
+if (moreMenuBtn) {
+    moreMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleMoreMenu();
+    });
+}
+
+function toggleMoreMenu() {
+    const isVisible = moreMenuDropdown.classList.contains('visible');
+    if (isVisible) {
+        closeMoreMenu();
+    } else {
+        openMoreMenu();
+    }
+}
+
+function openMoreMenu() {
+    closeMoreMenu(); // 먼저 닫기
+    moreMenuDropdown.classList.remove('hidden');
+    moreMenuDropdown.classList.add('visible');
+    moreMenuBtn.classList.add('active');
+
+    // 토큰 정보, 연결 상태, 세션 정보 동기화
+    syncMoreMenuStatus();
+}
+
+function closeMoreMenu() {
+    moreMenuDropdown.classList.remove('visible');
+    moreMenuDropdown.classList.add('hidden');
+    moreMenuBtn.classList.remove('active');
+}
+
+function syncMoreMenuStatus() {
+    // 토큰 정보
+    const tokenInfo = document.getElementById('tokenInfo');
+    const moreTokenInfo = document.getElementById('moreTokenInfo');
+    if (tokenInfo && moreTokenInfo) {
+        moreTokenInfo.textContent = tokenInfo.textContent;
+    }
+
+    // 연결 상태
+    const statusIndicator = document.getElementById('statusIndicator');
+    const moreStatusIndicator = document.getElementById('moreStatusIndicator');
+    const statusText = document.getElementById('statusText');
+    const moreStatusText = document.getElementById('moreStatusText');
+    if (statusIndicator && moreStatusIndicator) {
+        moreStatusIndicator.className = statusIndicator.className;
+    }
+    if (statusText && moreStatusText) {
+        moreStatusText.textContent = statusText.textContent;
+    }
+
+    // 세션 상태
+    const sessionBadge = document.getElementById('sessionBadge');
+    const moreSessionBadgeText = document.getElementById('moreSessionBadgeText');
+    if (sessionBadge && moreSessionBadgeText) {
+        moreSessionBadgeText.textContent = sessionBadge.textContent.replace('세션: ', '');
+        moreSessionBadgeText.className = sessionBadge.className;
+    }
+}
+
+// 더보기 메뉴 아이템 클릭 이벤트
+document.getElementById('moreGitSyncBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    document.getElementById('gitSyncBtn')?.click();
+});
+
+document.getElementById('moreSettingsBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    const settingsModal = document.getElementById('settingsModal');
+    settingsModal?.classList.remove('hidden');
+});
+
+document.getElementById('moreParticipantsBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    openParticipantsModal();
+});
+
+document.getElementById('moreClearHistoryBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    document.getElementById('clearHistoryBtn')?.click();
+});
+
+document.getElementById('moreResetSessionsBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    document.getElementById('resetSessionsBtn')?.click();
+});
+
+// 로그아웃 버튼
+document.getElementById('logoutBtn')?.addEventListener('click', () => {
+    closeMoreMenu();
+    handleLogout();
+});
+
+function handleLogout() {
+    if (confirm('로그아웃하시겠습니까?')) {
+        // WebSocket 연결 끊기
+        if (ws) {
+            ws.close();
+        }
+
+        // 로그인 상태 초기화
+        localStorage.removeItem('savedUsername');
+        localStorage.removeItem('savedPassword');
+        localStorage.removeItem('rememberMe');
+        localStorage.removeItem('autoLogin');
+
+        // 로그인 모달 표시
+        const loginModal = document.getElementById('loginModal');
+        if (loginModal) {
+            loginModal.classList.remove('hidden');
+        }
+
+        // 페이지 새로고침
+        setTimeout(() => {
+            location.reload();
+        }, 500);
+    }
+}
+
+// 문서 전체 클릭 시 더보기 메뉴 닫기
+document.addEventListener('click', (e) => {
+    if (moreMenuDropdown && !moreMenuDropdown.contains(e.target) && e.target !== moreMenuBtn) {
+        closeMoreMenu();
+    }
+});
+
+function openMobilePanel(panel) {
+    closeMobilePanel(); // 먼저 기존 패널 닫기
+
+    if (panel === 'left' && leftPanel) {
+        leftPanel.classList.add('mobile-visible');
+        currentMobilePanel = 'left';
+        if (hamburgerBtn) {
+            hamburgerBtn.classList.add('active');
+        }
+    } else if (panel === 'right' && rightPanel) {
+        rightPanel.classList.add('mobile-visible');
+        currentMobilePanel = 'right';
+        if (narrativeMenuBtn) {
+            narrativeMenuBtn.classList.add('active');
+        }
+    }
+
+    if (mobileOverlay) {
+        mobileOverlay.classList.add('active');
+    }
+}
+
+function closeMobilePanel() {
+    if (leftPanel) {
+        leftPanel.classList.remove('mobile-visible');
+    }
+    if (rightPanel) {
+        rightPanel.classList.remove('mobile-visible');
+    }
+    if (mobileOverlay) {
+        mobileOverlay.classList.remove('active');
+    }
+    if (hamburgerBtn) {
+        hamburgerBtn.classList.remove('active');
+    }
+    if (narrativeMenuBtn) {
+        narrativeMenuBtn.classList.remove('active');
+    }
+    currentMobilePanel = null;
+}
+
+// 오버레이 클릭 시 패널 닫기
+if (mobileOverlay) {
+    mobileOverlay.addEventListener('click', closeMobilePanel);
+}
+
+// 서사 패널을 여는 기능 추가 (필요 시)
+// 예: 서사 버튼 클릭 시 우측 패널 열기
+// 이 기능은 필요에 따라 나중에 추가할 수 있습니다.
+
 // ===== 초기화 =====
 
 window.addEventListener('load', async () => {
     await loadAppConfig();
+    // UI 초기 상태 강제 정리 (헤더 가려짐 방지)
+    document.getElementById('settingsModal')?.classList.add('hidden');
+    document.getElementById('characterEditorModal')?.classList.add('hidden');
+    document.getElementById('moreMenuDropdown')?.classList.add('hidden');
+    document.getElementById('mobileOverlay')?.classList.remove('active');
+    document.getElementById('participantsModal')?.classList.add('hidden');
     connect();
 
     // 주기적 상태 확인 (10초마다)
     setInterval(checkGitStatus, 10000);
-    setInterval(checkModeStatus, 10000);
 });

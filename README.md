@@ -125,7 +125,7 @@ python server/websocket_server.py
 
 ### 맥락 길이 & 세션 관리
 
-좌측 패널 → `모드` 탭에서 제어할 수 있습니다:
+좌측 패널에서 진행자 관련 설정을 제어할 수 있습니다. (이전 버전의 ‘모드 전환(챗봇↔코딩)’ UI는 제거되었습니다.)
 
 | 기능 | 위치 | 설명 |
 | --- | --- | --- |
@@ -172,7 +172,7 @@ python server/websocket_server.py
 
 ## AI 제공자 설정
 
-좌측 패널 → `모드` 탭 → **AI 제공자**에서 선택할 수 있습니다.
+좌측 패널/설정에서 **AI 제공자**를 선택할 수 있습니다. (이전의 `모드` 탭은 제거되었습니다.)
 
 ### Claude (Anthropic)
 - **모델**: Claude Sonnet 4.5
@@ -296,6 +296,58 @@ docker compose down
 ```
 
 접속: http://localhost:9000
+
+### 로컬 훅(린트/보안) 설정
+
+커밋/푸시 전에 자동으로 포맷/린트/보안 점검을 수행합니다.
+
+1) 설치
+```
+python3 -m pip install --user pre-commit
+bash scripts/install_hooks.sh
+```
+
+2) 수동 실행
+```
+pre-commit run --all-files
+```
+
+구성 파일: `.pre-commit-config.yaml`, `pyproject.toml`, `bandit.yaml`, `.secrets.baseline` (detect-secrets)
+※ `persona_data/`는 전역 exclude로 모든 훅 검사 대상에서 제외됩니다.
+
+## CI (GitHub Actions)
+
+공개 레포지토리용 CI를 제공합니다.
+
+- 워크플로: `.github/workflows/ci.yml`
+- 단계:
+  - Pre-commit 훅 실행(블랙/러프/밴딧/시크릿)
+  - PyTest + 커버리지(타깃 모듈 ≥ 90%)
+  - 커버리지 타깃: `server.handlers.{history_handler,context_handler,mode_handler,file_handler}` (`--cov-fail-under=90`)
+  - CLI 의존이 큰 핸들러(claude/droid/gemini, git/workspace)는 단계적으로 모킹 테스트를 추가 예정입니다.
+
+
+### 상태/스모크 테스트 (2025-11-10 확인)
+
+- 현재 상태: ✅ Claude / ✅ Droid / ✅ Gemini 모두 정상 동작 확인됨 (Docker/로컬 모두).
+- 간단 스모크 테스트 스크립트: `scripts/ws_chat_test.py`
+
+실행 예시:
+
+```bash
+# 1) 컨테이너 기동
+docker compose up --build -d
+
+# 2) WebSocket 스모크 테스트 (로그인/컨텍스트/스트리밍 포함)
+python scripts/ws_chat_test.py --provider claude --prompt "테스트: Claude"
+python scripts/ws_chat_test.py --provider droid  --prompt "테스트: Droid"
+python scripts/ws_chat_test.py --provider gemini --prompt "테스트: Gemini"
+```
+
+참고:
+- 로그인을 사용한다면 `.env`의 `APP_LOGIN_USERNAME`/`APP_LOGIN_PASSWORD` 및 `APP_JWT_SECRET`가 설정되어 있어야 합니다.
+- Docker 사용 시 인증 디렉터리는 호스트 절대 경로를 권장합니다.
+  - `FACTORY_AUTH_DIR=$HOME/.factory`, `CLAUDE_AUTH_DIR=$HOME/.claude`, `GEMINI_AUTH_DIR=$HOME/.gemini`
 
 ### Docker/Git 동기화 가이드 (중요)
 
@@ -524,7 +576,7 @@ droid auth login
 
 ### 대화가 맥락을 잊어버리는 경우
 
-- 좌측 패널 → `모드` 탭 → **🧠 맥락 길이** 슬라이더를 늘리거나 `무제한` 토글 활성화
+- 좌측 패널/설정의 **🧠 맥락 길이** 슬라이더를 늘리거나 `무제한` 토글 활성화
 - **♻️ 세션 유지** 토글을 ON으로 설정 (Claude/Droid만)
 - 서버 기본값 변경: `server/handlers/history_handler.py` → `HistoryHandler(max_turns=50)`
 

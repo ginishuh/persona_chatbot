@@ -1,6 +1,7 @@
 import asyncio
 from pathlib import Path
 
+
 class GitHandler:
     def __init__(self, repo_path="STORIES"):
         self.repo_path = Path(repo_path).resolve()
@@ -11,7 +12,7 @@ class GitHandler:
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=self.repo_path
+            cwd=self.repo_path,
         )
         stdout, stderr = await process.communicate()
         return process.returncode, stdout.decode(), stderr.decode()
