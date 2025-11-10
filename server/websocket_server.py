@@ -19,6 +19,7 @@ from handlers.gemini_handler import GeminiHandler
 from handlers.git_handler import GitHandler
 from handlers.history_handler import HistoryHandler
 from handlers.mode_handler import ModeHandler
+from handlers.token_usage_handler import TokenUsageHandler
 from handlers.workspace_handler import WorkspaceHandler
 
 # 로깅 설정
@@ -56,6 +57,7 @@ context_handler = ContextHandler()
 history_handler = HistoryHandler(max_turns=30)
 workspace_handler = WorkspaceHandler(str(project_root / "persona_data"))
 mode_handler = ModeHandler(project_root=str(project_root))
+token_usage_handler = TokenUsageHandler()
 
 # 연결된 클라이언트들
 connected_clients = set()
@@ -583,6 +585,8 @@ async def handle_message(websocket, message):
             _, room = _get_room(session_obj, room_id)
             room["history"].clear()
             clear_client_sessions(websocket, room_id=room_id)
+            # 토큰 사용량도 초기화
+            token_usage_handler.clear_usage(session_key, room_id)
             await websocket.send(
                 json.dumps(
                     {
@@ -962,6 +966,34 @@ async def handle_message(websocket, message):
                     )
                 )
 
+        # 토큰 사용량 조회(채팅방 단위)
+        elif action == "get_token_usage":
+            try:
+                session_key, session_obj = _get_or_create_session(websocket, data)
+                room_id = data.get("room_id")
+                _, room = _get_room(session_obj, room_id)
+                token_summary = token_usage_handler.get_formatted_summary(
+                    session_key=session_key,
+                    room_id=room_id,
+                )
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "action": "get_token_usage",
+                            "data": {"success": True, "token_usage": token_summary},
+                        }
+                    )
+                )
+            except Exception as exc:
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "action": "get_token_usage",
+                            "data": {"success": False, "error": str(exc)},
+                        }
+                    )
+                )
+
         # 히스토리 스냅샷 반환(채팅방 단위)
         elif action == "get_history_snapshot":
             try:
@@ -995,7 +1027,7 @@ async def handle_message(websocket, message):
                 "provider", context_handler.get_context().get("ai_provider", "claude")
             )
             # 세션/채팅방 해석
-            _, sess = _get_or_create_session(websocket, data)
+            key, sess = _get_or_create_session(websocket, data)
             rid, room = _get_room(sess, data.get("room_id"))
             provider_sessions = room.setdefault("provider_sessions", {})
             retention_enabled = is_session_retention_enabled(websocket, sess)
@@ -1078,6 +1110,22 @@ async def handle_message(websocket, message):
             if result.get("success") and result.get("message"):
                 room["history"].add_assistant_message(result["message"])
 
+            # 토큰 사용량 수집 및 누적
+            token_info = result.get("token_info")
+            if token_info is not None:
+                token_usage_handler.add_usage(
+                    session_key=key,
+                    room_id=rid,
+                    provider=provider,
+                    token_info=token_info,
+                )
+
+            # 토큰 사용량 요약 생성
+            token_summary = token_usage_handler.get_formatted_summary(
+                session_key=key,
+                room_id=rid,
+            )
+
             # 최종 결과 전송
             new_session_id = result.get("session_id")
             if retention_enabled and new_session_id:
@@ -1087,7 +1135,14 @@ async def handle_message(websocket, message):
 
             await websocket.send(
                 json.dumps(
-                    {"action": "chat_complete", "data": {**result, "provider_used": provider}}
+                    {
+                        "action": "chat_complete",
+                        "data": {
+                            **result,
+                            "provider_used": provider,
+                            "token_usage": token_summary,
+                        },
+                    }
                 )
             )
 
@@ -1162,6 +1217,7 @@ def run_http_server():
         "ws_url": os.getenv("APP_PUBLIC_WS_URL", ""),
         "ws_port": int(os.getenv("WS_PORT", "8765")),
         "login_required": LOGIN_REQUIRED,
+        "show_token_usage": bool(int(os.getenv("SHOW_TOKEN_USAGE", "1"))),
     }
 
     class CustomHandler(SimpleHTTPRequestHandler):
