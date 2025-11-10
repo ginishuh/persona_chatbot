@@ -48,7 +48,9 @@ def test_user_is_narrator_and_output_less():
 def test_direct_and_describe_modes_and_desc_present():
     ctx = ContextHandler()
     # 진행자 설명 제공(229), 모드 direct(259~265)
-    ctx.set_narrator(enabled=True, mode="active", description="테스트 진행자", user_is_narrator=False)
+    ctx.set_narrator(
+        enabled=True, mode="active", description="테스트 진행자", user_is_narrator=False
+    )
     ctx.set_narrator_drive("direct")
     p1 = ctx.build_system_prompt()
     assert "테스트 진행자" in p1
