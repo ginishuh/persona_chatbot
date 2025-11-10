@@ -9,7 +9,7 @@ def test_provider_validation():
 
     try:
         ctx.set_ai_provider("unknown")
-        assert False, "ValueError expected for invalid provider"
+        raise AssertionError("ValueError expected for invalid provider")
     except ValueError:
         pass
 
@@ -54,10 +54,12 @@ def test_full_context_sections_and_separation():
     ctx.set_world("중세 판타지 왕국")
     ctx.set_situation("마을 축제의 밤")
     ctx.set_user_character("용사: 검을 든 여행자")
-    ctx.set_characters([
-        {"name": "민수", "description": "쾌활한 도적"},
-        {"name": "지은", "description": "온화한 사제"},
-    ])
+    ctx.set_characters(
+        [
+            {"name": "민수", "description": "쾌활한 도적"},
+            {"name": "지은", "description": "온화한 사제"},
+        ]
+    )
     ctx.set_narrative_separation(True)
 
     prompt = ctx.build_system_prompt("HIST")
@@ -67,4 +69,9 @@ def test_full_context_sections_and_separation():
     assert "=== 대화 상대 (사용자) ===\n용사: 검을 든 여행자" in prompt
     assert "=== 등장 캐릭터들 ===" in prompt
     assert "[민수]" in prompt and "[지은]" in prompt
-    assert prompt.endswith("대화하세요\n\n응답 예시:\n[민수]: 오 그거 좋은데? 나도 갈래!\n[지은]: 민수야, 너 숙제는 다 했어?\n[민수]: 아... 그게... 나중에 할게ㅋㅋ\n\n" ) or "대화 규칙" in prompt
+    assert (
+        prompt.endswith(
+            "대화하세요\n\n응답 예시:\n[민수]: 오 그거 좋은데? 나도 갈래!\n[지은]: 민수야, 너 숙제는 다 했어?\n[민수]: 아... 그게... 나중에 할게ㅋㅋ\n\n"
+        )
+        or "대화 규칙" in prompt
+    )

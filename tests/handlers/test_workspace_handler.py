@@ -37,7 +37,9 @@ def test_char_template_and_profile(tmp_path: Path):
     ws = WorkspaceHandler(workspace_path=str(tmp_path))
 
     # 템플릿(JSON)
-    res = run(ws.save_file("char_template", "mage", json.dumps({"role": "mage"}, ensure_ascii=False)))
+    res = run(
+        ws.save_file("char_template", "mage", json.dumps({"role": "mage"}, ensure_ascii=False))
+    )
     assert res["success"]
 
     res = run(ws.read_file("char_template", "mage"))
@@ -72,4 +74,3 @@ def test_config_and_presets(tmp_path: Path):
     res = run(ws.load_preset("first"))
     assert res["success"] and res["preset"] == data
     assert run(ws.delete_preset("first"))["success"]
-

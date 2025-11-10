@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from server.handlers.mode_handler import ModeHandler
@@ -69,9 +70,6 @@ def test_mode_none_and_mixed(tmp_path: Path):
     # switch_to_coding 스킵 케이스: md와 bak가 동시에 있을 때
     s3 = run(m.switch_to_coding())
     assert s3["success"] and any("CLAUDE.md.bak" in p for p in s3["skipped"])  # line 109
-
-
-import asyncio
 
 
 def run(coro):
