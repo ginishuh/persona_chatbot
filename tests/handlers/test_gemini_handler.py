@@ -17,7 +17,7 @@ class _FakeWriter:
 
 class _FakeReader:
     def __init__(self, lines: list[str]):
-        self._lines = [l.encode("utf-8") for l in lines]
+        self._lines = [line.encode("utf-8") for line in lines]
 
     async def readline(self) -> bytes:
         if not self._lines:

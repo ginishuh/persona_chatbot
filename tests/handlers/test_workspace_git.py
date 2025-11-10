@@ -1,6 +1,4 @@
 import asyncio
-import json
-import os
 from pathlib import Path
 
 from server.handlers.workspace_handler import WorkspaceHandler
@@ -109,6 +107,62 @@ def test_git_pull_success(monkeypatch, tmp_path: Path):
     assert res["success"] and "Pull 완료" in res["message"]
 
 
+def test_git_sync_container_mode_with_upstream_push(monkeypatch, tmp_path: Path):
+    ws = _mk_ws(tmp_path)
+    (tmp_path / ".git").mkdir()
+
+    # 컨테이너 모드 (기본), upstream 존재 + pull --rebase 성공 + push 성공
+    monkeypatch.delenv("APP_GIT_SYNC_MODE", raising=False)
+    monkeypatch.delenv("APP_DISABLE_GIT_PUSH", raising=False)
+
+    def mk_proc(code=0, out=b"", err=b""):
+        return _FakeProc(code, out, err)
+
+    async def fake_exec(*args, **kwargs):
+        cmd = list(args)
+        if len(cmd) >= 3 and cmd[1] == "add":
+            return mk_proc(0)
+        if len(cmd) >= 2 and cmd[1] == "commit":
+            return mk_proc(0, out=b"[main] ok\n")
+        if len(cmd) >= 2 and cmd[1] == "rev-parse" and "@{u}" in cmd:
+            return mk_proc(0, out=b"origin/main\n")
+        if len(cmd) >= 2 and cmd[1] == "pull" and "--rebase" in cmd:
+            return mk_proc(0, out=b"Rebase successful\n")
+        if len(cmd) >= 2 and cmd[1] == "push":
+            return mk_proc(0, out=b"pushed\n")
+        if len(cmd) >= 2 and cmd[1] == "rev-parse" and "--short" in cmd:
+            return mk_proc(0, out=b"abc123\n")
+        return mk_proc(0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    res = asyncio.run(ws.git_sync("msg"))
+    assert res["success"] and "동기화 완료" in res["message"]
+
+
+def test_git_sync_container_mode_no_upstream_no_remote(monkeypatch, tmp_path: Path):
+    ws = _mk_ws(tmp_path)
+    (tmp_path / ".git").mkdir()
+
+    def mk_proc(code=0, out=b"", err=b""):
+        return _FakeProc(code, out, err)
+
+    async def fake_exec(*args, **kwargs):
+        cmd = list(args)
+        if len(cmd) >= 3 and cmd[1] == "add":
+            return mk_proc(0)
+        if len(cmd) >= 2 and cmd[1] == "commit":
+            return mk_proc(0, out=b"[main] ok\n")
+        if len(cmd) >= 2 and cmd[1] == "rev-parse" and "@{u}" in cmd:
+            return mk_proc(1, err=b"no upstream\n")
+        if len(cmd) >= 2 and cmd[1] == "push":
+            return mk_proc(1, err=b"No configured push destination\n")
+        return mk_proc(0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    res = asyncio.run(ws.git_sync("msg"))
+    assert res["success"] and "원격 레포 미설정" in res.get("message", "")
+
+
 def test_story_save_append_load_delete(tmp_path: Path):
     ws = _mk_ws(tmp_path)
 
@@ -128,7 +182,11 @@ def test_story_save_append_load_delete(tmp_path: Path):
     res = asyncio.run(ws.save_story("story1", "# 새제목\n새본문\n", append=True))
     assert res["success"]
     content2 = asyncio.run(ws.load_story("story1"))
-    assert content2["success"] and "새제목" not in content2["content"] and "새본문" in content2["content"]
+    assert (
+        content2["success"]
+        and "새제목" not in content2["content"]
+        and "새본문" in content2["content"]
+    )
 
     # 삭제
     res = asyncio.run(ws.delete_story("story1"))

@@ -17,7 +17,7 @@ class _FakeWriter:
 
 class _FakeReader:
     def __init__(self, lines: list[str]):
-        self._lines = [l.encode("utf-8") for l in lines]
+        self._lines = [line.encode("utf-8") for line in lines]
 
     async def readline(self) -> bytes:
         if not self._lines:
@@ -108,3 +108,38 @@ def test_droid_handler_timeout(monkeypatch):
     handler = DroidHandler(droid_path="droid")
     res, _ = asyncio.run(_run(handler))
     assert res.get("success") in (True, False)
+
+
+def test_droid_handler_start_args_variants(monkeypatch):
+    captured = {}
+
+    class _P:
+        def __init__(self):
+            self.stdin = _FakeWriter()
+            self.stdout = _FakeReader([])
+            self.stderr = _FakeReader([])
+            self.returncode = None
+
+        def terminate(self):
+            self.returncode = 0
+
+        async def wait(self):
+            self.returncode = 0
+            return 0
+
+    async def fake_exec(*args, **kwargs):
+        captured["args"] = list(args)
+        return _P()
+
+    monkeypatch.setenv("DROID_SKIP_PERMISSIONS_UNSAFE", "1")
+    monkeypatch.setenv("DROID_MODEL", "glm-x")
+    monkeypatch.setenv("DROID_EXEC_STYLE", "exec")
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    h = DroidHandler(droid_path="droid")
+    # send_message가 내부에서 start를 호출함
+    asyncio.run(h.send_message("hello", system_prompt="SYS"))
+    args = [str(x) for x in captured["args"]]
+    # skip-permissions 옵션 포함 및 모델 인자 확인
+    assert "--skip-permissions-unsafe" in args
+    assert "--model" in args and "glm-x" in args

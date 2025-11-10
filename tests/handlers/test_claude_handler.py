@@ -20,7 +20,7 @@ class _FakeWriter:
 
 class _FakeReader:
     def __init__(self, lines: list[str]):
-        self._lines = [l.encode("utf-8") for l in lines]
+        self._lines = [line.encode("utf-8") for line in lines]
 
     async def readline(self) -> bytes:
         if not self._lines:
@@ -126,3 +126,38 @@ def test_claude_handler_timeout(monkeypatch):
     res, _ = asyncio.run(_run(handler))
     # timeout 발생했어도 graceful하게 success True(메시지 빈값) 혹은 False 처리
     assert res.get("success") in (True, False)
+
+
+def test_claude_handler_start_args_and_stop(monkeypatch):
+    captured = {}
+
+    class _P:
+        def __init__(self):
+            self.stdin = _FakeWriter()
+            self.stdout = _FakeReader([])
+            self.stderr = _FakeReader([])
+            self.returncode = None
+
+        def terminate(self):
+            self.returncode = 0
+
+        async def wait(self):
+            self.returncode = 0
+            return 0
+
+    async def fake_exec(*args, **kwargs):
+        captured["args"] = list(args)
+        return _P()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    h = ClaudeCodeHandler(claude_path="claude")
+    # start with explicit model and resume
+    asyncio.run(h.start(system_prompt="SYS", resume_session_id="RES1", model="c-sonnet"))
+    args = [str(x) for x in captured["args"]]
+    # 인자 포함 검증
+    assert "--model" in args and "c-sonnet" in args
+    assert "--resume" in args and "RES1" in args
+    assert "--system-prompt" in args and "SYS" in args
+    assert "--setting-sources" in args and "user,local" in args
+    # stop 경로 실행
+    asyncio.run(h.stop())

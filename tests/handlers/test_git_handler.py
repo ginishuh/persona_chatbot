@@ -41,4 +41,3 @@ def test_git_status_failure(monkeypatch, tmp_path):
     # so we test commit path error handling via _run_command
     res = asyncio.run(gh.commit_and_push("msg"))
     assert res["success"] is False
-
