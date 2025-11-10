@@ -1,6 +1,21 @@
-# 📖 Persona Chat - 멀티 캐릭터 대화 시스템
+# 📖 Persona Chat – 멀티 캐릭터 대화 시스템
 
-Claude Code와 Droid CLI, GEMINI CLI를 활용한 웹 기반 멀티 캐릭터 대화 및 서사 관리 시스템입니다.
+웹 기반 멀티 캐릭터 대화/서사 관리 시스템입니다. Claude Code, Droid CLI, Gemini CLI를 이용해 실시간 스트리밍 대화를 제공합니다.
+
+> 2025-11-10 기준: Claude ✅, Droid ✅, Gemini ✅ (로컬/Docker 모두 동작 확인)
+
+목차
+
+- 주요 기능
+- 빠른 시작(로컬)
+- 빠른 시작(Docker Compose)
+- 개발 가이드(테스트/커버리지/훅)
+- AI 제공자 설정
+- 프로젝트 구조
+- WebSocket API 개요
+- persona_data 동기화(컨테이너/호스트)
+- 환경 변수(.env)
+- 문제 해결(FAQ)
 
 ## 주요 기능
 
@@ -14,9 +29,9 @@ Claude Code와 Droid CLI, GEMINI CLI를 활용한 웹 기반 멀티 캐릭터 �
 
 ## 빠른 시작
 
-### 1. 사전 요구사항
+### 1) 사전 요구사항
 
-- Python 3.8+
+- Python 3.11+ (권장: 3.12)
 - Node.js (AI CLI 설치용)
 - AI CLI 중 최소 1개 이상 설치 및 인증
 
@@ -34,16 +49,16 @@ curl -fsSL https://app.factory.ai/cli | sh
 droid auth login
 ```
 
-### 2. 설치 및 실행
+### 2) 설치 및 실행 (로컬)
 
 ```bash
 # 프로젝트 클론
 git clone <repository-url>
 cd persona_chatbot
 
-# Python 가상환경 설정
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Python 가상환경 설정(권장 디렉터리명: .venv)
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
 # 의존성 설치
 pip install -r requirements.txt
@@ -53,10 +68,10 @@ python server/websocket_server.py
 ```
 
 서버가 시작되면:
-- **웹 UI**: http://localhost:9000
-- **WebSocket**: ws://localhost:8765
+- 웹 UI: http://localhost:9000
+- WebSocket: ws://localhost:8765
 
-### 3. persona_data 디렉토리 설정 (권장)
+### 3) persona_data 디렉토리 설정 (권장)
 
 `persona_data/` 디렉토리는 캐릭터 프리셋, 세계관, 스토리 등 민감한 데이터를 담으므로 **별도 프라이빗 저장소**로 관리하는 것을 권장합니다.
 
@@ -88,7 +103,17 @@ python server/websocket_server.py
 
 > **중요**: 서버는 `persona_data` 폴더명을 고정으로 참조합니다. 다른 이름으로 클론한 경우 반드시 폴더명을 `persona_data`로 변경하세요.
 
-> **참고**: 웹 UI의 **🔄 동기화** 버튼은 `persona_data` 레포에서 `git add/commit/push`를 수행합니다.
+> 참고: 웹 UI의 🔄 동기화 버튼은 `persona_data/` 레포에서 `git add/commit/push`를 수행합니다.
+
+### 4) 로컬 훅(린트/보안) 설치
+
+커밋/푸시 전 자동 포맷/린트/보안 점검을 위해 Pre-commit 훅 설치를 권장합니다.
+
+```bash
+pip install pre-commit
+bash scripts/install_hooks.sh
+pre-commit run --all-files  # 스모크
+```
 
 ## 사용 가이드
 
@@ -136,18 +161,20 @@ python server/websocket_server.py
 | **♻️ 세션 버튼** | 헤더 우측 | 모든 세션 ID 초기화 |
 | **🗑️ 대화 초기화** | 헤더 우측 | 대화 내용과 세션 모두 초기화 |
 
-**참고**:
-- 서사(MD) 저장은 항상 **전체 대화** 기준 (슬라이더 값과 무관)
-- Gemini는 현재 stateless만 지원 (세션 유지 불가)
-- 세션 유지 OFF 전환 시 즉시 모든 세션 초기화됨
+참고
+- 서사(MD) 저장은 항상 전체 대화 기준(슬라이더와 무관)
+- Gemini는 현재 stateless만 지원(세션 유지 불가)
+- 세션 유지 OFF 전환 시 즉시 모든 세션 초기화
 
 ### 서사 기록
 
 우측 패널에서 대화 기록을 관리합니다:
 
-- **자동 기록**: 대화가 진행되면 마크다운 형식으로 자동 저장
-- **💾 저장 버튼**: `.md` 파일로 다운로드
-- **전체 대화 보존**: 맥락 길이 설정과 무관하게 전체 내용 유지
+- 자동 기록: 대화가 진행되면 마크다운 형식으로 자동 저장
+- 저장: `.md` 파일 다운로드
+- 전체 보존: 맥락 길이 설정과 무관하게 전체 내용 유지
+
+노트: `STORIES/` 폴더는 레포에 포함되지 않으며(레거시 제거), 서버가 최초 실행 시 자동 생성됩니다. 영속 보관을 원하면 프로젝트 루트에 `STORIES/` 디렉터리를 만들어 두세요.
 
 ### persona_data 동기화
 
@@ -175,24 +202,20 @@ python server/websocket_server.py
 좌측 패널/설정에서 **AI 제공자**를 선택할 수 있습니다. (이전의 `모드` 탭은 제거되었습니다.)
 
 ### Claude (Anthropic)
-- **모델**: Claude Sonnet 4.5
-- **인증**: OAuth (`~/.claude/.credentials.json`)
-- **설치**: `npm install -g @anthropic-ai/claude-code`
-- **상태**: ✅ 완벽 지원 (세션 유지 지원)
+- 인증: OAuth (`~/.claude/...`)
+- 설치: `npm install -g @anthropic-ai/claude-code`
+- 상태: 세션 유지 지원
 
 ### Gemini (Google)
-- **모델**: Gemini 2.5 Pro
-- **인증**: OAuth (`~/.config/gemini/oauth_creds.json`) - API 키 미지원
-- **할당량**: 60 requests/min, 1,000 requests/day (무료)
-- **설치**: `npm install -g @google/gemini-cli`
-- **상태**: ✅ 완벽 지원 (stateless만)
+- 인증: OAuth (`~/.config/gemini/...`) – API 키 미사용
+- 설치: `npm install -g @google/gemini-cli`
+- 상태: stateless 동작
 
 ### Droid (Factory.ai)
-- **모델**: 사용자 설정 가능 (기본: `custom:glm-4.6`, 무료)
-- **인증**: OAuth (`~/.factory/auth.json`) 또는 API 키
-- **설치**: `curl -fsSL https://app.factory.ai/cli | sh`
-- **상태**: ✅ 완벽 지원 (세션 유지 지원)
-- **참고**: 다른 모델 사용 시 `server/handlers/droid_handler.py` 수정 필요
+- 인증: OAuth (`~/.factory/auth.json`) 또는 API 키
+- 설치: `curl -fsSL https://app.factory.ai/cli | sh`
+- 상태: 세션 유지 지원
+- 참고: 모델 변경이 필요하면 `server/handlers/droid_handler.py`에서 조정
 
 ## 프로젝트 구조
 
@@ -206,17 +229,16 @@ persona_chatbot/
 │       ├── gemini_handler.py        # Gemini CLI 통신
 │       ├── context_handler.py       # 컨텍스트 관리
 │       ├── history_handler.py       # 대화 히스토리 & 서사 생성
-│       ├── workspace_handler.py     # 파일 관리
-│       └── mode_handler.py          # 모드 상태 관리
+│       ├── workspace_handler.py     # 파일/스토리/깃 동기화
+│       └── mode_handler.py          # 모드 상태 관리(스크립트용)
 ├── web/
 │   ├── index.html                   # 3단 레이아웃 UI
 │   ├── app.js                       # 프론트엔드 로직
-│   └── style.css                    # VS Code 스타일 테마
+│   └── style.css                    # 라이트 테마 스타일
 ├── chatbot_workspace/
-│   ├── CLAUDE.md                    # 챗봇 전용 지침 (성인 콘텐츠 규칙)
-│   └── GEMINI.md                    # Gemini 전용 지침
-├── persona_data/                    # 캐릭터/세계관 데이터 (별도 레포)
-├── STORIES/                         # 서사 파일 저장
+│   ├── CLAUDE.md                    # 챗봇 전용 지침(샘플에서 복사)
+│   └── GEMINI.md                    # Gemini 전용 지침(샘플에서 복사)
+├── persona_data/                    # 캐릭터/세계관 프리셋(별도 레포 권장)
 ├── requirements.txt                 # Python 의존성
 └── README.md
 ```
@@ -278,7 +300,7 @@ persona_chatbot/
 }
 ```
 
-## Docker 실행
+## 빠른 시작(Docker Compose)
 
 Docker Compose를 사용하여 컨테이너로 실행할 수 있습니다.
 
@@ -297,23 +319,15 @@ docker compose down
 
 접속: http://localhost:9000
 
-### 로컬 훅(린트/보안) 설정
+## 개발 가이드(테스트/커버리지/훅)
 
-커밋/푸시 전에 자동으로 포맷/린트/보안 점검을 수행합니다.
-
-1) 설치
-```
-python3 -m pip install --user pre-commit
-bash scripts/install_hooks.sh
-```
-
-2) 수동 실행
-```
-pre-commit run --all-files
-```
-
-구성 파일: `.pre-commit-config.yaml`, `pyproject.toml`, `bandit.yaml`, `.secrets.baseline` (detect-secrets)
-※ `persona_data/`는 전역 exclude로 모든 훅 검사 대상에서 제외됩니다.
+- 테스트: `pytest -q`
+- 커버리지 기준: 타깃 모듈 총합 ≥ 90% (CI 동일)
+  - 타깃: `server.handlers.{history,context,mode,file}_handler`
+- 훅 설치: `pip install pre-commit && bash scripts/install_hooks.sh`
+- 수동 전체 검사: `pre-commit run --all-files`
+  - 구성: `.pre-commit-config.yaml`, `pyproject.toml`, `bandit.yaml`, `.secrets.baseline`
+  - `persona_data/`는 전역 exclude 처리
 
 ## CI (GitHub Actions)
 
@@ -321,7 +335,7 @@ pre-commit run --all-files
 
 - 워크플로: `.github/workflows/ci.yml`
 - 단계:
-  - Pre-commit 훅 실행(블랙/러프/밴딧/시크릿)
+  - Pre-commit 훅 실행(Black/Ruff/Bandit/detect-secrets)
   - PyTest + 커버리지(타깃 모듈 ≥ 90%)
   - 커버리지 타깃: `server.handlers.{history_handler,context_handler,mode_handler,file_handler}` (`--cov-fail-under=90`)
   - CLI 의존이 큰 핸들러(claude/droid/gemini, git/workspace)는 단계적으로 모킹 테스트를 추가 예정입니다.
@@ -344,16 +358,16 @@ python scripts/ws_chat_test.py --provider droid  --prompt "테스트: Droid"
 python scripts/ws_chat_test.py --provider gemini --prompt "테스트: Gemini"
 ```
 
-참고:
-- 로그인을 사용한다면 `.env`의 `APP_LOGIN_USERNAME`/`APP_LOGIN_PASSWORD` 및 `APP_JWT_SECRET`가 설정되어 있어야 합니다.
-- Docker 사용 시 인증 디렉터리는 호스트 절대 경로를 권장합니다.
+참고
+- 로그인 사용 시 `.env`의 `APP_LOGIN_PASSWORD`와 `APP_JWT_SECRET`를 함께 설정해야 합니다.
+- Docker 사용 시 인증 디렉토리는 호스트 절대 경로 권장:
   - `FACTORY_AUTH_DIR=$HOME/.factory`, `CLAUDE_AUTH_DIR=$HOME/.claude`, `GEMINI_AUTH_DIR=$HOME/.gemini`
 
 ### Docker/Git 동기화 가이드 (중요)
 
 웹 UI의 "🔄 동기화" 버튼은 `persona_data/` 디렉토리에서 `git add/commit/push`를 수행합니다. 컨테이너 내부 사용자(`node`, UID 1000)에는 전역 Git 사용자 설정이 없으므로, 다음을 참고해 주세요.
 
-#### 1) "Author identity unknown" 오류 해결
+#### 1) "Author identity unknown" 오류
 
 증상:
 
@@ -435,17 +449,17 @@ REPO_DIR="$(pwd)/persona_data" ./scripts/host_git_sync_watch.sh
 
 팁: systemd --user 유닛으로 등록하면 백그라운드에서 영속 실행할 수 있습니다.
 
-#### 3) 권한/소유권 이슈(특히 STORIES)
+#### 3) 권한/소유권 이슈
 
-`STORIES/` 디렉토리가 `root:root` 소유이고 권한이 `755`인 경우, 호스트에서 서버를 실행하면 쓰기 실패가 날 수 있습니다. 다음 명령으로 소유권을 현재 사용자로 변경하세요.
+`STORIES/`는 런타임에 생성됩니다. 호스트/컨테이너 혼용 시 소유자/권한이 달라 쓰기 문제가 생길 수 있습니다. 필요 시 다음을 참고하세요.
 
 ```bash
 sudo chown -R $(id -u):$(id -g) STORIES
 ```
 
-Docker를 사용하는 경우에도 호스트 디렉토리의 소유자가 현재 사용자(UID/GID)와 일치하는지 확인하는 것이 안전합니다. 본 프로젝트의 Compose는 컨테이너를 `${UID}:${GID}`로 실행하므로, 호스트와 UID/GID가 맞으면 권한 이슈가 줄어듭니다.
+Compose는 컨테이너를 `${UID}:${GID}`로 실행하므로, 호스트 UID/GID와 맞추면 문제를 줄일 수 있습니다.
 
-### 환경 변수 설정 (.env)
+### 환경 변수(.env)
 
 ```bash
 # AI CLI 인증 (호스트 경로 절대 경로)
@@ -458,7 +472,7 @@ FACTORY_API_KEY=your-api-key
 
 # 간단 로그인 (선택, 비워두면 인증 없음)
 APP_LOGIN_PASSWORD=yourpassword
-APP_JWT_SECRET=your-secret-key
+APP_JWT_SECRET=your-secret-key  # 로그인 사용 시 반드시 함께 설정
 
 # 토큰 수명 (리프레시 토큰 도입)
 # ACCESS 기본값: APP_JWT_TTL (없으면 7일), REFRESH 기본 30일
@@ -481,9 +495,9 @@ APP_BIND_HOST=127.0.0.1
 - 애플리케이션 코드 (`server/`, `web/`)
 
 #### 호스트에서 마운트되는 것
-- AI CLI 인증 정보 (`~/.claude`, `~/.factory`, `~/.gemini`)
-- 개발 코드 (`./server`, `./web`) - 실시간 반영
-- 데이터 (`./persona_data`, `./chatbot_workspace`, `./STORIES`)
+- AI CLI 인증 정보(`~/.claude`, `~/.factory`, `~/.gemini`)
+- 개발 코드(`./server`, `./web`) – 실시간 반영
+- 데이터(`./persona_data`, `./chatbot_workspace`, `./STORIES`) – STORIES는 런타임 생성
 
 #### Workspace 격리
 
@@ -518,6 +532,17 @@ cp chatbot_workspace/GEMINI.sample.md chatbot_workspace/GEMINI.md
 ```
 
 이 파일들은 `.gitignore`에 포함되어 로컬에서 자유롭게 수정할 수 있습니다.
+
+## 문제 해결(FAQ)
+
+- Pre-commit이 CI에서만 실패해요
+  - 로컬에서 훅이 설치되지 않았을 수 있습니다. `pip install pre-commit && pre-commit install && pre-commit run --all-files`로 확인하세요.
+- 9000/8765 포트 충돌
+  - 이미 사용 중인 프로세스를 종료하거나 Docker로 실행하세요.
+- UI 동기화 버튼이 푸시에 실패
+  - 컨테이너 모드에서는 컨테이너 내부 Git 사용자/자격증명이 필요합니다. 보안을 위해 `APP_GIT_SYNC_MODE=host` 사용을 권장합니다.
+- 로그인 활성화 후 토큰 오류
+  - `APP_LOGIN_PASSWORD` 설정 시 `APP_JWT_SECRET`가 반드시 있어야 합니다. 둘 다 `.env`에 설정하세요.
 
 ### Docker vs 로컬 실행
 
