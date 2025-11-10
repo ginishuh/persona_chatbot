@@ -1326,6 +1326,8 @@ input.input:focus, .select-input:focus, textarea:focus, select:focus {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-sm);
+    font-size: 0.875rem; /* ~14px for dense side list */
+    line-height: 1.4;
 }
 /* 입력 플레이스홀더 색상 통일(회색) */
 input::placeholder, textarea::placeholder {

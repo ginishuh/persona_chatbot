@@ -21,6 +21,7 @@ class WorkspaceHandler:
         self.situations_path = self.workspace_path / "situations"
         self.presets_path = self.workspace_path / "presets"
         self.stories_path = self.workspace_path / "stories"
+        self.rooms_path = self.workspace_path / "rooms"
         self.config_path = self.workspace_path / "config.json"
 
         # 신규: JSON 캐릭터 템플릿/내 프로필
@@ -35,6 +36,7 @@ class WorkspaceHandler:
         self.situations_path.mkdir(parents=True, exist_ok=True)
         self.presets_path.mkdir(parents=True, exist_ok=True)
         self.stories_path.mkdir(parents=True, exist_ok=True)
+        self.rooms_path.mkdir(parents=True, exist_ok=True)
         self.characters_dir.mkdir(parents=True, exist_ok=True)
         self.char_templates_path.mkdir(parents=True, exist_ok=True)
 
@@ -698,14 +700,102 @@ class WorkspaceHandler:
 
     # ===== 서사 관리 =====
 
-    async def list_stories(self):
-        """서사 목록 반환"""
+    def _sanitize_room(self, room_id: str | None) -> str:
+        """채팅방 폴더명 안전화: 영숫자, -, _ 만 허용. 빈 값은 'default'."""
+        rid = (room_id or "default").strip()
+        import re
+
+        rid = re.sub(r"[^A-Za-z0-9_\-]", "_", rid)
+        return rid or "default"
+
+    def _stories_dir(self, room_id: str | None):
+        rid = self._sanitize_room(room_id)
+        path = self.stories_path / rid
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    # ===== 채팅방 설정 저장/로드 =====
+    def _rooms_dir(self, room_id: str | None):
+        rid = self._sanitize_room(room_id)
+        path = self.rooms_path / rid
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    async def list_rooms(self):
         try:
-            if not self.stories_path.exists():
+            if not self.rooms_path.exists():
+                return {"success": True, "rooms": []}
+            rooms = []
+            for d in sorted(self.rooms_path.iterdir()):
+                if d.is_dir():
+                    cfg = d / "room.json"
+                    title = d.name
+                    mtime = d.stat().st_mtime
+                    if cfg.exists():
+                        try:
+                            async with aiofiles.open(cfg, encoding="utf-8") as f:
+                                import json as _json
+
+                                obj = _json.loads(await f.read() or "{}")
+                                title = obj.get("title") or obj.get("room_id") or title
+                        except Exception:
+                            pass
+                    rooms.append({"room_id": d.name, "title": title, "modified": mtime})
+            rooms.sort(key=lambda x: x["modified"], reverse=True)
+            return {"success": True, "rooms": rooms}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def save_room(self, room_id: str, config: dict):
+        try:
+            base = self._rooms_dir(room_id)
+            cfg = base / "room.json"
+            import json as _json
+
+            async with aiofiles.open(cfg, "w", encoding="utf-8") as f:
+                await f.write(_json.dumps(config, ensure_ascii=False, indent=2))
+            return {"success": True, "room_id": self._sanitize_room(room_id)}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def load_room(self, room_id: str):
+        try:
+            base = self._rooms_dir(room_id)
+            cfg = base / "room.json"
+            if not cfg.exists():
+                return {"success": False, "error": "room.json 이 없습니다"}
+            async with aiofiles.open(cfg, encoding="utf-8") as f:
+                import json as _json
+
+                obj = _json.loads(await f.read() or "{}")
+            return {"success": True, "room": obj, "room_id": self._sanitize_room(room_id)}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def delete_room(self, room_id: str):
+        try:
+            base = self._rooms_dir(room_id)
+            # room.json만 삭제(폴더는 유지) — 스토리 등 보존 목적
+            cfg = base / "room.json"
+            if cfg.exists():
+                cfg.unlink()
+            return {"success": True, "room_id": self._sanitize_room(room_id)}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def list_stories(self, room_id: str | None = None):
+        """서사 목록 반환
+
+        요구사항: 우측 '서사 기록' 패널을 채팅방으로 활용. 즉, 최상위 stories 목록을 그대로 노출.
+        room_id 인자는 무시하고 최상위 디렉터리를 조회합니다.
+        """
+        try:
+            base = self.stories_path
+            if not base.exists():
                 return {"success": True, "files": []}
 
             files = []
-            for file_path in self.stories_path.glob("*.md"):
+            for file_path in base.glob("*.md"):
                 files.append(
                     {
                         "name": file_path.stem,
@@ -721,7 +811,7 @@ class WorkspaceHandler:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def save_story(self, filename, content, append: bool = False):
+    async def save_story(self, filename, content, append: bool = False, room_id: str | None = None):
         """서사 저장
 
         Args:
@@ -733,7 +823,8 @@ class WorkspaceHandler:
             if not filename.endswith(".md"):
                 filename = f"{filename}.md"
 
-            full_path = self.stories_path / filename
+            base = self.stories_path
+            full_path = base / filename
 
             # 보안: 경로 탈출 방지
             if not str(full_path.resolve()).startswith(str(self.stories_path.resolve())):
@@ -780,14 +871,36 @@ class WorkspaceHandler:
                 return {"success": True, "filename": filename, "appended": True}
 
             # 기본: 새 파일 생성 또는 덮어쓰기
+            body = content or ""
+            try:
+                # front matter가 없으면 간단한 메타데이터를 추가
+                needs_header = not body.lstrip().startswith("---\n")
+                if needs_header:
+                    from datetime import datetime
+
+                    title = filename[:-3] if filename.endswith(".md") else filename
+                    rid = self._sanitize_room(title)
+                    iso = datetime.utcnow().isoformat() + "Z"
+                    header = (
+                        f"---\n"
+                        f"title: {title}\n"
+                        f"room_id: {rid}\n"
+                        f"created_at: {iso}\n"
+                        f"updated_at: {iso}\n"
+                        f"---\n\n"
+                    )
+                    body = header + body
+            except Exception:
+                pass
+
             async with aiofiles.open(full_path, "w", encoding="utf-8") as f:
-                await f.write(content)
+                await f.write(body)
 
             return {"success": True, "filename": filename, "appended": False}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def load_story(self, filename):
+    async def load_story(self, filename, room_id: str | None = None):
         """서사 로드
 
         Args:
@@ -797,7 +910,8 @@ class WorkspaceHandler:
             if not filename.endswith(".md"):
                 filename = f"{filename}.md"
 
-            full_path = self.stories_path / filename
+            base = self.stories_path
+            full_path = base / filename
 
             if not full_path.exists():
                 return {"success": False, "error": "서사 파일이 존재하지 않습니다"}
@@ -813,7 +927,7 @@ class WorkspaceHandler:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def delete_story(self, filename):
+    async def delete_story(self, filename, room_id: str | None = None):
         """서사 삭제
 
         Args:
@@ -823,7 +937,8 @@ class WorkspaceHandler:
             if not filename.endswith(".md"):
                 filename = f"{filename}.md"
 
-            full_path = self.stories_path / filename
+            base = self.stories_path
+            full_path = base / filename
 
             if not full_path.exists():
                 return {"success": False, "error": "서사 파일이 존재하지 않습니다"}
