@@ -315,6 +315,18 @@ pre-commit run --all-files
 구성 파일: `.pre-commit-config.yaml`, `pyproject.toml`, `bandit.yaml`, `.secrets.baseline` (detect-secrets)
 ※ `persona_data/`는 전역 exclude로 모든 훅 검사 대상에서 제외됩니다.
 
+## CI (GitHub Actions)
+
+공개 레포지토리용 CI를 제공합니다.
+
+- 워크플로: `.github/workflows/ci.yml`
+- 단계:
+  - Pre-commit 훅 실행(블랙/러프/밴딧/시크릿)
+  - PyTest + 커버리지(타깃 모듈 100%)
+- 커버리지 타깃: `server/handlers/{history,context,workspace,mode}_handler.py` (`--cov-fail-under=100`)
+  - CLI 의존이 큰 핸들러(claude/droid/gemini, git/file)는 별도 통합 테스트 범주로 분리합니다.
+
+
 ### 상태/스모크 테스트 (2025-11-10 확인)
 
 - 현재 상태: ✅ Claude / ✅ Droid / ✅ Gemini 모두 정상 동작 확인됨 (Docker/로컬 모두).
