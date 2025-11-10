@@ -297,6 +297,28 @@ docker compose down
 
 접속: http://localhost:9000
 
+### 상태/스모크 테스트 (2025-11-10 확인)
+
+- 현재 상태: ✅ Claude / ✅ Droid / ✅ Gemini 모두 정상 동작 확인됨 (Docker/로컬 모두).
+- 간단 스모크 테스트 스크립트: `scripts/ws_chat_test.py`
+
+실행 예시:
+
+```bash
+# 1) 컨테이너 기동
+docker compose up --build -d
+
+# 2) WebSocket 스모크 테스트 (로그인/컨텍스트/스트리밍 포함)
+python scripts/ws_chat_test.py --provider claude --prompt "테스트: Claude"
+python scripts/ws_chat_test.py --provider droid  --prompt "테스트: Droid"
+python scripts/ws_chat_test.py --provider gemini --prompt "테스트: Gemini"
+```
+
+참고:
+- 로그인을 사용한다면 `.env`의 `APP_LOGIN_USERNAME`/`APP_LOGIN_PASSWORD` 및 `APP_JWT_SECRET`가 설정되어 있어야 합니다.
+- Docker 사용 시 인증 디렉터리는 호스트 절대 경로를 권장합니다.
+  - `FACTORY_AUTH_DIR=$HOME/.factory`, `CLAUDE_AUTH_DIR=$HOME/.claude`, `GEMINI_AUTH_DIR=$HOME/.gemini`
+
 ### Docker/Git 동기화 가이드 (중요)
 
 웹 UI의 "🔄 동기화" 버튼은 `persona_data/` 디렉토리에서 `git add/commit/push`를 수행합니다. 컨테이너 내부 사용자(`node`, UID 1000)에는 전역 Git 사용자 설정이 없으므로, 다음을 참고해 주세요.
