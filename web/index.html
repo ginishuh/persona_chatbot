@@ -67,6 +67,14 @@
                             <option value="passive">소극적</option>
                         </select>
                         <textarea id="narratorDescription" placeholder="진행자 성향..." rows="2"></textarea>
+                        <div style="display:flex; gap:0.5rem; margin-top:0.5rem; align-items:center;">
+                            <label style="min-width: 80px;">주도권</label>
+                            <select id="narratorDrive" class="select-input" style="flex:1; min-width: 160px;">
+                                <option value="describe">설명형</option>
+                                <option value="guide" selected>안내형</option>
+                                <option value="direct">주도형</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -109,7 +117,7 @@
                     <p class="hint">ON 시 모델 내부 세션을 이어서 사용합니다. 모델 전환 시 자동으로 새 세션이 시작됩니다.</p>
                 </div>
 
-                <!-- 성인 콘텐츠 수위 -->
+                <!-- 성인 콘텐츠 수위 / 동의 -->
                 <div class="context-section">
                     <label>🔞 성인 콘텐츠 수위</label>
                     <select id="adultLevel" class="select-input">
@@ -117,6 +125,36 @@
                         <option value="enhanced">묘사/효과음/신음 강화</option>
                         <option value="extreme">최고 수위 (욕설, 더티토크)</option>
                     </select>
+                    <label class="checkbox-label" style="margin-top:0.5rem;">
+                        <input type="checkbox" id="adultConsent" />
+                        <span>성인임을 확인하며, 본 기능 사용에 따른 책임이 본인에게 있음을 동의합니다.</span>
+                    </label>
+                </div>
+
+                <!-- 출력량 -->
+                <div class="context-section">
+                    <label>📝 출력량</label>
+                    <select id="outputLevel" class="select-input">
+                        <option value="less">적게</option>
+                        <option value="normal" selected>보통</option>
+                        <option value="more">많이</option>
+                    </select>
+                    <p class="hint">턴당 줄 수/길이 가이드가 프롬프트에 반영됩니다.</p>
+                </div>
+
+                <!-- 선택지 강제 -->
+                <div class="context-section">
+                    <label>🎯 선택지</label>
+                    <div style="display:flex; gap:0.5rem; align-items:center;">
+                        <label class="checkbox-label" style="flex: 0 0 auto;"><input type="checkbox" id="forceChoices"> <span>선택지 강제</span></label>
+                        <select id="choiceCount" class="select-input" style="width: 120px;">
+                            <option value="2">2개</option>
+                            <option value="3" selected>3개</option>
+                            <option value="4">4개</option>
+                            <option value="5">5개</option>
+                        </select>
+                    </div>
+                    <p class="hint">응답 말미에 A)/B)/C) 형식의 선택지를 반드시 포함하도록 유도합니다.</p>
                 </div>
 
                 <!-- 대화/서술/효과음 분리 -->

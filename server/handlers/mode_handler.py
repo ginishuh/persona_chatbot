@@ -1,5 +1,5 @@
-import asyncio
 from pathlib import Path
+
 
 class ModeHandler:
     """코딩 모드 ↔ 챗봇 모드 전환 관리"""
@@ -11,7 +11,7 @@ class ModeHandler:
         self.target_dirs = [
             self.project_root,
             self.project_root / ".claude",
-            self.project_root / ".codex"
+            self.project_root / ".codex",
         ]
 
         # 대상 파일명들
@@ -52,12 +52,7 @@ class ModeHandler:
             else:
                 mode = "mixed"
 
-            return {
-                "success": True,
-                "mode": mode,
-                "md_files": md_count,
-                "bak_files": bak_count
-            }
+            return {"success": True, "mode": mode, "md_files": md_count, "bak_files": bak_count}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -89,7 +84,7 @@ class ModeHandler:
                 "mode": "chatbot",
                 "moved": moved_files,
                 "skipped": skipped_files,
-                "message": f"챗봇 전용 모드로 전환 완료 ({len(moved_files)}개 파일)"
+                "message": f"챗봇 전용 모드로 전환 완료 ({len(moved_files)}개 파일)",
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -122,7 +117,7 @@ class ModeHandler:
                 "mode": "coding",
                 "moved": moved_files,
                 "skipped": skipped_files,
-                "message": f"코딩 모드로 전환 완료 ({len(moved_files)}개 파일)"
+                "message": f"코딩 모드로 전환 완료 ({len(moved_files)}개 파일)",
             }
         except Exception as e:
             return {"success": False, "error": str(e)}

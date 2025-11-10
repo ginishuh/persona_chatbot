@@ -1,6 +1,7 @@
-import os
-import aiofiles
 from pathlib import Path
+
+import aiofiles
+
 
 class FileHandler:
     def __init__(self, base_path="STORIES"):
@@ -15,11 +16,13 @@ class FileHandler:
             files = []
             for file_path in self.base_path.rglob("*.md"):
                 relative_path = file_path.relative_to(self.base_path)
-                files.append({
-                    "path": str(relative_path),
-                    "name": file_path.name,
-                    "size": file_path.stat().st_size
-                })
+                files.append(
+                    {
+                        "path": str(relative_path),
+                        "name": file_path.name,
+                        "size": file_path.stat().st_size,
+                    }
+                )
 
             return {"success": True, "files": files}
         except Exception as e:
@@ -37,7 +40,7 @@ class FileHandler:
             if not str(full_path.resolve()).startswith(str(self.base_path.resolve())):
                 return {"success": False, "error": "잘못된 경로입니다"}
 
-            async with aiofiles.open(full_path, 'r', encoding='utf-8') as f:
+            async with aiofiles.open(full_path, encoding="utf-8") as f:
                 content = await f.read()
 
             return {"success": True, "content": content, "path": file_path}
@@ -56,7 +59,7 @@ class FileHandler:
             # 디렉토리 생성
             full_path.parent.mkdir(parents=True, exist_ok=True)
 
-            async with aiofiles.open(full_path, 'w', encoding='utf-8') as f:
+            async with aiofiles.open(full_path, "w", encoding="utf-8") as f:
                 await f.write(content)
 
             return {"success": True, "path": file_path}

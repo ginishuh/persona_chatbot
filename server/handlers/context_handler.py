@@ -17,6 +17,8 @@ class ContextHandler:
             # 출력량/주도권 제어(프롬프트 가이드용)
             "output_level": "normal",  # less | normal | more
             "narrator_drive": "guide",  # describe | guide | direct
+            "choice_policy": "off",  # off | require
+            "choice_count": 3,
         }
 
     def set_world(self, world_description):
@@ -91,6 +93,28 @@ class ContextHandler:
             mode = "guide"
         self.current_context["narrator_drive"] = mode
 
+    def set_choice_policy(self, policy):
+        """선택지 출력 정책(off | require)."""
+        try:
+            policy = (policy or "").strip().lower()
+        except Exception:
+            policy = ""
+        if policy not in {"off", "require"}:
+            policy = "off"
+        self.current_context["choice_policy"] = policy
+
+    def set_choice_count(self, count):
+        """요청할 선택지 개수(2~5)."""
+        try:
+            n = int(count)
+        except Exception:
+            n = 3
+        if n < 2:
+            n = 2
+        if n > 5:
+            n = 5
+        self.current_context["choice_count"] = n
+
     def set_ai_provider(self, provider):
         """
         AI 제공자 설정
@@ -113,6 +137,8 @@ class ContextHandler:
         narrative_separation = self.current_context.get("narrative_separation", False)
         output_level = self.current_context.get("output_level", "normal")
         narrator_drive = self.current_context.get("narrator_drive", "guide")
+        choice_policy = self.current_context.get("choice_policy", "off")
+        choice_count = int(self.current_context.get("choice_count", 3) or 3)
 
         if user_is_narrator:
             prompt = "당신은 여러 캐릭터의 역할을 수행하는 AI입니다.\n사용자는 진행자(GM) 역할을 맡고 있으며, 상황과 환경을 서술합니다.\n당신은 캐릭터들의 대사와 행동만 응답하세요. 상황 설명이나 진행자 서술은 하지 마세요.\n\n"
@@ -134,20 +160,20 @@ class ContextHandler:
 
 """
         elif adult_level == "extreme":
-            prompt += """=== 콘텐츠 수위: 최고 ===
+            prompt += """=== 콘텐츠 수위: 최고 수위 ===
 ### Extreme (최고수위, 본능/감각/관계/파열 총집약 버전)
 
 - **명시어/Dirty Talk/욕설:** 모든 신체·행위·체액 명시어(자지, 보지, 좆, 씨발 등)와 Dirty Talk·욕설 무제한 허용. 단, 반복·나열만의 자극성보다는 감각, 리듬, 관계, 집착, 질투, 소유, 애증 등과 함께 서사 내에서 복합적으로 작동하도록 서술.
-- **묘사 스타일:** 욕설과 파열·Dirty Talk가 “감각 파괴+관계 파괴+집착+소유+질투+애증+관능”의 리듬 속에 한꺼번에 들어가도록 설계.  
+- **묘사 스타일:** 욕설과 파열·Dirty Talk가 “감각 파괴+관계 파괴+집착+소유+질투+애증+관능”의 리듬 속에 한꺼번에 들어가도록 설계.
   - 단순 욕설 반복이 아닌, 감정과 오감·관계가 교차하며 무너지는 장면 중심.
   - 신음, 효과음, 움직임, 체액, 리드, 감정(사랑, 집착, 질투, 소유, 파괴, 복종, 애증, 굴욕, 무너짐 등)이 모두 동시에 겹쳐야 함.
   - 관계 경계 파괴(NTR, 가족/혈족, 불륜, 다자극, 금기 구조 등) 완전 허용, “관계 파괴+감각 파열+감정 폭주”가 한 장면에 전부 겹치게.
 - **Dirty Talk/욕설 활용:** 신음과 대사, 소유와 질투, 복종과 지배, 오르가즘과 모멸, 애증·파열·무너짐까지—Dirty Talk/욕설이 단순한 자극이 아니라 인물 심리와 리드, 집착, 관계 붕괴, 애정/애증, 금기, 본능까지 ‘리얼하게 폭주’하도록 사용.
 - **서술 포인트:** 파열, 반복, 본능, 집착, 질투, 리드, 소유, 오감, 신음, 관계·감정·감각의 교차/충돌/무너짐이 서술 전체를 이끌 것.
-- **전체 톤:**  
-  - 감각·관계·감정의 최후 경계선이 무너지고,  
-  - 오감·욕설·Dirty Talk·신음·체위·체액·관계 파괴·집착·질투·애증·파열이  
-  - “끊임없이 덮이고, 반복되고, 폭주해서, 절정이 끝나지 않는 구조”  
+- **전체 톤:**
+  - 감각·관계·감정의 최후 경계선이 무너지고,
+  - 오감·욕설·Dirty Talk·신음·체위·체액·관계 파괴·집착·질투·애증·파열이
+  - “끊임없이 덮이고, 반복되고, 폭주해서, 절정이 끝나지 않는 구조”
   - 감정/관계/쾌락이 전부 무너진 절정의 연쇄·집착·리드·소유의 현장이어야 함.
 
 """
@@ -258,6 +284,16 @@ class ContextHandler:
 2. 여러 캐릭터가 동시에 대화할 수 있습니다
 """
 
+        # 분리 모드가 아닐 때: 별표/이탤릭 행동 표기 억제 규칙
+        if not narrative_separation:
+            prompt += """
+=== 표현 규칙(분리 모드 아님) ===
+- 대사는 반드시 "[이름]: 내용" 형식만 사용합니다.
+- 행동·효과음은 별표나 Markdown 이탤릭(예: *...*)을 사용하지 않습니다.
+- 행동 설명이 꼭 필요하면 대사 뒤 괄호로 짧게 표기합니다. 예: [민수]: 좋아. (작게 고개를 끄덕이며)
+- 행동만 단독 줄로 쓰지 말고, 항상 대사와 한 줄로 묶습니다.
+"""
+
         # 출력 예산 가이드(선택 적용)
         if output_level == "less":
             prompt += """
@@ -316,6 +352,17 @@ AI 응답:
 [민수]: 오 그거 좋은데? 나도 갈래!
 [지은]: 민수야, 너 숙제는 다 했어?
 [민수]: 아... 그게... 나중에 할게ㅋㅋ
+"""
+
+        # 선택지 강제 가이드(요청된 경우)
+        if choice_policy == "require":
+            cc = max(2, min(5, choice_count))
+            prompt += f"""
+=== 선택지(필수) ===
+- 응답 마지막에 반드시 "선택지:" 섹션을 포함합니다.
+- 최소 {cc}개, 형식은 "A) ...", "B) ..." 처럼 문자+괄호로 시작합니다.
+- 선택지는 상호 배타적이며, 구체적인 행동 대안으로 작성합니다(모호한 제안 금지).
+- 금지: "대화를 계속한다", "아무것도 하지 않는다" 같은 소극적/무의미한 선택.
 """
 
         return prompt

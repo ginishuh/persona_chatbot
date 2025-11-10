@@ -446,6 +446,8 @@ async def handle_message(websocket, message):
             ai_provider = data.get("ai_provider", "claude")
             output_level = data.get("output_level")
             narrator_drive = data.get("narrator_drive")
+            choice_policy = data.get("choice_policy")
+            choice_count = data.get("choice_count")
             # 성인 모드 동의(선택): true가 오면 세션에 저장
             if "adult_consent" in data:
                 try:
@@ -469,6 +471,10 @@ async def handle_message(websocket, message):
                 context_handler.set_output_level(output_level)
             if narrator_drive is not None:
                 context_handler.set_narrator_drive(narrator_drive)
+            if choice_policy is not None:
+                context_handler.set_choice_policy(choice_policy)
+            if choice_count is not None:
+                context_handler.set_choice_count(choice_count)
 
             await websocket.send(
                 json.dumps(

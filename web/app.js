@@ -32,7 +32,12 @@ const applyCharactersBtn = document.getElementById('applyCharactersBtn');
 const aiProvider = document.getElementById('aiProvider');
 const modelSelect = document.getElementById('modelSelect');
 const adultLevel = document.getElementById('adultLevel');
+const adultConsent = document.getElementById('adultConsent');
 const narrativeSeparation = document.getElementById('narrativeSeparation');
+const narratorDrive = document.getElementById('narratorDrive');
+const outputLevel = document.getElementById('outputLevel');
+const forceChoices = document.getElementById('forceChoices');
+const choiceCount = document.getElementById('choiceCount');
 const saveContextBtn = document.getElementById('saveContextBtn');
 const historyLengthSlider = document.getElementById('historyLengthSlider');
 const historyLengthValue = document.getElementById('historyLengthValue');
@@ -92,6 +97,7 @@ let authRequired = false;
 let isAuthenticated = false;
 let currentProvider = 'claude'; // 최근 전송에 사용한 프로바이더
 let participants = []; // 현재 대화 참여자 목록
+let pendingConsentResend = false; // 성인 동의 직후 직전 요청 재전송
 
 const AUTH_TOKEN_KEY = 'persona_auth_token';
 const AUTH_EXP_KEY = 'persona_auth_exp';
@@ -698,6 +704,11 @@ function handleMessage(msg) {
             if (data.success) {
                 log('컨텍스트 저장 완료', 'success');
                 if (saveContextBtn) saveContextBtn.disabled = false;
+                if (pendingConsentResend && lastRequest) {
+                    const payload = { ...lastRequest };
+                    pendingConsentResend = false;
+                    sendMessage(payload, { skipRetry: true });
+                }
             }
             break;
 
@@ -752,6 +763,19 @@ function handleMessage(msg) {
                 sendMessage({ action: 'get_session_settings' });
             }
             break;
+
+        case 'consent_required': {
+            const msg = (data && data.message) || '성인 전용 기능입니다. 성인임을 확인하고 동의해야 합니다.';
+            const agree = confirm(msg + '\n\n동의하시겠습니까?');
+            if (agree) {
+                pendingConsentResend = true;
+                if (adultConsent) adultConsent.checked = true;
+                sendMessage({ action: 'set_context', adult_consent: true });
+            } else {
+                log('성인 동의가 거부되어 요청이 취소되었습니다.', 'warning');
+            }
+            break;
+        }
 
         case 'reset_sessions':
             if (data.success) {
@@ -1516,8 +1540,13 @@ saveContextBtn.addEventListener('click', () => {
         user_is_narrator: userIsNarrator.checked,
         ai_provider: aiProvider.value,
         adult_level: adultLevel.value,
+        adult_consent: adultConsent ? !!adultConsent.checked : undefined,
         narrative_separation: narrativeSeparation.checked,
-        characters: characters
+        narrator_drive: narratorDrive ? narratorDrive.value : undefined,
+        output_level: outputLevel ? outputLevel.value : undefined,
+        characters: characters,
+        choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
+        choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
     });
     setTimeout(() => { if (saveContextBtn) saveContextBtn.disabled = false; }, 5000);
 });
@@ -1556,8 +1585,13 @@ if (applyCharactersBtn) {
             user_is_narrator: userIsNarrator.checked,
             ai_provider: aiProvider.value,
             adult_level: adultLevel.value,
+            adult_consent: adultConsent ? !!adultConsent.checked : undefined,
             narrative_separation: narrativeSeparation.checked,
-            characters: characters
+            narrator_drive: narratorDrive ? narratorDrive.value : undefined,
+            output_level: outputLevel ? outputLevel.value : undefined,
+            characters: characters,
+            choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
+            choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
         });
         setTimeout(() => { applyCharactersBtn.disabled = false; }, 5000);
     });
@@ -1582,6 +1616,11 @@ function loadContext(context) {
     aiProvider.value = context.ai_provider || 'claude';
     adultLevel.value = context.adult_level || 'explicit';
     narrativeSeparation.checked = context.narrative_separation || false;
+    if (narratorDrive) narratorDrive.value = context.narrator_drive || 'guide';
+    if (outputLevel) outputLevel.value = context.output_level || 'normal';
+    if (adultConsent) adultConsent.checked = false; // 세션 보관값은 서버 측, UI는 기본 해제
+    if (forceChoices) forceChoices.checked = (context.choice_policy || 'off') === 'require';
+    if (choiceCount) choiceCount.value = String(context.choice_count || 3);
 
     // 진행자 설정 표시/숨김
     if (narratorEnabled.checked) {
