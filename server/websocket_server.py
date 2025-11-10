@@ -457,6 +457,7 @@ async def handle_message(websocket, message):
                 except Exception:
                     pass
 
+            prev_ctx = context_handler.get_context()
             context_handler.set_world(world)
             context_handler.set_situation(situation)
             context_handler.set_user_character(user_character)
@@ -484,6 +485,27 @@ async def handle_message(websocket, message):
                     }
                 )
             )
+
+            # 핵심 프롬프트 구성 키 변경 시 세션 초기화로 새 프롬프트 강제 적용
+            try:
+                new_ctx = context_handler.get_context()
+                keys = [
+                    "adult_level",
+                    "narrative_separation",
+                    "output_level",
+                    "narrator_drive",
+                    "narrator_enabled",
+                    "narrator_mode",
+                    "choice_policy",
+                    "choice_count",
+                ]
+                if any(prev_ctx.get(k) != new_ctx.get(k) for k in keys):
+                    clear_client_sessions(websocket)
+                    logger.info(
+                        "Context changed; provider sessions reset for fresh prompt application"
+                    )
+            except Exception:
+                pass
 
         # 컨텍스트 조회
         elif action == "get_context":

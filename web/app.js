@@ -284,6 +284,29 @@ if (aiProvider) {
     aiProvider.addEventListener('change', () => updateModelOptions(aiProvider.value));
 }
 
+// 주도권 ↔ 선택지 연동: describe=선택지X, guide=선택지ON, direct=선택지X(강제)
+if (narratorDrive) {
+    const syncChoiceControls = () => {
+        const mode = narratorDrive.value;
+        if (!forceChoices || !choiceCount) return;
+        if (mode === 'guide') {
+            forceChoices.checked = true;
+            forceChoices.disabled = false;
+            choiceCount.disabled = false;
+        } else if (mode === 'direct') {
+            forceChoices.checked = false;
+            forceChoices.disabled = true;
+            choiceCount.disabled = true;
+        } else { // describe
+            forceChoices.checked = false;
+            forceChoices.disabled = false; // 사용자가 원하면 켤 수는 있게 둠
+            choiceCount.disabled = !forceChoices.checked;
+        }
+    };
+    narratorDrive.addEventListener('change', syncChoiceControls);
+    syncChoiceControls();
+}
+
 // 상태 업데이트
 function updateStatus(status, text) {
     statusIndicator.className = `status-indicator ${status}`;
