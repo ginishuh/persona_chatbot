@@ -307,7 +307,14 @@ Docker Compose를 사용하여 컨테이너로 실행할 수 있습니다.
 ### 빠른 시작
 
 ```bash
-# 컨테이너 빌드 및 실행
+# 1) .env 생성(환경에 맞는 템플릿 택1)
+#    예) VPS 루트 컨테이너 환경
+cp deploy/env/.env.example.vps-root .env
+
+# 2) Compose 템플릿 복사(레포는 예시만 커밋합니다)
+cp docker-compose.yml.example docker-compose.yml
+
+# 3) 컨테이너 빌드 및 실행
 docker compose up -d
 
 # 로그 확인
@@ -486,6 +493,36 @@ APP_REFRESH_ROTATE=1
 APP_BIND_HOST=127.0.0.1
 ```
 
+#### 환경별 .env 선택표
+
+- 상황에 맞는 샘플을 복사해 `.env`로 사용하세요.
+  - VPS(루트 컨테이너): `deploy/env/.env.example.vps-root`
+  - VPS(일반 사용자 컨테이너): `deploy/env/.env.example.vps-user`
+  - 일반 Linux(루트 컨테이너): `deploy/env/.env.example.root-linux`
+  - 일반 Linux(사용자 컨테이너): `deploy/env/.env.example.user-linux`
+  - 로컬 개발(프록시 없음): `deploy/env/.env.example.local-dev`
+
+- 핵심 분기
+  - UID/GID: 루트(`0:0`) vs 일반 사용자(`1000:1000`)
+  - 인증 디렉터리 3종: `FACTORY_AUTH_DIR`, `CLAUDE_AUTH_DIR`, `GEMINI_AUTH_DIR` 반드시 채우기
+  - 도메인/프록시: `APP_PUBLIC_WS_URL=wss://<도메인>/ws`
+
+#### docker-compose 로컬 커스텀
+
+- 레포의 기본 `docker-compose.yml`은 공용 템플릿입니다. 로컬 환경 차이는 `docker-compose.override.yml`로 분리하세요.
+- `docker-compose.override.yml`은 `.gitignore`에 포함되어 커밋되지 않습니다.
+- 예시:
+
+```yaml
+services:
+  persona-chatbot:
+    environment:
+      - APP_PUBLIC_WS_URL=wss://chat.example.com/ws
+    # 필요 시 추가 볼륨/리소스/포트 오버라이드
+```
+
+> 참고: Compose는 `.env` 값을 자동으로 읽습니다. 가능하면 Compose 수정 대신 `.env`로 관리하세요.
+
 ### Docker 아키텍처
 
 #### 이미지에 포함된 것
@@ -494,10 +531,13 @@ APP_BIND_HOST=127.0.0.1
 - Python 의존성 (websockets, aiofiles)
 - 애플리케이션 코드 (`server/`, `web/`)
 
+> Compose는 `Dockerfile.full`을 사용합니다(Claude/Gemini/Droid CLI 포함). 최소 `Dockerfile`은 제거했습니다.
+
 #### 호스트에서 마운트되는 것
 - AI CLI 인증 정보(`~/.claude`, `~/.factory`, `~/.gemini`)
 - 개발 코드(`./server`, `./web`) – 실시간 반영
-- 데이터(`./persona_data`, `./chatbot_workspace`, `./STORIES`) – STORIES는 런타임 생성
+- 데이터(`./persona_data`, `./chatbot_workspace`)  
+  - 서사 파일은 `persona_data/stories/`에 저장됩니다(별도 `STORIES/` 마운트 불필요).
 
 #### Workspace 격리
 

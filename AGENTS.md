@@ -3,11 +3,11 @@
 ## Project Structure & Module Organization
 - `server/` – Python backend. Entry: `server/websocket_server.py`; shared logic in `server/handlers/` (file, Claude/Gemini/Droid, context, history, mode, workspace/git).
 - `web/` – Static frontend (`index.html`, `app.js`, `style.css`) served by the Python HTTP helper.
-- `STORIES/` – Saved narratives (markdown). Created on first run if missing.
+- `persona_data/stories/` – Saved narratives (markdown). The legacy `STORIES/` folder is no longer used.
 - `chatbot_workspace/` – Chatbot-only workspace (reads `chatbot_workspace/CLAUDE.md`).
 - `persona_data/` – Presets and workspace configuration (git-synced via UI).
 - `scripts/` – Host-side helpers (`host_git_sync_once.sh`, `host_git_sync_watch.sh`).
-- Root: `requirements.txt`, `Dockerfile*`, `docker-compose.yml`, `.env.example`, `README.md`.
+- Root: `requirements.txt`, `Dockerfile.full`, `docker-compose.yml.example`, `.env.example`, `README.md`.
 
 ## Build, Test, and Development Commands
 - Create env: `python3 -m venv venv && source venv/bin/activate`
@@ -16,7 +16,7 @@
 - Run locally: `python server/websocket_server.py`
   - HTTP: `http://localhost:9000` (static UI)
   - WebSocket: `ws://localhost:8765`
-- Optional Docker (CLI auth inside containers is limited): `docker compose up --build`
+- Optional Docker: copy `docker-compose.yml.example` → `docker-compose.yml`, then `docker compose up --build`
   - Ports follow `.env` (`HTTP_PORT`, `WS_PORT`) for Docker only.
 
 ### Git Sync Modes (persona_data)
