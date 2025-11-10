@@ -92,7 +92,7 @@ def test_invalid_max_turns_raises():
     h = HistoryHandler(max_turns=5)
     try:
         h.set_max_turns(0)
-        assert False, "ValueError expected"
+        raise AssertionError("ValueError expected")
     except ValueError as e:
         assert "positive" in str(e)
 
@@ -108,4 +108,3 @@ def test_narrative_markdown_format():
     assert re.search(r"##\s+2\.\s*AI 응답", md)
     assert "첫 메시지" in md and "첫 응답" in md
     assert "---\n\n" in md
-
