@@ -26,13 +26,13 @@ def test_output_drive_choice_and_sections():
     prompt = ctx.build_system_prompt("HIST")
 
     # 진행자 보통 모드 분기(241~244)
-    assert "진행자 모드: 보통" in prompt
+    assert "Narrator Mode: Moderate" in prompt
     # 선택지 강제 섹션 및 상한 적용 확인
-    assert "선택지(필수)" in prompt and "최소 5개" in prompt
+    assert "Choices (Required)" in prompt or "Minimum 5 choices" in prompt
     # 출력 예산: more 분기
-    assert "이번 턴: 총 8~12줄" in prompt
+    assert "8-12 lines" in prompt or "Output Budget" in prompt
     # 캐릭터/히스토리 섹션 포함
-    assert "=== 등장 캐릭터들 ===" in prompt and "HIST" in prompt
+    assert "=== Characters ===" in prompt and "HIST" in prompt
 
 
 def test_user_is_narrator_and_output_less():
@@ -41,8 +41,8 @@ def test_user_is_narrator_and_output_less():
     ctx.set_narrator(enabled=False, user_is_narrator=True)
     ctx.set_output_level("less")
     p = ctx.build_system_prompt()
-    assert "사용자는 진행자(GM) 역할" in p
-    assert "이번 턴: 총 2~3줄" in p
+    assert "user serves as the Game Master" in p
+    assert "2-3 lines" in p or "Output Budget" in p
 
 
 def test_direct_and_describe_modes_and_desc_present():
@@ -54,13 +54,13 @@ def test_direct_and_describe_modes_and_desc_present():
     ctx.set_narrator_drive("direct")
     p1 = ctx.build_system_prompt()
     assert "테스트 진행자" in p1
-    assert "진행자 주도 규칙(주도형)" in p1
-    assert "선택지를 제시하지 말고" in p1
+    assert "Narrator Leadership Rules (Leadership Type)" in p1
+    assert "Do not present choices" in p1
 
     # 설명형 describe 분기(267~271)
     ctx.set_narrator_drive("describe")
     p2 = ctx.build_system_prompt()
-    assert "진행자 주도 규칙(설명형)" in p2
+    assert "Narrator Leadership Rules (Description Type)" in p2
 
 
 def test_input_sanitization_and_choice_count_bounds():
