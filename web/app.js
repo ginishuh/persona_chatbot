@@ -1807,6 +1807,12 @@ saveContextBtn.addEventListener('click', () => {
         choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
         choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
     });
+    // 방 설정도 함께 저장(room.json)
+    try {
+        const r = currentRoom || 'default';
+        const config = collectRoomConfig(r);
+        sendMessage({ action: 'room_save', room_id: r, config });
+    } catch (_) {}
     // 설정 적용 시 설정 모달 닫기
     try {
         const modal = document.getElementById('settingsModal');
@@ -2004,6 +2010,11 @@ saveNarrativeBtn.addEventListener('click', () => {
     });
     currentRoom = filename;
     try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
+    // 서사 저장과 동시에 방 설정도 저장
+    try {
+        const config = collectRoomConfig(currentRoom);
+        sendMessage({ action: 'room_save', room_id: currentRoom, config });
+    } catch (_) {}
 });
 
 // ===== 토큰 표시 =====
@@ -2689,7 +2700,18 @@ function savePreset() {
         narrator_description: narratorDescription.value,
         user_is_narrator: userIsNarrator.checked,
         adult_level: adultLevel.value,
-        narrative_separation: narrativeSeparation.checked
+        narrative_separation: narrativeSeparation.checked,
+        // 확장 저장: AI/출력/주도권/선택지/유저프로필
+        ai_provider: aiProvider ? aiProvider.value : 'claude',
+        output_level: outputLevel ? outputLevel.value : 'normal',
+        narrator_drive: narratorDrive ? narratorDrive.value : 'guide',
+        choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
+        choice_count: choiceCount ? (parseInt(choiceCount.value, 10) || 3) : 3,
+        user_profile: {
+            name: (document.getElementById('userCharacterName')?.value || '').trim(),
+            gender: (document.getElementById('userCharacterGender')?.value || '').trim(),
+            age: (document.getElementById('userCharacterAge')?.value || '').trim()
+        }
     };
 
     sendMessage({
@@ -2717,9 +2739,25 @@ function applyPreset(preset) {
     narratorDescription.value = preset.narrator_description || '';
     userIsNarrator.checked = preset.user_is_narrator || false;
 
-    // 모드 설정
+    // 모드/기타 설정
     adultLevel.value = preset.adult_level || 'explicit';
     narrativeSeparation.checked = preset.narrative_separation || false;
+    if (aiProvider && preset.ai_provider) aiProvider.value = preset.ai_provider;
+    if (outputLevel && preset.output_level) outputLevel.value = preset.output_level;
+    if (narratorDrive && preset.narrator_drive) narratorDrive.value = preset.narrator_drive;
+    if (forceChoices) forceChoices.checked = (preset.choice_policy || 'off') === 'require';
+    if (choiceCount && (preset.choice_count !== undefined)) choiceCount.value = String(preset.choice_count);
+
+    // 사용자 프로필 메타(이름/성별/나이)
+    try {
+        const prof = preset.user_profile || {};
+        const nameEl = document.getElementById('userCharacterName');
+        const genderEl = document.getElementById('userCharacterGender');
+        const ageEl = document.getElementById('userCharacterAge');
+        if (nameEl) nameEl.value = prof.name || '';
+        if (genderEl) genderEl.value = prof.gender || '';
+        if (ageEl) ageEl.value = prof.age || '';
+    } catch (_) {}
 
     // 진행자 설정 표시/숨김
     if (narratorEnabled.checked && !userIsNarrator.checked) {
