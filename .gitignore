@@ -16,6 +16,8 @@ docker-compose.override.yml
 docker-compose.local.yml
 docker-compose.yml
 docker-compose.yaml
+.env.backup-*
+docker-compose.local.bak-*
 
 # IDE
 .vscode/

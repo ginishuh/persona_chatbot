@@ -309,7 +309,7 @@ Docker Compose를 사용하여 컨테이너로 실행할 수 있습니다.
 ```bash
 # 1) .env 생성(환경에 맞는 템플릿 택1)
 #    예) VPS 루트 컨테이너 환경
-cp deploy/env/.env.example.vps-root .env
+cp examples/env/.env.example.vps-root .env
 
 # 2) Compose 템플릿 복사(레포는 예시만 커밋합니다)
 cp docker-compose.yml.example docker-compose.yml
@@ -496,11 +496,11 @@ APP_BIND_HOST=127.0.0.1
 #### 환경별 .env 선택표
 
 - 상황에 맞는 샘플을 복사해 `.env`로 사용하세요.
-  - VPS(루트 컨테이너): `deploy/env/.env.example.vps-root`
-  - VPS(일반 사용자 컨테이너): `deploy/env/.env.example.vps-user`
-  - 일반 Linux(루트 컨테이너): `deploy/env/.env.example.root-linux`
-  - 일반 Linux(사용자 컨테이너): `deploy/env/.env.example.user-linux`
-  - 로컬 개발(프록시 없음): `deploy/env/.env.example.local-dev`
+  - VPS(루트 컨테이너): `examples/env/.env.example.vps-root`
+  - VPS(일반 사용자 컨테이너): `examples/env/.env.example.vps-user`
+  - 일반 Linux(루트 컨테이너): `examples/env/.env.example.root-linux`
+  - 일반 Linux(사용자 컨테이너): `examples/env/.env.example.user-linux`
+  - 로컬 개발(프록시 없음): `examples/env/.env.example.local-dev`
 
 - 핵심 분기
   - UID/GID: 루트(`0:0`) vs 일반 사용자(`1000:1000`)
