@@ -2896,6 +2896,8 @@ window.addEventListener('load', async () => {
     document.getElementById('participantsModal')?.classList.add('hidden');
     connect();
 
-    // 주기적 상태 확인 (10초마다)
-    setInterval(checkGitStatus, 10000);
+    // 주기적 상태 확인 (120초마다)
+    // 서버 부하와 로그 스팸을 줄이기 위해 간격을 늘렸습니다.
+    // 필요 시 환경설정으로 노출 예정.
+    setInterval(checkGitStatus, 120000);
 });
