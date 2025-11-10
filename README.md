@@ -322,9 +322,9 @@ pre-commit run --all-files
 - 워크플로: `.github/workflows/ci.yml`
 - 단계:
   - Pre-commit 훅 실행(블랙/러프/밴딧/시크릿)
-  - PyTest + 커버리지(타깃 모듈 100%)
-- 커버리지 타깃: `server/handlers/{history,context,workspace,mode}_handler.py` (`--cov-fail-under=100`)
-  - CLI 의존이 큰 핸들러(claude/droid/gemini, git/file)는 별도 통합 테스트 범주로 분리합니다.
+  - PyTest + 커버리지(타깃 모듈 ≥ 90%)
+  - 커버리지 타깃: `server.handlers.{history_handler,context_handler,mode_handler,file_handler}` (`--cov-fail-under=90`)
+  - CLI 의존이 큰 핸들러(claude/droid/gemini, git/workspace)는 단계적으로 모킹 테스트를 추가 예정입니다.
 
 
 ### 상태/스모크 테스트 (2025-11-10 확인)
