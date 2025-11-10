@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 *.egg-info/
 
@@ -25,8 +26,24 @@ Thumbs.db
 # Logs
 *.log
 
+# Caches & coverage
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage*
+coverage.xml
+coverage/
+
 # User data (별도 git 레포로 관리)
 persona_data/
 chatbot_workspace/CLAUDE.md
 chatbot_workspace/GEMINI.md
 .env
+
+# Local auth/config dirs (호스트 전용 보관)
+.factory/
+.claude/
+.gemini/
+
+# Runtime artifacts
+STORIES/
