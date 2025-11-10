@@ -53,6 +53,3 @@ chatbot_workspace/GEMINI.md
 
 # Runtime artifacts
 STORIES/
-
-# Local deployment assets (server-specific)
-deploy/
