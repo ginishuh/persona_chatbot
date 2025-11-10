@@ -3,7 +3,8 @@ let ws = null;
 let appConfig = {
     ws_url: '',
     ws_port: 8765,
-    login_required: false
+    login_required: false,
+    show_token_usage: true
 };
 
 // DOM 요소
@@ -1455,10 +1456,10 @@ function handleChatComplete(response) {
             window.streamingText = '';
         }
 
-        // 토큰 정보 업데이트
-        console.log('Token info:', data.token_info); // 디버그
-        if (data.token_info) {
-            updateTokenDisplay(data.token_info);
+        // 토큰 사용량 업데이트
+        console.log('Token usage:', data.token_usage); // 디버그
+        if (data.token_usage) {
+            updateTokenDisplay(data.token_usage);
         }
 
         // 서사 업데이트
@@ -2028,24 +2029,91 @@ saveNarrativeBtn.addEventListener('click', () => {
 
 // ===== 토큰 표시 =====
 
-function updateTokenDisplay(tokenInfo) {
-    if (!tokenInfo) return;
+function updateTokenDisplay(tokenUsage) {
+    const tokenInfoDiv = document.getElementById('tokenInfo');
 
-    const total = tokenInfo.total_tokens;
-    const remaining = tokenInfo.tokens_remaining;
-    const contextWindow = tokenInfo.context_window;
+    // show_token_usage 설정 확인
+    if (!appConfig.show_token_usage) {
+        tokenInfoDiv.style.display = 'none';
+        return;
+    }
 
-    // 1000 단위로 쉼표 추가
+    tokenInfoDiv.style.display = 'flex';
+
+    if (!tokenUsage || !tokenUsage.providers) return;
+
     const formatNumber = (num) => num.toLocaleString('ko-KR');
+    const providers = tokenUsage.providers;
+
+    // 현재 사용 중인 제공자 또는 Claude 우선
+    let activeProvider = null;
+    if (currentProvider && providers[currentProvider] && providers[currentProvider].supported) {
+        activeProvider = currentProvider;
+    } else if (providers.claude && providers.claude.supported) {
+        activeProvider = 'claude';
+    } else if (providers.gemini && providers.gemini.supported) {
+        activeProvider = 'gemini';
+    } else if (providers.droid && providers.droid.supported) {
+        activeProvider = 'droid';
+    }
+
+    if (!activeProvider) {
+        // 토큰 정보를 제공하는 제공자가 없음
+        tokenText.textContent = '토큰: 정보 없음';
+        tokenText.title = '사용 중인 AI 제공자가 토큰 정보를 제공하지 않습니다.';
+        tokenInfoDiv.style.color = '#808080'; // 회색
+        return;
+    }
+
+    const providerData = providers[activeProvider];
+    const total = providerData.total_tokens || 0;
+    const contextWindow = 200000; // Claude 기본 컨텍스트 윈도우
 
     // 남은 비율 계산
-    const usagePercent = ((total / contextWindow) * 100).toFixed(1);
+    const usagePercent = total > 0 ? ((total / contextWindow) * 100).toFixed(1) : 0;
 
-    tokenText.textContent = `토큰: ${formatNumber(total)} / ${formatNumber(contextWindow)} (${usagePercent}%)`;
-    tokenText.title = `입력: ${formatNumber(tokenInfo.input_tokens)}, 캐시 읽기: ${formatNumber(tokenInfo.cache_read_tokens)}, 캐시 생성: ${formatNumber(tokenInfo.cache_creation_tokens)}, 출력: ${formatNumber(tokenInfo.output_tokens)}`;
+    // 제공자 레이블
+    const providerLabel = activeProvider === 'claude' ? 'Claude' :
+                         activeProvider === 'gemini' ? 'Gemini' : 'Droid';
+
+    // 메인 텍스트
+    tokenText.textContent = `${providerLabel}: ${formatNumber(total)} / ${formatNumber(contextWindow)} (${usagePercent}%)`;
+
+    // 툴팁에 상세 정보 표시
+    const tooltipLines = [
+        `=== ${providerLabel} 토큰 사용량 ===`,
+        `총 누적: ${formatNumber(total)} 토큰 (${providerData.message_count || 0}회)`,
+        `최근: ${formatNumber(providerData.last_total_tokens || 0)} 토큰`,
+        ``,
+        `[누적 상세]`,
+        `입력: ${formatNumber(providerData.total_input_tokens || 0)}`,
+        `출력: ${formatNumber(providerData.total_output_tokens || 0)}`,
+        `캐시 읽기: ${formatNumber(providerData.total_cache_read_tokens || 0)}`,
+        `캐시 생성: ${formatNumber(providerData.total_cache_creation_tokens || 0)}`,
+        ``,
+        `[최근 사용량]`,
+        `입력: ${formatNumber(providerData.last_input_tokens || 0)}`,
+        `출력: ${formatNumber(providerData.last_output_tokens || 0)}`,
+        `캐시 읽기: ${formatNumber(providerData.last_cache_read_tokens || 0)}`,
+        `캐시 생성: ${formatNumber(providerData.last_cache_creation_tokens || 0)}`
+    ];
+
+    // 다른 제공자 정보도 추가
+    Object.keys(providers).forEach(provider => {
+        if (provider !== activeProvider && providers[provider].supported) {
+            const pData = providers[provider];
+            const pLabel = provider === 'claude' ? 'Claude' :
+                          provider === 'gemini' ? 'Gemini' : 'Droid';
+            tooltipLines.push('');
+            tooltipLines.push(`[${pLabel}]`);
+            tooltipLines.push(`총: ${formatNumber(pData.total_tokens || 0)} (${pData.message_count || 0}회)`);
+            tooltipLines.push(`최근: ${formatNumber(pData.last_total_tokens || 0)}`);
+        }
+    });
+
+    tokenText.title = tooltipLines.join('\n');
 
     // 토큰 사용량에 따라 색상 변경
-    const tokenInfoDiv = document.getElementById('tokenInfo');
     if (usagePercent > 80) {
         tokenInfoDiv.style.color = '#f48771'; // 빨강 (경고)
     } else if (usagePercent > 50) {
