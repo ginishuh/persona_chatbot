@@ -80,6 +80,11 @@ const storySelect = document.getElementById('storySelect');
 const loadStoryBtn = document.getElementById('loadStoryBtn');
 const deleteStoryBtn = document.getElementById('deleteStoryBtn');
 const resumeStoryBtn = document.getElementById('resumeStoryBtn');
+// 채팅방 UI
+const roomSelect = document.getElementById('roomSelect');
+const roomAddBtn = document.getElementById('roomAddBtn');
+const roomDelBtn = document.getElementById('roomDelBtn');
+const roomSaveBtn = document.getElementById('roomSaveBtn');
 
 // 로그인 요소
 const loginModal = document.getElementById('loginModal');
@@ -104,6 +109,10 @@ const AUTH_TOKEN_KEY = 'persona_auth_token';
 const AUTH_EXP_KEY = 'persona_auth_exp';
 const REFRESH_TOKEN_KEY = 'persona_refresh_token';
 const REFRESH_EXP_KEY = 'persona_refresh_exp';
+// 세션/채팅방 로컬키
+const SESSION_KEY_KEY = 'persona_session_key';
+const ROOMS_KEY = 'persona_rooms';
+const CURRENT_ROOM_KEY = 'persona_current_room';
 let authToken = '';
 let authTokenExpiresAt = '';
 let refreshToken = '';
@@ -112,6 +121,9 @@ let tokenRefreshTimeout = null;
 let refreshRetryCount = 0;
 let refreshInProgress = false;
 let lastRequest = null; // 재전송용 마지막 사용자 액션
+let sessionKey = '';
+let rooms = ['default'];
+let currentRoom = 'default';
 const RETRY_ACTIONS = new Set([
     'set_context', 'chat',
     'save_workspace_file', 'delete_workspace_file',
@@ -223,6 +235,17 @@ function connect() {
     ws.onopen = () => {
         updateStatus('connected', '연결됨');
         log('WebSocket 연결 성공', 'success');
+        // 저장된 세션키/채팅방 불러오기
+        try {
+            sessionKey = localStorage.getItem(SESSION_KEY_KEY) || '';
+            const savedRooms = JSON.parse(localStorage.getItem(ROOMS_KEY) || '[]');
+            if (Array.isArray(savedRooms) && savedRooms.length) {
+                rooms = savedRooms;
+            }
+            const savedCurrent = localStorage.getItem(CURRENT_ROOM_KEY);
+            if (savedCurrent) currentRoom = savedCurrent;
+            renderRoomsUI();
+        } catch (_) {}
     };
 
     ws.onmessage = (event) => {
@@ -340,6 +363,16 @@ function sendMessage(payload, options = {}) {
     if (!options.skipToken && authToken) {
         message.token = authToken;
     }
+    if (sessionKey) {
+        message.session_key = sessionKey;
+    }
+    const ACTIONS_WITH_ROOM = new Set([
+        // 채팅/세션/히스토리 관련만 방 개념 적용
+        'chat', 'get_history_snapshot', 'clear_history', 'get_history_settings', 'set_history_limit', 'get_narrative'
+    ]);
+    if (ACTIONS_WITH_ROOM.has(String(payload.action))) {
+        message.room_id = currentRoom || 'default';
+    }
     if (!options.skipRetry && RETRY_ACTIONS.has(payload.action)) {
         lastRequest = message;
     }
@@ -353,6 +386,8 @@ function initializeAppData() {
     sendMessage({ action: 'get_narrative' });
     sendMessage({ action: 'get_history_settings' });
     sendMessage({ action: 'get_session_settings' });
+    // 서버에 저장된 방 목록 조회
+    sendMessage({ action: 'room_list' });
 
     loadFileList('world', worldSelect);
     loadFileList('situation', situationSelect);
@@ -360,6 +395,142 @@ function initializeAppData() {
     loadPresetList();
     loadStoryList();
     checkGitStatus();
+}
+
+// ===== 채팅방 관리 =====
+function sanitizeRoomName(name) {
+    return (name || '').trim().replace(/[^A-Za-z0-9_\-]/g, '_') || 'default';
+}
+
+function persistRooms() {
+    try {
+        localStorage.setItem(ROOMS_KEY, JSON.stringify(rooms));
+        localStorage.setItem(CURRENT_ROOM_KEY, currentRoom);
+    } catch (_) {}
+}
+
+function renderRoomsUI() {
+    if (!roomSelect) return;
+    // 방 목록 반영
+    roomSelect.innerHTML = '';
+    (rooms || []).forEach(r => {
+        const roomId = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : roomId;
+        const opt = document.createElement('option');
+        opt.value = roomId;
+        opt.textContent = title;
+        roomSelect.appendChild(opt);
+    });
+    const hasCurrent = (rooms || []).some(x => (typeof x === 'string' ? x : x.room_id) === currentRoom);
+    if (!hasCurrent) currentRoom = 'default';
+    roomSelect.value = currentRoom;
+}
+
+function refreshRoomViews() {
+    sendMessage({ action: 'get_narrative' });
+    sendMessage({ action: 'get_history_settings' });
+    sendMessage({ action: 'get_history_snapshot' });
+    loadStoryList();
+}
+
+if (roomSelect) {
+    roomSelect.addEventListener('change', () => {
+        currentRoom = roomSelect.value || 'default';
+        persistRooms();
+        // 방 설정 로드 시도
+        sendMessage({ action: 'room_load', room_id: currentRoom });
+        // 방 전환 시 해당 방의 프로바이더 세션 초기화(신규 프롬프트 적용)
+        sendMessage({ action: 'reset_sessions', room_id: currentRoom });
+        // 서사/히스토리 뷰 갱신
+        refreshRoomViews();
+        log(`채팅방 전환: ${currentRoom}`, 'info');
+    });
+}
+if (roomAddBtn) {
+    roomAddBtn.addEventListener('click', () => {
+        const name = prompt('새 채팅방 이름', 'room_' + Math.random().toString(36).slice(2, 6));
+        if (!name) return;
+        const r = sanitizeRoomName(name);
+        if (!rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) rooms.push(r);
+        currentRoom = r;
+        persistRooms();
+        renderRoomsUI();
+        // 현재 설정으로 방 저장
+        const config = collectRoomConfig(r);
+        sendMessage({ action: 'room_save', room_id: r, config });
+        setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+        refreshRoomViews();
+        log(`채팅방 추가: ${r}`, 'success');
+    });
+}
+if (roomDelBtn) {
+    roomDelBtn.addEventListener('click', () => {
+        if (currentRoom === 'default') {
+            alert('기본 채팅방은 삭제할 수 없습니다.');
+            return;
+        }
+        if (!confirm(`채팅방 '${currentRoom}' 설정을 삭제하시겠습니까? (서사 파일은 보존)`)) return;
+        sendMessage({ action: 'room_delete', room_id: currentRoom });
+        rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== currentRoom);
+        currentRoom = 'default';
+        persistRooms();
+        renderRoomsUI();
+        refreshRoomViews();
+        log('채팅방 삭제 완료', 'success');
+    });
+}
+if (roomSaveBtn) {
+    roomSaveBtn.addEventListener('click', () => {
+        const r = currentRoom || 'default';
+        const config = collectRoomConfig(r);
+        sendMessage({ action: 'room_save', room_id: r, config });
+        setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+        log('채팅방 설정 저장 완료', 'success');
+    });
+}
+
+// 방 설정 수집
+function collectRoomConfig(roomId) {
+    const userName = document.getElementById('userCharacterName').value.trim();
+    const userGender = document.getElementById('userCharacterGender').value.trim();
+    const userAge = (userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '');
+    const userDesc = userCharacterInput.value.trim();
+    let userCharacterData = '';
+    if (userName) {
+        userCharacterData = `이름: ${userName}`;
+        if (userGender) userCharacterData += `, 성별: ${userGender}`;
+        if (userAge) userCharacterData += `, 나이: ${userAge}`;
+        if (userDesc) userCharacterData += `\n${userDesc}`;
+    } else if (userDesc) {
+        userCharacterData = userDesc;
+    }
+    return {
+        room_id: roomId,
+        title: roomId,
+        context: {
+            world: worldInput.value.trim(),
+            situation: situationInput.value.trim(),
+            user_character: userCharacterData,
+            narrator_enabled: !!narratorEnabled.checked,
+            narrator_mode: narratorMode.value,
+            narrator_description: narratorDescription.value.trim(),
+            user_is_narrator: !!userIsNarrator.checked,
+            ai_provider: aiProvider.value,
+            adult_level: adultLevel.value,
+            narrative_separation: !!narrativeSeparation.checked,
+            narrator_drive: narratorDrive ? narratorDrive.value : 'guide',
+            output_level: outputLevel ? outputLevel.value : 'normal',
+            choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
+            choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : 3,
+            characters: Array.isArray(participants) ? participants : []
+        },
+        user_profile: {
+            name: userName,
+            gender: userGender,
+            age: userAge,
+            description: userDesc
+        }
+    };
 }
 
 // ===== 맥락 길이 슬라이더 =====
@@ -669,6 +840,10 @@ function handleMessage(msg) {
                 if (data.refresh_token) {
                     setRefreshToken(data.refresh_token, data.refresh_expires_at);
                 }
+                if (data.session_key) {
+                    sessionKey = data.session_key;
+                    try { localStorage.setItem(SESSION_KEY_KEY, sessionKey); } catch (_) {}
+                }
                 log('로그인 성공', 'success');
                 // 아이디/자동로그인 저장
                 try {
@@ -800,15 +975,9 @@ function handleMessage(msg) {
             break;
 
         case 'consent_required': {
-            const msg = (data && data.message) || '성인 전용 기능입니다. 성인임을 확인하고 동의해야 합니다.';
-            const agree = confirm(msg + '\n\n동의하시겠습니까?');
-            if (agree) {
-                pendingConsentResend = true;
-                if (adultConsent) adultConsent.checked = true;
-                sendMessage({ action: 'set_context', adult_consent: true });
-            } else {
-                log('성인 동의가 거부되어 요청이 취소되었습니다.', 'warning');
-            }
+            // 정책 변경: 로그인 시 자동 동의로 처리 → 즉시 동의 설정
+            pendingConsentResend = true;
+            sendMessage({ action: 'set_context', adult_consent: true });
             break;
         }
 
@@ -833,6 +1002,61 @@ function handleMessage(msg) {
                 handleFileList(data);
             } else {
                 log(`파일 목록 로드 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'room_list':
+            if (data.success) {
+                rooms = data.rooms || [];
+                try { localStorage.setItem(ROOMS_KEY, JSON.stringify(rooms)); } catch (_) {}
+                renderRoomsUI();
+            } else {
+                log(`방 목록 로드 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'room_save':
+            if (data.success) {
+                log('방 설정 저장 완료', 'success');
+                sendMessage({ action: 'room_list' });
+            } else {
+                log(`방 저장 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'room_load':
+            if (data.success) {
+                const room = data.room || {};
+                const ctx = room.context || {};
+                // UI 반영
+                loadContext(ctx);
+                // 사용자 프로필 필드 채움
+                try {
+                    const prof = room.user_profile || {};
+                    const nameEl = document.getElementById('userCharacterName');
+                    const genderEl = document.getElementById('userCharacterGender');
+                    const ageEl = document.getElementById('userCharacterAge');
+                    if (nameEl) nameEl.value = prof.name || '';
+                    if (genderEl) genderEl.value = prof.gender || '';
+                    if (ageEl) ageEl.value = prof.age || '';
+                    if (prof.description && (!ctx.user_character || !ctx.user_character.includes(prof.description))) {
+                        userCharacterInput.value = prof.description;
+                    }
+                } catch (_) {}
+                // 서버 컨텍스트에도 적용
+                sendMessage({ action: 'set_context', ...ctx });
+                log('방 설정 로드 완료', 'success');
+            } else {
+                log(`방 로드 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'room_delete':
+            if (data.success) {
+                sendMessage({ action: 'room_list' });
+                log('방 삭제 완료(설정)', 'success');
+            } else {
+                log(`방 삭제 실패: ${data.error}`, 'error');
             }
             break;
 
@@ -1583,6 +1807,11 @@ saveContextBtn.addEventListener('click', () => {
         choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
         choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
     });
+    // 설정 적용 시 설정 모달 닫기
+    try {
+        const modal = document.getElementById('settingsModal');
+        modal?.classList.add('hidden');
+    } catch (_) {}
     setTimeout(() => { if (saveContextBtn) saveContextBtn.disabled = false; }, 5000);
 });
 
@@ -1639,10 +1868,26 @@ function loadContext(context) {
 
     // 사용자 캐릭터 정보 파싱
     const userChar = context.user_character || '';
-    userCharacterInput.value = userChar;
-    // 이름/성별 필드는 비워둠 (향후 개선 시 파싱 가능)
-    document.getElementById('userCharacterName').value = '';
-    document.getElementById('userCharacterGender').value = '';
+    try {
+        const nameEl = document.getElementById('userCharacterName');
+        const genderEl = document.getElementById('userCharacterGender');
+        const ageEl = document.getElementById('userCharacterAge');
+        let body = userChar;
+        const lines = (userChar || '').split(/\r?\n/);
+        if (lines.length && /^\s*이름\s*:\s*/.test(lines[0])) {
+            const meta = lines[0];
+            body = lines.slice(1).join('\n');
+            const mName = meta.match(/이름\s*:\s*([^,]+)/);
+            const mGender = meta.match(/성별\s*:\s*([^,]+)/);
+            const mAge = meta.match(/나이\s*:\s*([^,]+)/);
+            if (nameEl) nameEl.value = mName ? mName[1].trim() : '';
+            if (genderEl) genderEl.value = mGender ? mGender[1].trim() : '';
+            if (ageEl) ageEl.value = mAge ? mAge[1].trim() : '';
+        }
+        userCharacterInput.value = (body || '').trim();
+    } catch (_) {
+        userCharacterInput.value = userChar;
+    }
 
     narratorEnabled.checked = context.narrator_enabled || false;
     narratorMode.value = context.narrator_mode || 'moderate';
@@ -1741,7 +1986,7 @@ saveNarrativeBtn.addEventListener('click', () => {
     }
 
     const defaultName = `서사_${new Date().toISOString().slice(0, 10)}`;
-    const filename = prompt('서사 이름을 입력하세요:', defaultName);
+    const filename = prompt('채팅방(서사) 이름을 입력하세요:', currentRoom || defaultName) || currentRoom || defaultName;
     if (!filename) return;
 
     const exists = (typeof latestStories !== 'undefined') && latestStories.some(f => f.name === filename || f.filename === filename || f.filename === `${filename}.md`);
@@ -1757,6 +2002,8 @@ saveNarrativeBtn.addEventListener('click', () => {
         use_server: true,
         append: append
     });
+    currentRoom = filename;
+    try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
 });
 
 // ===== 토큰 표시 =====
@@ -1900,7 +2147,28 @@ function handleFileLoad(data) {
         situationInput.value = content;
         situationSelect.value = filename.replace('.md', '');
     } else if (window.pendingLoadType === 'my_character') {
-        userCharacterInput.value = content;
+        // 메타 파싱(이름/성별/나이)
+        try {
+            const nameEl = document.getElementById('userCharacterName');
+            const genderEl = document.getElementById('userCharacterGender');
+            const ageEl = document.getElementById('userCharacterAge');
+            let body = content || '';
+            const lines = body.split(/\r?\n/);
+            if (lines.length && /^\s*이름\s*:\s*/.test(lines[0])) {
+                const meta = lines[0];
+                body = lines.slice(1).join('\n');
+                // 이름, 성별, 나이 추출
+                const mName = meta.match(/이름\s*:\s*([^,]+)/);
+                const mGender = meta.match(/성별\s*:\s*([^,]+)/);
+                const mAge = meta.match(/나이\s*:\s*([^,]+)/);
+                if (nameEl) nameEl.value = mName ? mName[1].trim() : '';
+                if (genderEl) genderEl.value = mGender ? mGender[1].trim() : '';
+                if (ageEl) ageEl.value = mAge ? mAge[1].trim() : '';
+            }
+            userCharacterInput.value = body.trim();
+        } catch (_) {
+            userCharacterInput.value = content;
+        }
         myCharacterSelect.value = filename.replace('.md', '');
     } else if (window.pendingLoadType === 'char_template') {
         // 템플릿(JSON) 로드 → 모달 또는 캐릭터 아이템에 반영
@@ -2059,11 +2327,23 @@ deleteSituationBtn.addEventListener('click', () => {
 
 // 나의 캐릭터 관리
 saveMyCharacterBtn.addEventListener('click', () => {
-    const content = userCharacterInput.value.trim();
-    if (!content) {
-        alert('캐릭터 내용을 입력하세요');
+    const name = document.getElementById('userCharacterName').value.trim();
+    const gender = document.getElementById('userCharacterGender').value.trim();
+    const age = userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '';
+    const desc = userCharacterInput.value.trim();
+    if (!name && !desc) {
+        alert('이름 또는 캐릭터 내용을 입력하세요');
         return;
     }
+    const lines = [];
+    if (name) {
+        const meta = [`이름: ${name}`];
+        if (gender) meta.push(`성별: ${gender}`);
+        if (age) meta.push(`나이: ${age}`);
+        lines.push(meta.join(', '));
+    }
+    if (desc) lines.push(desc);
+    const content = lines.join('\n');
     saveFile('my_character', myCharacterSelect, () => content);
 });
 
@@ -2565,7 +2845,7 @@ function loadStoryList() {
 // 서사 목록 업데이트
 function updateStoryList(files) {
     const currentValue = storySelect.value;
-    storySelect.innerHTML = '<option value="">저장된 서사...</option>';
+    storySelect.innerHTML = '<option value="">채팅방 선택...</option>';
 
     files.forEach(file => {
         const option = document.createElement('option');
@@ -2574,10 +2854,45 @@ function updateStoryList(files) {
         storySelect.appendChild(option);
     });
 
-    if (currentValue && files.some(f => f.name === currentValue)) {
-        storySelect.value = currentValue;
+    // 현재 선택 복원 또는 첫 항목 선택
+    let desired = currentRoom || currentValue;
+    const names = files.map(f => f.name);
+    if (desired && names.includes(desired)) {
+        storySelect.value = desired;
+    } else if (names.length) {
+        storySelect.value = names[0];
+        desired = names[0];
+    } else {
+        storySelect.value = '';
+        desired = 'default';
     }
+    currentRoom = desired;
+    try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
     latestStories = files || [];
+    updateRoomListUI();
+}
+
+function updateRoomListUI() {
+    if (!roomList) return;
+    roomList.innerHTML = '';
+    const q = (roomSearch?.value || '').trim();
+    const items = (latestStories || []).filter(f => !q || f.name.includes(q));
+    if (!items.length) {
+        roomList.innerHTML = '<div class="empty">저장된 채팅방이 없습니다.</div>';
+        return;
+    }
+    items.forEach(f => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm';
+        btn.style = 'width:100%; text-align:left; margin-bottom:4px;';
+        btn.textContent = f.name;
+        btn.title = `${f.name} (${Math.round((f.size || 0)/1024)} KB)`;
+        btn.addEventListener('click', () => {
+            storySelect.value = f.name;
+            storySelect.dispatchEvent(new Event('change'));
+        });
+        roomList.appendChild(btn);
+    });
 }
 
 // 서사 표시
@@ -2913,3 +3228,18 @@ window.addEventListener('load', async () => {
     // 필요 시 환경설정으로 노출 예정.
     setInterval(checkGitStatus, 120000);
 });
+// 서사(=채팅방) 선택 시 방 전환 처리
+if (storySelect) {
+    storySelect.addEventListener('change', () => {
+        currentRoom = storySelect.value || 'default';
+        try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
+        // 방 전환: 세션 초기화 + 뷰 갱신
+        sendMessage({ action: 'reset_sessions', room_id: currentRoom });
+        refreshRoomViews();
+        log(`채팅방 전환: ${currentRoom}`, 'info');
+    });
+}
+
+if (roomSearch) {
+    roomSearch.addEventListener('input', () => updateRoomListUI());
+}

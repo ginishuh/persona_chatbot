@@ -117,7 +117,7 @@
                     <p class="hint">ON 시 모델 내부 세션을 이어서 사용합니다. 모델 전환 시 자동으로 새 세션이 시작됩니다.</p>
                 </div>
 
-                <!-- 성인 콘텐츠 수위 / 동의 -->
+                <!-- 성인 콘텐츠 수위 -->
                 <div class="context-section">
                     <label>🔞 성인 콘텐츠 수위</label>
                     <select id="adultLevel" class="select-input">
@@ -125,10 +125,6 @@
                         <option value="enhanced">묘사/효과음/신음 강화</option>
                         <option value="extreme">최고 수위 (욕설, 더티토크)</option>
                     </select>
-                    <label class="checkbox-label" style="margin-top:0.5rem;">
-                        <input type="checkbox" id="adultConsent" />
-                        <span>성인임을 확인하며, 본 기능 사용에 따른 책임이 본인에게 있음을 동의합니다.</span>
-                    </label>
                 </div>
 
                 <!-- 출력량 -->
@@ -306,13 +302,15 @@
             <!-- Right Panel: Narrative -->
             <aside class="right-panel">
                 <div class="panel-header narrative-header">
-                    <h2>📜 서사 기록</h2>
+                    <h2>💬 채팅방 (서사 기록)</h2>
                 </div>
                 <div class="narrative-controls">
                     <div style="padding: 0.75rem 1rem; border-bottom: 2px solid #e8ecef;">
-                        <select id="storySelect" class="select-input" style="width: 100%; margin-bottom: 0.75rem;" title="저장된 서사">
-                            <option value="">저장된 서사...</option>
+                        <select id="storySelect" class="select-input" style="width: 100%; margin-bottom: 0.75rem;" title="채팅방(서사)">
+                            <option value="">채팅방 선택...</option>
                         </select>
+                        <input id="roomSearch" type="text" class="input" placeholder="채팅방 검색" style="width:100%; margin: 0.25rem 0 0.5rem 0;" />
+                        <div id="roomList" style="max-height: 180px; overflow:auto; border:1px solid #e8ecef; border-radius:6px; padding:0.5rem; background:#fff;"></div>
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                             <button id="loadStoryBtn" class="btn btn-sm" title="서사 불러오기">📤</button>
                             <button id="resumeStoryBtn" class="btn btn-sm" title="이 서사에서 이어하기">▶</button>

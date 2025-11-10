@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 import threading
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler
@@ -51,42 +52,93 @@ claude_handler = ClaudeCodeHandler()
 droid_handler = DroidHandler()
 gemini_handler = GeminiHandler()
 context_handler = ContextHandler()
-history_handler = HistoryHandler(max_turns=30)  # 세션 지원에 맞춰 30턴만 유지
+# 레거시 단일 히스토리(기본값). 채팅방 도입으로 방별 히스토리를 별도로 관리합니다.
+history_handler = HistoryHandler(max_turns=30)
 workspace_handler = WorkspaceHandler(str(project_root / "persona_data"))
 mode_handler = ModeHandler(project_root=str(project_root))
 
 # 연결된 클라이언트들
 connected_clients = set()
 login_attempts = {}
-client_sessions: dict = {}
-client_session_settings: dict = {}
+
+# 세션/채팅방 상태 관리 (웹소켓 분리, 재연결 내구성)
+# - websocket_to_session: 웹소켓 → 세션키
+# - sessions: 세션키 → { settings, rooms }
+#   - settings: { retention_enabled: bool, adult_consent: bool }
+#   - rooms: room_id → { history: HistoryHandler, provider_sessions: { provider: session_id } }
+websocket_to_session: dict = {}
+sessions: dict = {}
+
+
+def _get_or_create_session(websocket, data: dict | None):
+    """세션키를 해석하고(메시지에서 우선), 없으면 생성합니다.
+
+    반환: (session_key, session_dict)
+    """
+    key = None
+    if isinstance(data, dict):
+        key = data.get("session_key") or None
+
+    if key and key in sessions:
+        websocket_to_session[websocket] = key
+    else:
+        key = websocket_to_session.get(websocket)
+        if not key or key not in sessions:
+            # 새 세션 생성 (로그인 요구 환경에서는 성인동의 True 기본)
+            key = uuid.uuid4().hex
+            sessions[key] = {
+                "settings": {"retention_enabled": False, "adult_consent": bool(LOGIN_REQUIRED)},
+                "rooms": {},
+            }
+            websocket_to_session[websocket] = key
+    return key, sessions[key]
+
+
+def _get_room(session: dict, room_id: str | None):
+    """세션 내 채팅방 객체 반환(없으면 생성). room_id가 없으면 'default'."""
+    rid = room_id or "default"
+    rooms = session.setdefault("rooms", {})
+    room = rooms.get(rid)
+    if not room:
+        room = {
+            "history": HistoryHandler(max_turns=30),
+            "provider_sessions": {},
+        }
+        rooms[rid] = room
+    return rid, room
 
 
 def initialize_client_state(websocket):
-    """클라이언트별 세션/설정 초기값"""
-    client_sessions[websocket] = {}
-    client_session_settings[websocket] = {
-        "retention_enabled": False,
-        "adult_consent": False,  # 성인 모드 동의 플래그(세션별)
-    }
+    """웹소켓 연결 시 세션 매핑만 준비(상태는 세션에 저장)."""
+    _get_or_create_session(websocket, None)
 
 
-def clear_client_sessions(websocket):
-    """특정 클라이언트의 세션 정보를 초기화"""
-    if websocket in client_sessions:
-        client_sessions[websocket].clear()
-    else:
-        client_sessions[websocket] = {}
+def clear_client_sessions(websocket, room_id: str | None = None):
+    """프로바이더 세션 초기화.
+
+    room_id가 주어지면 해당 방만, 없으면 세션의 모든 방에 대해 초기화합니다.
+    히스토리는 유지합니다.
+    """
+    key = websocket_to_session.get(websocket)
+    if key and key in sessions:
+        if room_id:
+            rid = (room_id or "default")
+            room = sessions[key].get("rooms", {}).get(rid)
+            if room:
+                room["provider_sessions"] = {}
+        else:
+            for room in sessions[key].get("rooms", {}).values():
+                room["provider_sessions"] = {}
 
 
 def remove_client_sessions(websocket):
-    """클라이언트 연결 종료 시 세션/설정 제거"""
-    client_sessions.pop(websocket, None)
-    client_session_settings.pop(websocket, None)
+    """연결 종료 시 웹소켓↔세션 매핑만 제거(세션 상태는 보존)."""
+    websocket_to_session.pop(websocket, None)
 
 
-def is_session_retention_enabled(websocket):
-    settings = client_session_settings.get(websocket, {})
+def is_session_retention_enabled(websocket, session: dict | None = None):
+    sess = session or _get_or_create_session(websocket, None)[1]
+    settings = sess.get("settings", {})
     return settings.get("retention_enabled", False)
 
 
@@ -194,11 +246,16 @@ async def send_auth_required(websocket, reason="missing_token"):
 
 
 async def handle_login_action(websocket, data):
-    """로그인/토큰 검증 처리"""
-    # 로그인 시 수신된 성인 기능 동의(선택)를 세션에 반영
+    """로그인/토큰 검증 처리
+
+    변경점:
+    - 로그인 성공 시 성인동의를 자동으로 True로 설정합니다.
+    - 세션키(session_key)를 발급/반환하여 재연결 시 상태를 유지합니다.
+    """
+    # 세션 확보 및 성인 동의 자동 설정
+    session_key, session_obj = _get_or_create_session(websocket, data)
     try:
-        if isinstance(data, dict) and data.get("adult_consent"):
-            client_session_settings.setdefault(websocket, {}).update({"adult_consent": True})
+        session_obj.setdefault("settings", {})["adult_consent"] = True
     except Exception:
         pass
     if not LOGIN_REQUIRED:
@@ -282,12 +339,6 @@ async def handle_login_action(websocket, data):
             return
 
         new_token, expires_at = issue_access_token()
-        # 토큰 검증 로그인 성공 시에도 동의 플래그 유지/반영
-        try:
-            if isinstance(data, dict) and data.get("adult_consent"):
-                client_session_settings.setdefault(websocket, {}).update({"adult_consent": True})
-        except Exception:
-            pass
         await websocket.send(
             json.dumps(
                 {
@@ -297,6 +348,7 @@ async def handle_login_action(websocket, data):
                         "token": new_token,
                         "expires_at": expires_at,
                         "renewed": True,
+                        "session_key": session_key,
                     },
                 }
             )
@@ -325,11 +377,6 @@ async def handle_login_action(websocket, data):
     if password and password == LOGIN_PASSWORD:
         issued, expires_at = issue_access_token()
         refresh, refresh_exp = issue_refresh_token()
-        try:
-            if isinstance(data, dict) and data.get("adult_consent"):
-                client_session_settings.setdefault(websocket, {}).update({"adult_consent": True})
-        except Exception:
-            pass
         await websocket.send(
             json.dumps(
                 {
@@ -341,6 +388,7 @@ async def handle_login_action(websocket, data):
                         "refresh_token": refresh,
                         "refresh_expires_at": refresh_exp,
                         "renewed": False,
+                        "session_key": session_key,
                     },
                 }
             )
@@ -465,14 +513,7 @@ async def handle_message(websocket, message):
             narrator_drive = data.get("narrator_drive")
             choice_policy = data.get("choice_policy")
             choice_count = data.get("choice_count")
-            # 성인 모드 동의(선택): true가 오면 세션에 저장
-            if "adult_consent" in data:
-                try:
-                    client_session_settings.setdefault(websocket, {})["adult_consent"] = bool(
-                        data.get("adult_consent")
-                    )
-                except Exception:
-                    pass
+            # 성인 동의는 로그인 시 자동 부여됨. 추가 입력은 무시합니다.
 
             prev_ctx = context_handler.get_context()
             context_handler.set_world(world)
@@ -535,10 +576,13 @@ async def handle_message(websocket, message):
                 )
             )
 
-        # 히스토리 초기화
+        # 히스토리 초기화(채팅방 단위)
         elif action == "clear_history":
-            history_handler.clear()
-            clear_client_sessions(websocket)
+            session_key, session_obj = _get_or_create_session(websocket, data)
+            room_id = data.get("room_id")
+            _, room = _get_room(session_obj, room_id)
+            room["history"].clear()
+            clear_client_sessions(websocket, room_id=room_id)
             await websocket.send(
                 json.dumps(
                     {
@@ -548,20 +592,24 @@ async def handle_message(websocket, message):
                 )
             )
 
-        # 히스토리 설정 조회
+        # 히스토리 설정 조회(채팅방 단위)
         elif action == "get_history_settings":
+            session_key, session_obj = _get_or_create_session(websocket, data)
+            room_id = data.get("room_id")
+            _, room = _get_room(session_obj, room_id)
             await websocket.send(
                 json.dumps(
                     {
                         "action": "get_history_settings",
-                        "data": {"success": True, "max_turns": history_handler.max_turns},
+                        "data": {"success": True, "max_turns": room["history"].max_turns},
                     }
                 )
             )
 
         # 세션 리셋
         elif action == "reset_sessions":
-            clear_client_sessions(websocket)
+            room_id = data.get("room_id")
+            clear_client_sessions(websocket, room_id=room_id)
             await websocket.send(
                 json.dumps(
                     {
@@ -571,7 +619,7 @@ async def handle_message(websocket, message):
                 )
             )
 
-        # 히스토리 길이 조정
+        # 히스토리 길이 조정(채팅방 단위)
         elif action == "set_history_limit":
             requested = data.get("max_turns")
             try:
@@ -584,12 +632,15 @@ async def handle_message(websocket, message):
                             f"맥락 길이는 5~1000 사이여야 합니다 (입력값: {new_limit})"
                         )
 
-                history_handler.set_max_turns(new_limit)
+                session_key, session_obj = _get_or_create_session(websocket, data)
+                room_id = data.get("room_id")
+                _, room = _get_room(session_obj, room_id)
+                room["history"].set_max_turns(new_limit)
                 await websocket.send(
                     json.dumps(
                         {
                             "action": "set_history_limit",
-                            "data": {"success": True, "max_turns": history_handler.max_turns},
+                            "data": {"success": True, "max_turns": room["history"].max_turns},
                         }
                     )
                 )
@@ -610,19 +661,21 @@ async def handle_message(websocket, message):
                     )
                 )
 
-        # 세션 설정 조회
+        # 세션 설정 조회(세션 단위)
         elif action == "get_session_settings":
-            settings = client_session_settings.get(websocket, {"retention_enabled": False})
+            _, sess = _get_or_create_session(websocket, data)
+            settings = sess.get("settings", {"retention_enabled": False})
             await websocket.send(
                 json.dumps(
                     {"action": "get_session_settings", "data": {"success": True, **settings}}
                 )
             )
 
-        # 세션 유지 토글
+        # 세션 유지 토글(세션 단위)
         elif action == "set_session_retention":
             enabled = bool(data.get("enabled"))
-            client_session_settings.setdefault(websocket, {})["retention_enabled"] = enabled
+            _, sess = _get_or_create_session(websocket, data)
+            sess.setdefault("settings", {})["retention_enabled"] = enabled
             if not enabled:
                 clear_client_sessions(websocket)
             await websocket.send(
@@ -634,9 +687,12 @@ async def handle_message(websocket, message):
                 )
             )
 
-        # 서사 가져오기 (마크다운)
+        # 서사 가져오기 (마크다운, 채팅방 연동)
         elif action == "get_narrative":
-            narrative_md = history_handler.get_narrative_markdown()
+            _, sess = _get_or_create_session(websocket, data)
+            room_id = data.get("room_id")
+            _, room = _get_room(sess, room_id)
+            narrative_md = room["history"].get_narrative_markdown()
             await websocket.send(
                 json.dumps(
                     {"action": "get_narrative", "data": {"success": True, "markdown": narrative_md}}
@@ -670,6 +726,33 @@ async def handle_message(websocket, message):
             filename = data.get("filename")
             result = await workspace_handler.delete_file(file_type, filename)
             await websocket.send(json.dumps({"action": "delete_workspace_file", "data": result}))
+
+        # 채팅방 목록
+        elif action == "room_list":
+            result = await workspace_handler.list_rooms()
+            await websocket.send(json.dumps({"action": "room_list", "data": result}))
+
+        # 채팅방 저장(설정)
+        elif action == "room_save":
+            room_id = data.get("room_id") or "default"
+            # 클라이언트에서 보낸 conf 우선, 없으면 현재 컨텍스트를 사용
+            conf = data.get("config")
+            if not isinstance(conf, dict) or not conf:
+                conf = {"room_id": room_id, "context": context_handler.get_context()}
+            result = await workspace_handler.save_room(room_id, conf)
+            await websocket.send(json.dumps({"action": "room_save", "data": result}))
+
+        # 채팅방 로드(설정)
+        elif action == "room_load":
+            room_id = data.get("room_id") or "default"
+            result = await workspace_handler.load_room(room_id)
+            await websocket.send(json.dumps({"action": "room_load", "data": result}))
+
+        # 채팅방 삭제(설정만 제거)
+        elif action == "room_delete":
+            room_id = data.get("room_id") or "default"
+            result = await workspace_handler.delete_room(room_id)
+            await websocket.send(json.dumps({"action": "room_delete", "data": result}))
 
         # 워크스페이스 설정 로드
         elif action == "load_workspace_config":
@@ -742,43 +825,50 @@ async def handle_message(websocket, message):
             result = await mode_handler.switch_to_coding()
             await websocket.send(json.dumps({"action": "mode_switch_coding", "data": result}))
 
-        # 서사 목록
+        # 서사 목록(채팅방 연동)
         elif action == "list_stories":
-            result = await workspace_handler.list_stories()
+            room_id = data.get("room_id")
+            result = await workspace_handler.list_stories(room_id=room_id)
             await websocket.send(json.dumps({"action": "list_stories", "data": result}))
 
-        # 서사 저장 (append/use_server 옵션 지원)
+        # 서사 저장 (append/use_server 옵션 지원, 채팅방 연동)
         elif action == "save_story":
             filename = data.get("filename")
             content = data.get("content")
             use_server = bool(data.get("use_server", False))
             append = bool(data.get("append", False))
+            room_id = data.get("room_id")
             if use_server:
-                # 서버 원본 서사 사용
-                content = history_handler.get_narrative_markdown()
-            result = await workspace_handler.save_story(filename, content, append=append)
+                # 채팅방 원본 서사 사용
+                _, sess = _get_or_create_session(websocket, data)
+                _, room = _get_room(sess, room_id)
+                content = room["history"].get_narrative_markdown()
+            result = await workspace_handler.save_story(filename, content, append=append, room_id=room_id)
             await websocket.send(json.dumps({"action": "save_story", "data": result}))
 
-        # 서사 로드
+        # 서사 로드(채팅방 연동)
         elif action == "load_story":
             filename = data.get("filename")
-            result = await workspace_handler.load_story(filename)
+            room_id = data.get("room_id")
+            result = await workspace_handler.load_story(filename, room_id=room_id)
             await websocket.send(json.dumps({"action": "load_story", "data": result}))
 
-        # 서사 삭제
+        # 서사 삭제(채팅방 연동)
         elif action == "delete_story":
             filename = data.get("filename")
-            result = await workspace_handler.delete_story(filename)
+            room_id = data.get("room_id")
+            result = await workspace_handler.delete_story(filename, room_id=room_id)
             await websocket.send(json.dumps({"action": "delete_story", "data": result}))
 
-        # 서사에서 이어하기 (히스토리 주입)
+        # 서사에서 이어하기 (히스토리 주입, 채팅방 연동)
         elif action == "resume_from_story":
             filename = data.get("filename")
+            room_id = data.get("room_id")
             turns_req = data.get("turns")
             summarize = bool(data.get("summarize", False))
             try:
                 # 서사 로드
-                loaded = await workspace_handler.load_story(filename)
+                loaded = await workspace_handler.load_story(filename, room_id=room_id)
                 if not loaded.get("success"):
                     raise ValueError(loaded.get("error") or "서사를 불러오지 못했습니다")
 
@@ -789,12 +879,16 @@ async def handle_message(websocket, message):
 
                 # 불러올 턴 수 계산
                 try:
+                    # 방별 히스토리 설정 우선
+                    _, sess = _get_or_create_session(websocket, data)
+                    _, room = _get_room(sess, room_id)
+                    room_limit = room["history"].max_turns
                     if turns_req is None:
-                        turns = history_handler.max_turns or 30
+                        turns = room_limit or 30
                     else:
                         turns = int(turns_req)
                 except Exception:
-                    turns = history_handler.max_turns or 30
+                    turns = 30
 
                 if turns <= 0:
                     turns = 10
@@ -824,15 +918,18 @@ async def handle_message(websocket, message):
                     if bullets:
                         summary_text = "요약:\n" + "\n".join(bullets)
 
-                # 히스토리 교체
-                history_handler.clear()
+                # 히스토리 교체(채팅방)
+                _, sess = _get_or_create_session(websocket, data)
+                _, room = _get_room(sess, room_id)
+                room_hist = room["history"]
+                room_hist.clear()
                 if summary_text:
-                    history_handler.add_assistant_message(summary_text)
+                    room_hist.add_assistant_message(summary_text)
                 for m in inject:
                     if m["role"] == "user":
-                        history_handler.add_user_message(m["content"])
+                        room_hist.add_user_message(m["content"])
                     else:
-                        history_handler.add_assistant_message(m["content"])
+                        room_hist.add_assistant_message(m["content"])
 
                 # 대략 토큰 추정
                 total_chars = sum(len(m["content"]) for m in inject) + (
@@ -863,10 +960,13 @@ async def handle_message(websocket, message):
                     )
                 )
 
-        # 히스토리 스냅샷 반환
+        # 히스토리 스냅샷 반환(채팅방 단위)
         elif action == "get_history_snapshot":
             try:
-                snap = history_handler.get_history()
+                _, sess = _get_or_create_session(websocket, data)
+                room_id = data.get("room_id")
+                _, room = _get_room(sess, room_id)
+                snap = room["history"].get_history()
                 await websocket.send(
                     json.dumps(
                         {
@@ -885,22 +985,25 @@ async def handle_message(websocket, message):
                     )
                 )
 
-        # AI 채팅 (컨텍스트 + 히스토리 포함)
+        # AI 채팅 (컨텍스트 + 히스토리 포함, 채팅방 단위)
         elif action == "chat":
             prompt = data.get("prompt", "")
             # provider 파라미터 (없으면 컨텍스트의 기본값 사용)
             provider = data.get(
                 "provider", context_handler.get_context().get("ai_provider", "claude")
             )
-            provider_sessions = client_sessions.setdefault(websocket, {})
-            retention_enabled = is_session_retention_enabled(websocket)
+            # 세션/채팅방 해석
+            _, sess = _get_or_create_session(websocket, data)
+            rid, room = _get_room(sess, data.get("room_id"))
+            provider_sessions = room.setdefault("provider_sessions", {})
+            retention_enabled = is_session_retention_enabled(websocket, sess)
             provider_session_id = provider_sessions.get(provider) if retention_enabled else None
 
             # 성인 모드 동의 확인(세션)
             try:
                 ctx = context_handler.get_context()
                 level = (ctx.get("adult_level") or "").lower()
-                consent = client_session_settings.get(websocket, {}).get("adult_consent", False)
+                consent = sess.get("settings", {}).get("adult_consent", False)
                 if level in {"enhanced", "extreme"} and not consent:
                     await websocket.send(
                         json.dumps(
@@ -917,11 +1020,11 @@ async def handle_message(websocket, message):
             except Exception:
                 pass
 
-            # 사용자 메시지를 히스토리에 추가
-            history_handler.add_user_message(prompt)
+            # 사용자 메시지를 히스토리에 추가(채팅방)
+            room["history"].add_user_message(prompt)
 
-            # 히스토리 텍스트 가져오기
-            history_text = history_handler.get_history_text()
+            # 히스토리 텍스트 가져오기(채팅방)
+            history_text = room["history"].get_history_text()
 
             # System prompt 생성 (히스토리 포함)
             system_prompt = context_handler.build_system_prompt(history_text)
@@ -969,9 +1072,9 @@ async def handle_message(websocket, message):
             else:
                 result = {"success": False, "error": f"Unknown provider: {provider}"}
 
-            # AI 응답을 히스토리에 추가
+            # AI 응답을 히스토리에 추가(채팅방)
             if result.get("success") and result.get("message"):
-                history_handler.add_assistant_message(result["message"])
+                room["history"].add_assistant_message(result["message"])
 
             # 최종 결과 전송
             new_session_id = result.get("session_id")
