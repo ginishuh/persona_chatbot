@@ -90,6 +90,7 @@ const autoLoginCheckbox = document.getElementById('autoLogin');
 const loginButton = document.getElementById('loginButton');
 const autoLoginButton = document.getElementById('autoLoginButton');
 const loginError = document.getElementById('loginError');
+const loginAdultConsent = document.getElementById('loginAdultConsent');
 
 let currentAssistantMessage = null;
 let characterColors = {}; // 캐릭터별 색상 매핑
@@ -128,6 +129,7 @@ let sessionSettingsLoaded = false;
 const LOGIN_USER_KEY = 'persona_login_user';
 const LOGIN_AUTOLOGIN_KEY = 'persona_login_auto';
 const LOGIN_SAVED_PW_KEY = 'persona_login_pw';
+const LOGIN_ADULT_KEY = 'persona_login_adult';
 try {
     authToken = sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
     authTokenExpiresAt = sessionStorage.getItem(AUTH_EXP_KEY) || '';
@@ -537,6 +539,7 @@ function showLoginModal() {
         const auto = localStorage.getItem(LOGIN_AUTOLOGIN_KEY) === '1';
         if (rememberIdCheckbox) rememberIdCheckbox.checked = !!savedUser;
         if (autoLoginCheckbox) autoLoginCheckbox.checked = auto;
+        if (loginAdultConsent) loginAdultConsent.checked = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
     } catch (_) {}
     if (loginPasswordInput) loginPasswordInput.value = '';
     loginError.textContent = '';
@@ -561,10 +564,12 @@ function submitLogin() {
         loginError.textContent = '비밀번호를 입력하세요.';
         return;
     }
+    const consent = loginAdultConsent ? !!loginAdultConsent.checked : false;
     sendMessage({
         action: 'login',
         username,
-        password
+        password,
+        adult_consent: consent ? true : undefined
     }, { skipToken: true });
     loginError.textContent = '';
 }
@@ -588,7 +593,8 @@ if (autoLoginButton) {
                 alert('저장된 아이디/비밀번호가 없습니다. 먼저 로그인 후 자동 로그인을 설정하세요.');
                 return;
             }
-            sendMessage({ action: 'login', username: user, password: pw }, { skipToken: true });
+            const consent = localStorage.getItem(LOGIN_ADULT_KEY) === '1';
+            sendMessage({ action: 'login', username: user, password: pw, adult_consent: consent || undefined }, { skipToken: true });
         } catch (e) {
             console.error(e);
         }
@@ -606,7 +612,8 @@ function handleMessage(msg) {
                 authRequired = true;
                 isAuthenticated = false;
                 if (authToken) {
-                    sendMessage({ action: 'login' });
+                    const consent = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
+                    sendMessage({ action: 'login', adult_consent: consent || undefined });
                 } else {
                     // 자동 로그인 시도
                     try {
@@ -614,7 +621,8 @@ function handleMessage(msg) {
                         const user = localStorage.getItem(LOGIN_USER_KEY) || '';
                         const pw = localStorage.getItem(LOGIN_SAVED_PW_KEY) || '';
                         if (auto && user && pw) {
-                            sendMessage({ action: 'login', username: user, password: pw }, { skipToken: true });
+                            const consent = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
+                            sendMessage({ action: 'login', username: user, password: pw, adult_consent: consent || undefined }, { skipToken: true });
                         } else {
                             showLoginModal();
                         }
@@ -677,6 +685,10 @@ function handleMessage(msg) {
                     } else {
                         localStorage.removeItem(LOGIN_AUTOLOGIN_KEY);
                         localStorage.removeItem(LOGIN_SAVED_PW_KEY);
+                    }
+                    // 성인 동의 저장(선택)
+                    if (loginAdultConsent && loginAdultConsent.checked) {
+                        localStorage.setItem(LOGIN_ADULT_KEY, '1');
                     }
                 } catch (_) {}
                 // 직전 사용자 액션이 있었다면 우선 재전송

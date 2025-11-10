@@ -195,6 +195,12 @@ async def send_auth_required(websocket, reason="missing_token"):
 
 async def handle_login_action(websocket, data):
     """로그인/토큰 검증 처리"""
+    # 로그인 시 수신된 성인 기능 동의(선택)를 세션에 반영
+    try:
+        if isinstance(data, dict) and data.get("adult_consent"):
+            client_session_settings.setdefault(websocket, {}).update({"adult_consent": True})
+    except Exception:
+        pass
     if not LOGIN_REQUIRED:
         await websocket.send(
             json.dumps({"action": "login", "data": {"success": True, "token": None}})
@@ -276,6 +282,12 @@ async def handle_login_action(websocket, data):
             return
 
         new_token, expires_at = issue_access_token()
+        # 토큰 검증 로그인 성공 시에도 동의 플래그 유지/반영
+        try:
+            if isinstance(data, dict) and data.get("adult_consent"):
+                client_session_settings.setdefault(websocket, {}).update({"adult_consent": True})
+        except Exception:
+            pass
         await websocket.send(
             json.dumps(
                 {
@@ -313,6 +325,11 @@ async def handle_login_action(websocket, data):
     if password and password == LOGIN_PASSWORD:
         issued, expires_at = issue_access_token()
         refresh, refresh_exp = issue_refresh_token()
+        try:
+            if isinstance(data, dict) and data.get("adult_consent"):
+                client_session_settings.setdefault(websocket, {}).update({"adult_consent": True})
+        except Exception:
+            pass
         await websocket.send(
             json.dumps(
                 {

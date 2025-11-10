@@ -344,9 +344,10 @@
             <p class="login-description">.env에 설정한 아이디/비밀번호를 입력하세요.</p>
             <input type="text" id="loginUsername" placeholder="아이디" autocomplete="username" />
             <input type="password" id="loginPassword" placeholder="비밀번호" autocomplete="current-password" />
-            <div style="display:flex; justify-content: space-between; align-items:center; margin-top: 0.5rem;">
+            <div style="display:flex; justify-content: space-between; align-items:center; margin-top: 0.5rem; gap: 0.5rem; flex-wrap: wrap;">
                 <label class="checkbox-label"><input type="checkbox" id="rememberId"> <span>아이디 저장</span></label>
                 <label class="checkbox-label"><input type="checkbox" id="autoLogin"> <span>자동 로그인</span></label>
+                <label class="checkbox-label" title="성인 전용 기능(강화/극단 수위)을 사용할 수 있도록 동의합니다."><input type="checkbox" id="loginAdultConsent"> <span>성인 기능 동의</span></label>
             </div>
             <div style="display:flex; gap:0.5rem; margin-top: 0.5rem;">
                 <button id="loginButton" class="btn btn-primary" style="flex:1;">로그인</button>
