@@ -48,4 +48,3 @@ Compose and .env
 - Copy `docker-compose.yml.example` → `docker-compose.yml`
 - Pick an `.env` sample from `examples/env/` and adjust paths/UID/GID as needed
 - Run: `docker compose up -d --build`
-

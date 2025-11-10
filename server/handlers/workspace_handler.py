@@ -735,6 +735,7 @@ class WorkspaceHandler:
                         try:
                             async with aiofiles.open(cfg, encoding="utf-8") as f:
                                 import json as _json
+
                                 obj = _json.loads(await f.read() or "{}")
                                 title = obj.get("title") or obj.get("room_id") or title
                         except Exception:
@@ -750,6 +751,7 @@ class WorkspaceHandler:
             base = self._rooms_dir(room_id)
             cfg = base / "room.json"
             import json as _json
+
             async with aiofiles.open(cfg, "w", encoding="utf-8") as f:
                 await f.write(_json.dumps(config, ensure_ascii=False, indent=2))
             return {"success": True, "room_id": self._sanitize_room(room_id)}
@@ -764,6 +766,7 @@ class WorkspaceHandler:
                 return {"success": False, "error": "room.json 이 없습니다"}
             async with aiofiles.open(cfg, encoding="utf-8") as f:
                 import json as _json
+
                 obj = _json.loads(await f.read() or "{}")
             return {"success": True, "room": obj, "room_id": self._sanitize_room(room_id)}
         except Exception as e:
@@ -874,9 +877,10 @@ class WorkspaceHandler:
                 needs_header = not body.lstrip().startswith("---\n")
                 if needs_header:
                     from datetime import datetime
-                    title = filename[:-3] if filename.endswith('.md') else filename
+
+                    title = filename[:-3] if filename.endswith(".md") else filename
                     rid = self._sanitize_room(title)
-                    iso = datetime.utcnow().isoformat() + 'Z'
+                    iso = datetime.utcnow().isoformat() + "Z"
                     header = (
                         f"---\n"
                         f"title: {title}\n"

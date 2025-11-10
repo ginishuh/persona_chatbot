@@ -536,7 +536,7 @@ services:
 #### 호스트에서 마운트되는 것
 - AI CLI 인증 정보(`~/.claude`, `~/.factory`, `~/.gemini`)
 - 개발 코드(`./server`, `./web`) – 실시간 반영
-- 데이터(`./persona_data`, `./chatbot_workspace`)  
+- 데이터(`./persona_data`, `./chatbot_workspace`)
   - 서사 파일은 `persona_data/stories/`에 저장됩니다(별도 `STORIES/` 마운트 불필요).
 
 #### Workspace 격리

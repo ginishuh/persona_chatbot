@@ -2,8 +2,8 @@ import asyncio
 import json
 import logging
 import os
-import uuid
 import threading
+import uuid
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
@@ -122,7 +122,7 @@ def clear_client_sessions(websocket, room_id: str | None = None):
     key = websocket_to_session.get(websocket)
     if key and key in sessions:
         if room_id:
-            rid = (room_id or "default")
+            rid = room_id or "default"
             room = sessions[key].get("rooms", {}).get(rid)
             if room:
                 room["provider_sessions"] = {}
@@ -843,7 +843,9 @@ async def handle_message(websocket, message):
                 _, sess = _get_or_create_session(websocket, data)
                 _, room = _get_room(sess, room_id)
                 content = room["history"].get_narrative_markdown()
-            result = await workspace_handler.save_story(filename, content, append=append, room_id=room_id)
+            result = await workspace_handler.save_story(
+                filename, content, append=append, room_id=room_id
+            )
             await websocket.send(json.dumps({"action": "save_story", "data": result}))
 
         # 서사 로드(채팅방 연동)
