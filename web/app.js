@@ -1737,12 +1737,14 @@ function slugify(str) {
         .replace(/^\-+|\-+$/g, '') || 'character';
 }
 
-function composeDescription(base, gender, age, traits, goals, boundaries, examples, tags) {
+function composeDescription(base, gender, age, traits, goals, boundaries, examples, tags, includeMeta = true) {
     const lines = [];
-    const meta = [];
-    if (gender) meta.push(`성별: ${gender}`);
-    if (age) meta.push(`나이: ${age}`);
-    if (meta.length) lines.push(meta.join(', '));
+    if (includeMeta) {
+        const meta = [];
+        if (gender) meta.push(`성별: ${gender}`);
+        if (age) meta.push(`나이: ${age}`);
+        if (meta.length) lines.push(meta.join(', '));
+    }
     if (base) lines.push(base);
     if (traits) lines.push(`성격: ${traits}`);
     if (goals) lines.push(`목표: ${goals}`);
@@ -1767,7 +1769,7 @@ function collectCharacterFromItem(item) {
     const tags = (item.dataset.tags || '').trim();
     let examples = [];
     try { examples = JSON.parse(item.dataset.examples || '[]'); } catch (_) { examples = []; }
-    const description = composeDescription(base, gender, age, traits, goals, boundaries, examples, tags);
+    const description = composeDescription(base, gender, age, traits, goals, boundaries, examples, tags, false);
     const obj = { name, gender, description };
     if (age) obj.age = age;
     return obj;
@@ -2202,10 +2204,10 @@ function handleFileLoad(data) {
                 const boundaries = obj.boundaries || '';
                 const examples = Array.isArray(obj.examples) ? obj.examples : [];
                 const tags = Array.isArray(obj.tags) ? obj.tags.join(', ') : '';
-                const desc = composeDescription(summary, gender, age, traits, goals, boundaries, examples, tags);
-                participants.push({ name, gender, age, description: desc });
-                renderParticipantsLeftPanel();
-                renderParticipantsManagerList();
+            const desc = composeDescription(summary, gender, age, traits, goals, boundaries, examples, tags, false);
+            participants.push({ name, gender, age, description: desc });
+            renderParticipantsLeftPanel();
+            renderParticipantsManagerList();
             } else if (window.pendingTemplateModal) {
                 const ceName = document.getElementById('ceName');
                 const ceGender = document.getElementById('ceGender');
@@ -2532,6 +2534,9 @@ function renderParticipantsLeftPanel() {
         charactersList.appendChild(p);
         return;
     }
+    const stripMeta = (text) => (text || '')
+        .replace(/(^|\n)\s*(성별|나이|이름)\s*:[^\n]*\n?/g, '$1')
+        .trim();
     participants.forEach((c, idx) => {
         const row = document.createElement('div');
         row.className = 'character-chip';
@@ -2543,7 +2548,7 @@ function renderParticipantsLeftPanel() {
         const nm = c.name || '이름 없음';
         const gd = c.gender || '-';
         const ag = c.age || '-';
-        const snip = (c.description || '').slice(0, 40).replace(/\n/g, ' ');
+        const snip = stripMeta(c.description).slice(0, 60).replace(/\n/g, ' ');
         row.textContent = `${nm} · ${gd} · ${ag} — ${snip}`;
         charactersList.appendChild(row);
     });
@@ -2557,6 +2562,9 @@ function renderParticipantsManagerList() {
         wrap.innerHTML = '<p class="placeholder">참여자가 없습니다.</p>';
         return;
     }
+    const stripMeta = (text) => (text || '')
+        .replace(/(^|\n)\s*(성별|나이|이름)\s*:[^\n]*\n?/g, '$1')
+        .trim();
     participants.forEach((c, idx) => {
         const row = document.createElement('div');
         row.style.display = 'flex';
@@ -2565,7 +2573,7 @@ function renderParticipantsManagerList() {
         row.style.margin = '4px 0';
         const info = document.createElement('div');
         info.style.flex = '1';
-        info.textContent = `${c.name || '이름 없음'} · ${c.gender || '-'} · ${c.age || '-'} — ${(c.description||'').slice(0,40).replace(/\n/g,' ')}`;
+        info.textContent = `${c.name || '이름 없음'} · ${c.gender || '-'} · ${c.age || '-'} — ${stripMeta(c.description).slice(0,60).replace(/\n/g,' ')}`;
         const edit = document.createElement('button');
         edit.className = 'btn btn-sm';
         edit.textContent = '✏️ 편집';
