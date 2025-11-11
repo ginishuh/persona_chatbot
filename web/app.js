@@ -66,7 +66,6 @@ const deletePresetBtn = document.getElementById('deletePresetBtn');
 
 // 헤더 버튼
 // 모드 전환 UI 제거됨: 잔여 참조 방지를 위해 버튼 조회 삭제
-const gitSyncBtn = document.getElementById('gitSyncBtn');
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 const resetSessionsBtn = document.getElementById('resetSessionsBtn');
 const tokenText = document.getElementById('tokenText');
@@ -131,7 +130,6 @@ const RETRY_ACTIONS = new Set([
     'save_preset', 'delete_preset', 'load_preset',
     'set_history_limit',
     // 모드 전환 액션 제거됨
-    'git_sync', 'git_pull',
     'clear_history', 'reset_sessions'
 ]);
 const MAX_REFRESH_RETRIES = 3;
@@ -402,7 +400,6 @@ function initializeAppData() {
     loadFileList('my_character', myCharacterSelect);
     loadPresetList();
     loadStoryList();
-    checkGitStatus();
 }
 
 // ===== 채팅방 관리 =====
@@ -1127,40 +1124,6 @@ function handleMessage(msg) {
                 loadPresetList();
             } else {
                 log(`프리셋 삭제 실패: ${data.error}`, 'error');
-            }
-            break;
-
-        case 'git_check_status':
-            handleGitStatus(data);
-            break;
-
-        case 'git_init':
-            if (data.success) {
-                log(data.message, 'success');
-                checkGitStatus(); // 상태 재확인
-            } else {
-                log(`Git 초기화 실패: ${data.error}`, 'error');
-            }
-            break;
-
-        case 'git_sync':
-            if (data.success) {
-                log(data.message, 'success');
-                if (data.warning) {
-                    log(data.warning, 'error');
-                }
-                checkGitStatus(); // 상태 재확인
-            } else {
-                log(`동기화 실패: ${data.error}`, 'error');
-            }
-            break;
-
-        case 'git_pull':
-            if (data.success) {
-                log(data.message, 'success');
-                checkGitStatus(); // 상태 재확인
-            } else {
-                log(`Pull 실패: ${data.error}`, 'error');
             }
             break;
 
@@ -2886,74 +2849,6 @@ loadPresetBtn.addEventListener('click', () => {
 
 deletePresetBtn.addEventListener('click', deletePreset);
 
-// ===== Git 관리 =====
-
-// Git 상태 확인
-function checkGitStatus() {
-    sendMessage({ action: 'git_check_status' });
-}
-
-// Git 상태 처리
-function handleGitStatus(data) {
-    if (!data.success) {
-        gitSyncBtn.textContent = '🔄 동기화';
-        gitSyncBtn.title = `Git 오류: ${data.error}`;
-        return;
-    }
-
-    if (!data.is_repo) {
-        // Git 레포가 아님
-        gitSyncBtn.textContent = '📦 Git 초기화';
-        gitSyncBtn.title = '클릭하여 Git 레포지토리 초기화';
-    } else {
-        // 상세 상태 계산 (로컬/원격)
-        const localChanges = !!data.has_changes;
-        const ahead = Number(data.ahead || 0);
-        const behind = Number(data.behind || 0);
-
-        // 버튼 텍스트/아이콘
-        let text = '✓ 동기화';
-        let title = '변경사항 없음';
-
-        if (localChanges || ahead > 0 || behind > 0) {
-            // 동기화 필요
-            const upArrow = (localChanges || ahead > 0) ? '↑' : '';
-            const downArrow = (behind > 0) ? '↓' : '';
-            text = `🔄 동기화 ${upArrow}${downArrow}`.trim();
-
-            const bits = [];
-            if (localChanges) bits.push('로컬 변경 있음');
-            if (ahead > 0) bits.push(`원격 대비 앞섬 ${ahead}`);
-            if (behind > 0) bits.push(`원격 변경 ${behind}`);
-            title = bits.join(' · ') || '동기화 필요';
-        }
-
-        gitSyncBtn.textContent = text;
-        gitSyncBtn.title = title;
-    }
-}
-
-// Git 동기화 버튼 클릭
-gitSyncBtn.addEventListener('click', () => {
-    // 현재 상태 확인 후 처리
-    sendMessage({ action: 'git_check_status' });
-
-    // 잠시 후 실제 처리 (상태 확인 결과를 기다림)
-    setTimeout(() => {
-        const btnText = gitSyncBtn.textContent;
-
-        if (btnText.includes('초기화')) {
-            // Git 초기화
-            if (confirm('persona_data를 Git 레포지토리로 초기화하시겠습니까?')) {
-                sendMessage({ action: 'git_init' });
-            }
-        } else {
-            // Git 동기화
-            sendMessage({ action: 'git_sync' });
-        }
-    }, 100);
-});
-
 // (제거됨) 모드 관리 UI/로직은 더 이상 사용하지 않습니다.
 
 // ===== 서사 관리 =====
@@ -3217,11 +3112,6 @@ function syncMoreMenuStatus() {
 }
 
 // 더보기 메뉴 아이템 클릭 이벤트
-document.getElementById('moreGitSyncBtn')?.addEventListener('click', () => {
-    closeMoreMenu();
-    document.getElementById('gitSyncBtn')?.click();
-});
-
 document.getElementById('moreSettingsBtn')?.addEventListener('click', () => {
     closeMoreMenu();
     const settingsModal = document.getElementById('settingsModal');
@@ -3343,11 +3233,6 @@ window.addEventListener('load', async () => {
     document.getElementById('mobileOverlay')?.classList.remove('active');
     document.getElementById('participantsModal')?.classList.add('hidden');
     connect();
-
-    // 주기적 상태 확인 (120초마다)
-    // 서버 부하와 로그 스팸을 줄이기 위해 간격을 늘렸습니다.
-    // 필요 시 환경설정으로 노출 예정.
-    setInterval(checkGitStatus, 120000);
 });
 // 서사(=채팅방) 선택 시 방 전환 처리
 if (storySelect) {

@@ -123,14 +123,27 @@ def clear_client_sessions(websocket, room_id: str | None = None):
     """
     key = websocket_to_session.get(websocket)
     if key and key in sessions:
+        # Claude 세션 ID 수집 (누적 토큰 초기화용)
+        claude_session_ids = []
+
         if room_id:
             rid = room_id or "default"
             room = sessions[key].get("rooms", {}).get(rid)
             if room:
+                provider_sessions = room.get("provider_sessions", {})
+                if "claude" in provider_sessions:
+                    claude_session_ids.append(provider_sessions["claude"])
                 room["provider_sessions"] = {}
         else:
             for room in sessions[key].get("rooms", {}).values():
+                provider_sessions = room.get("provider_sessions", {})
+                if "claude" in provider_sessions:
+                    claude_session_ids.append(provider_sessions["claude"])
                 room["provider_sessions"] = {}
+
+        # Claude handler의 누적 토큰도 초기화
+        for session_id in claude_session_ids:
+            claude_handler.clear_session_tokens(session_id)
 
 
 def remove_client_sessions(websocket):
@@ -792,27 +805,6 @@ async def handle_message(websocket, message):
             filename = data.get("filename")
             result = await workspace_handler.delete_preset(filename)
             await websocket.send(json.dumps({"action": "delete_preset", "data": result}))
-
-        # Git 상태 확인
-        elif action == "git_check_status":
-            result = await workspace_handler.git_check_status()
-            await websocket.send(json.dumps({"action": "git_check_status", "data": result}))
-
-        # Git 초기화
-        elif action == "git_init":
-            result = await workspace_handler.git_init()
-            await websocket.send(json.dumps({"action": "git_init", "data": result}))
-
-        # Git 동기화
-        elif action == "git_sync":
-            commit_message = data.get("message")
-            result = await workspace_handler.git_sync(commit_message)
-            await websocket.send(json.dumps({"action": "git_sync", "data": result}))
-
-        # Git Pull
-        elif action == "git_pull":
-            result = await workspace_handler.git_pull()
-            await websocket.send(json.dumps({"action": "git_pull", "data": result}))
 
         # 모드 확인
         elif action == "mode_check":

@@ -1,12 +1,11 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `server/` – Python backend. Entry: `server/websocket_server.py`; shared logic in `server/handlers/` (file, Claude/Gemini/Droid, context, history, mode, workspace/git).
+- `server/` – Python backend. Entry: `server/websocket_server.py`; shared logic in `server/handlers/` (file, Claude/Gemini/Droid, context, history, mode, workspace).
 - `web/` – Static frontend (`index.html`, `app.js`, `style.css`) served by the Python HTTP helper.
 - `persona_data/stories/` – Saved narratives (markdown). The legacy `STORIES/` folder is no longer used.
 - `chatbot_workspace/` – Chatbot-only workspace (reads `chatbot_workspace/CLAUDE.md`).
-- `persona_data/` – Presets and workspace configuration (git-synced via UI).
-- `scripts/` – Host-side helpers (`host_git_sync_once.sh`, `host_git_sync_watch.sh`).
+- `persona_data/` – Presets and workspace configuration.
 - Root: `requirements.txt`, `Dockerfile.full`, `docker-compose.yml.example`, `.env.example`, `README.md`.
 
 ## Build, Test, and Development Commands
@@ -18,20 +17,6 @@
   - WebSocket: `ws://localhost:8765`
 - Optional Docker: copy `docker-compose.yml.example` → `docker-compose.yml`, then `docker compose up --build`
   - Ports follow `.env` (`HTTP_PORT`, `WS_PORT`) for Docker only.
-
-### Git Sync Modes (persona_data)
-- The web UI "🔄 동기화" button operates on `persona_data/`.
-- Two push modes are supported:
-  - Container mode (default): container does `pull --rebase` → `commit` → `push`.
-  - Host mode: set `APP_GIT_SYNC_MODE=host` in Compose → container writes a trigger file under `persona_data/.sync/` and host runner pushes (see `scripts/`).
-- Host runner options:
-  - One-shot: `scripts/host_git_sync_once.sh`
-  - Watch: `scripts/host_git_sync_watch.sh` (or systemd user path unit)
-- UI status icon mapping:
-  - `✓ 동기화`: no local changes, ahead=0, behind=0
-  - `🔄 동기화 ↑`: local changes or ahead>0 (push needed)
-  - `🔄 동기화 ↓`: behind>0 (pull needed)
-  - `🔄 동기화 ↑↓`: both
 
 ## Language Guidelines
 - Default language is Korean for comments, docstrings, user‑facing copy, commit messages, PRs, and documentation.
@@ -56,8 +41,7 @@
 
 ## Security & Configuration Tips
 - Do not commit secrets. Copy `.env.example` to `.env` for Docker workflows; local run uses ports hardcoded in `websocket_server.py`.
-- Mode switching: UI control has been removed. The backend helper `server/handlers/mode_handler.py` still exists for scripted or manual use (renames `AGENTS.md`/`CLAUDE.md` to `*.bak`). Prefer doing edits/commits in “coding” mode if you use it manually.
- - For container push, prefer SSH credentials mounted read-only (e.g., `~/.ssh:/home/node/.ssh:ro`). Host-push mode avoids credentials inside the container entirely.
+- Mode switching: UI control has been removed. The backend helper `server/handlers/mode_handler.py` still exists for scripted or manual use (renames `AGENTS.md`/`CLAUDE.md` to `*.bak`). Prefer doing edits/commits in "coding" mode if you use it manually.
 
 ## Current Status & Smoke Test
 
