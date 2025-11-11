@@ -123,14 +123,27 @@ def clear_client_sessions(websocket, room_id: str | None = None):
     """
     key = websocket_to_session.get(websocket)
     if key and key in sessions:
+        # Claude 세션 ID 수집 (누적 토큰 초기화용)
+        claude_session_ids = []
+
         if room_id:
             rid = room_id or "default"
             room = sessions[key].get("rooms", {}).get(rid)
             if room:
+                provider_sessions = room.get("provider_sessions", {})
+                if "claude" in provider_sessions:
+                    claude_session_ids.append(provider_sessions["claude"])
                 room["provider_sessions"] = {}
         else:
             for room in sessions[key].get("rooms", {}).values():
+                provider_sessions = room.get("provider_sessions", {})
+                if "claude" in provider_sessions:
+                    claude_session_ids.append(provider_sessions["claude"])
                 room["provider_sessions"] = {}
+
+        # Claude handler의 누적 토큰도 초기화
+        for session_id in claude_session_ids:
+            claude_handler.clear_session_tokens(session_id)
 
 
 def remove_client_sessions(websocket):

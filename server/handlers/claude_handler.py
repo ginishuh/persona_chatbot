@@ -17,6 +17,8 @@ class ClaudeCodeHandler:
         # 챗봇 전용 작업 디렉토리 (chatbot_workspace/CLAUDE.md 읽기 위해)
         self.chatbot_workspace = Path(__file__).parent.parent.parent / "chatbot_workspace"
         self.chatbot_workspace.mkdir(exist_ok=True)
+        # 세션별 누적 토큰 추적 (중복 누적 방지)
+        self.session_cumulative_tokens = {}
 
     async def start(self, system_prompt=None, resume_session_id=None, model: str | None = None):
         """Claude Code 프로세스 시작"""
@@ -165,7 +167,7 @@ class ClaudeCodeHandler:
             await self.process.wait()
             self.process = None
 
-            # 토큰 사용량 계산
+            # 토큰 사용량 계산 (세션 모드에서 중복 누적 방지)
             token_info = None
             if result and result.get("usage"):
                 usage = result.get("usage", {})
@@ -177,15 +179,43 @@ class ClaudeCodeHandler:
                 total_input = input_tokens + cache_read + cache_creation
                 total_tokens = total_input + output_tokens
 
-                token_info = {
-                    "input_tokens": input_tokens,
-                    "cache_read_tokens": cache_read,
-                    "cache_creation_tokens": cache_creation,
-                    "output_tokens": output_tokens,
-                    "total_tokens": total_tokens,
-                    "context_window": 200000,
-                    "tokens_remaining": 200000 - total_tokens,
-                }
+                # 세션 모드: Claude CLI가 누적값을 반환하므로 delta만 계산
+                if current_session_id:
+                    prev_total = self.session_cumulative_tokens.get(current_session_id, 0)
+                    delta_tokens = total_tokens - prev_total
+
+                    # 델타가 음수면 (새 세션이거나 리셋) 전체값 사용
+                    if delta_tokens < 0:
+                        delta_tokens = total_tokens
+
+                    # 현재 누적값 저장
+                    self.session_cumulative_tokens[current_session_id] = total_tokens
+
+                    # 델타값만 반환 (token_usage_handler에서 누적)
+                    token_info = {
+                        "input_tokens": delta_tokens,  # 간단화: 전체 델타만 반환
+                        "cache_read_tokens": 0,
+                        "cache_creation_tokens": 0,
+                        "output_tokens": 0,
+                        "total_tokens": delta_tokens,
+                        "context_window": 200000,
+                        "tokens_remaining": 200000 - total_tokens,
+                    }
+                    logger.info(
+                        f"Session {current_session_id[:8]}... - "
+                        f"Cumulative: {total_tokens}, Delta: {delta_tokens}"
+                    )
+                else:
+                    # 비세션 모드: 그대로 반환
+                    token_info = {
+                        "input_tokens": input_tokens,
+                        "cache_read_tokens": cache_read,
+                        "cache_creation_tokens": cache_creation,
+                        "output_tokens": output_tokens,
+                        "total_tokens": total_tokens,
+                        "context_window": 200000,
+                        "tokens_remaining": 200000 - total_tokens,
+                    }
 
             return {
                 "success": True,
@@ -199,3 +229,17 @@ class ClaudeCodeHandler:
             logger.error(f"Error sending message: {e}")
             await self.stop()
             return {"success": False, "error": str(e), "session_id": session_id}
+
+    def clear_session_tokens(self, session_id: str | None = None):
+        """세션별 누적 토큰 초기화
+
+        Args:
+            session_id: 초기화할 세션 ID (None이면 전체 초기화)
+        """
+        if session_id:
+            if session_id in self.session_cumulative_tokens:
+                del self.session_cumulative_tokens[session_id]
+                logger.info(f"Cleared cumulative tokens for session {session_id[:8]}...")
+        else:
+            self.session_cumulative_tokens.clear()
+            logger.info("Cleared all cumulative tokens")
