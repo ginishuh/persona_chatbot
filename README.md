@@ -104,8 +104,6 @@ python server/websocket_server.py
 
 > **중요**: 서버는 `persona_data` 폴더명을 고정으로 참조합니다. 다른 이름으로 클론한 경우 반드시 폴더명을 `persona_data`로 변경하세요.
 
-> 참고: 웹 UI의 🔄 동기화 버튼은 `persona_data/` 레포에서 `git add/commit/push`를 수행합니다.
-
 ### 4) 로컬 훅(린트/보안) 설치
 
 커밋/푸시 전 자동 포맷/린트/보안 점검을 위해 Pre-commit 훅 설치를 권장합니다.
@@ -177,27 +175,6 @@ pre-commit run --all-files  # 스모크
 
 노트: `STORIES/` 폴더는 레포에 포함되지 않으며(레거시 제거), 서버가 최초 실행 시 자동 생성됩니다. 영속 보관을 원하면 프로젝트 루트에 `STORIES/` 디렉터리를 만들어 두세요.
 
-### persona_data 동기화
-
-헤더의 **🔄 동기화** 버튼으로 캐릭터/세계관 데이터를 백업할 수 있습니다:
-
-**동작 방식**:
-1. `persona_data/` 디렉토리의 모든 변경사항을 자동으로 감지
-2. Git에 추가 (`git add -A`)
-3. 타임스탬프와 함께 커밋 (`git commit -m "Sync: YYYY-MM-DD HH:MM:SS"`)
-4. 원격 저장소에 푸시 (`git push`)
-
-**주의사항**:
-- `persona_data/`가 Git 저장소로 초기화되어 있어야 함
-- 원격 저장소(GitHub/GitLab 등)가 설정되어 있어야 푸시 가능
-- 동기화 실패 시 서버 로그 확인 필요
-
-**저장되는 데이터**:
-- 캐릭터 프리셋 (`characters/`)
-- 세계관 설정 (`worlds/`)
-- NPC 데이터 (`npcs/`)
-- 저장된 스토리/시나리오
-
 ## AI 제공자 설정
 
 좌측 패널/설정에서 **AI 제공자**를 선택할 수 있습니다. (이전의 `모드` 탭은 제거되었습니다.)
@@ -263,7 +240,6 @@ persona_chatbot/
 | `set_session_retention` | 세션 유지 토글 (true/false) |
 | `reset_sessions` | 모든 세션 ID 초기화 |
 | `list_files` / `read_file` / `write_file` | 파일 관리 |
-| `git_status` / `git_push` | Git 작업 |
 
 ### 예시: 대화 전송
 
@@ -370,102 +346,6 @@ python scripts/ws_chat_test.py --provider gemini --prompt "테스트: Gemini"
 - 로그인 사용 시 `.env`의 `APP_LOGIN_PASSWORD`와 `APP_JWT_SECRET`를 함께 설정해야 합니다.
 - Docker 사용 시 인증 디렉토리는 호스트 절대 경로 권장:
   - `FACTORY_AUTH_DIR=$HOME/.factory`, `CLAUDE_AUTH_DIR=$HOME/.claude`, `GEMINI_AUTH_DIR=$HOME/.gemini`
-
-### Docker/Git 동기화 가이드 (중요)
-
-웹 UI의 "🔄 동기화" 버튼은 `persona_data/` 디렉토리에서 `git add/commit/push`를 수행합니다. 컨테이너 내부 사용자(`node`, UID 1000)에는 전역 Git 사용자 설정이 없으므로, 다음을 참고해 주세요.
-
-#### 1) "Author identity unknown" 오류
-
-증상:
-
-```
-Author identity unknown
-Please tell me who you are.
-```
-
-원인: 컨테이너 내부에 전역 Git 사용자 정보가 없어 커밋 작성자 정보를 알 수 없습니다.
-
-해결(레포 로컬 설정 권장):
-
-```bash
-# 호스트에서 실행 (권장)
-git -C persona_data config user.name "YOUR_NAME"
-git -C persona_data config user.email "you@example.com"
-
-# 또는 컨테이너 안에서 실행
-docker compose exec persona-chatbot bash -lc \
-  'git -C /app/persona_data config user.name "YOUR_NAME" && \
-   git -C /app/persona_data config user.email "you@example.com"'
-```
-
-참고: 컨테이너에 `git config --global`을 넣어도 됩니다만, 이미지/컨테이너 재생성 시 유실될 수 있으므로 레포 **로컬 설정**을 추천합니다.
-
-#### 2) 원격 푸시 설정(선택)
-
-`persona_data`를 프라이빗 원격 저장소로 백업하려면 아래 중 하나를 선택하세요.
-
-- HTTPS + PAT(권장):
-  ```bash
-  # 1) 원격이 HTTPS인지 확인/변경
-  git -C persona_data remote set-url origin https://github.com/<USER>/<REPO>.git
-
-  # 2) 최초 푸시 시 사용자명/PAT 입력(토큰은 GitHub Settings → Developer settings → PAT 생성)
-  git -C persona_data push -u origin master
-
-  # 선택) 자격 증명 저장(개발 PC 한정, 보안 주의)
-  git -C persona_data config credential.helper store
-  ```
-
-- SSH 키 사용:
-  ```bash
-  # 원격을 SSH로 설정
-  git -C persona_data remote set-url origin git@github.com:<USER>/<REPO>.git
-
-  # 컨테이너에 SSH 키를 마운트(예시)
-  # docker-compose.yml 의 volumes 아래 추가 (호스트 경로는 환경에 맞게 수정)
-  #   - ~/.ssh:/home/node/.ssh:ro
-  ```
-
-#### 2.5) 호스트 푸시 모드(보안 선호)
-
-컨테이너에서 `git push`를 수행하지 않고, UI의 동기화 버튼은 커밋과 함께
-호스트에 "푸시 요청" 트리거 파일을 남기고, 실제 푸시는 호스트에서 수행하는 모드입니다.
-
-장점: 컨테이너에 PAT/SSH 자격증명을 저장하지 않아도 되며, 호스트의 Git 설정을 그대로 활용합니다.
-
-사용법:
-
-1) Compose 환경변수 설정(컨테이너 푸시 비활성화)
-
-docker-compose.yml의 `environment` 블록에 추가:
-
-```
-  - APP_GIT_SYNC_MODE=host
-```
-
-2) 호스트 워처 실행(별도 터미널)
-
-```
-chmod +x scripts/host_git_sync_*.sh
-# REPO_DIR는 생략 가능(기본은 현재 저장소 기준 ../persona_data)
-REPO_DIR="$(pwd)/persona_data" ./scripts/host_git_sync_watch.sh
-```
-
-동작: 컨테이너는 `persona_data/.sync/push_*.json` 파일을 생성하고,
-호스트 워처는 이를 감지하여 `git -C persona_data pull --rebase && git -C persona_data push`를 실행합니다.
-
-팁: systemd --user 유닛으로 등록하면 백그라운드에서 영속 실행할 수 있습니다.
-
-#### 3) 권한/소유권 이슈
-
-`STORIES/`는 런타임에 생성됩니다. 호스트/컨테이너 혼용 시 소유자/권한이 달라 쓰기 문제가 생길 수 있습니다. 필요 시 다음을 참고하세요.
-
-```bash
-sudo chown -R $(id -u):$(id -g) STORIES
-```
-
-Compose는 컨테이너를 `${UID}:${GID}`로 실행하므로, 호스트 UID/GID와 맞추면 문제를 줄일 수 있습니다.
 
 ### 환경 변수(.env)
 
@@ -585,8 +465,6 @@ cp chatbot_workspace/GEMINI.sample.md chatbot_workspace/GEMINI.md
   - 로컬에서 훅이 설치되지 않았을 수 있습니다. `pip install pre-commit && pre-commit install && pre-commit run --all-files`로 확인하세요.
 - 9000/8765 포트 충돌
   - 이미 사용 중인 프로세스를 종료하거나 Docker로 실행하세요.
-- UI 동기화 버튼이 푸시에 실패
-  - 컨테이너 모드에서는 컨테이너 내부 Git 사용자/자격증명이 필요합니다. 보안을 위해 `APP_GIT_SYNC_MODE=host` 사용을 권장합니다.
 - 로그인 활성화 후 토큰 오류
   - `APP_LOGIN_PASSWORD` 설정 시 `APP_JWT_SECRET`가 반드시 있어야 합니다. 둘 다 `.env`에 설정하세요.
 

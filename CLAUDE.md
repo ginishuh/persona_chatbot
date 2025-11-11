@@ -54,7 +54,7 @@ persona_chatbot/
 │       ├── context_handler.py       # System prompt builder
 │       ├── history_handler.py       # Sliding window conversation memory
 │       ├── file_handler.py          # File operations
-│       └── workspace_handler.py     # Persona data + Git sync (status/init/sync/pull)
+│       └── workspace_handler.py     # Persona data management
 ├── web/                             # Static frontend (HTML/CSS/JS)
 ├── chatbot_workspace/               # Isolated Claude Code workspace
 │   └── CLAUDE.md                    # Chatbot-specific instructions (adult mode, character acting)
@@ -91,7 +91,7 @@ Server listens on `0.0.0.0:8765`, handles these actions:
 - `chat` - Send message (returns `chat_stream` events + `chat_complete`)
 - `clear_history` - Reset conversation memory
 - `get_narrative` - Get markdown formatted conversation history
-- `list_files`, `read_file`, `write_file`, `git_status`, `git_push` - File/Git operations
+- `list_files`, `read_file`, `write_file` - File operations
 
 ### Frontend Message Parsing
 
@@ -222,19 +222,6 @@ Check `claude_handler.py` line 99 for stderr logging. Increase verbosity or remo
 Characters are assigned colors by hashing their name modulo 5. See `web/app.js`:
 ```javascript
 const colorClass = `character-${characterColorMap.size % 5}`;
-```
-
-## Git Workflow
-
-Standard Python project. When committing:
-```bash
-git add -A
-git commit -m "Description
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
-git push origin main
 ```
 
 ## Project-Specific Conventions

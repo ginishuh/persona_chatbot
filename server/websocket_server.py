@@ -793,27 +793,6 @@ async def handle_message(websocket, message):
             result = await workspace_handler.delete_preset(filename)
             await websocket.send(json.dumps({"action": "delete_preset", "data": result}))
 
-        # Git 상태 확인
-        elif action == "git_check_status":
-            result = await workspace_handler.git_check_status()
-            await websocket.send(json.dumps({"action": "git_check_status", "data": result}))
-
-        # Git 초기화
-        elif action == "git_init":
-            result = await workspace_handler.git_init()
-            await websocket.send(json.dumps({"action": "git_init", "data": result}))
-
-        # Git 동기화
-        elif action == "git_sync":
-            commit_message = data.get("message")
-            result = await workspace_handler.git_sync(commit_message)
-            await websocket.send(json.dumps({"action": "git_sync", "data": result}))
-
-        # Git Pull
-        elif action == "git_pull":
-            result = await workspace_handler.git_pull()
-            await websocket.send(json.dumps({"action": "git_pull", "data": result}))
-
         # 모드 확인
         elif action == "mode_check":
             result = await mode_handler.check_mode()
