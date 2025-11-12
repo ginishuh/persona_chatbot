@@ -22,7 +22,7 @@
 - **멀티 캐릭터 대화**: 여러 캐릭터가 동시에 참여하는 그룹 채팅 형식
 - **TRPG 스타일 GM 시스템**: AI 진행자(적극적/보통/소극적), 사용자 진행자, 진행자 없음 모드
 - **실시간 스트리밍**: WebSocket 기반 즉각 응답
-- **히스토리/Export**: 대화 히스토리를 우측 패널에서 확인하고, HTTP `/api/export`로 JSON(선택 Zip) 다운로드
+- **히스토리/Export**: 대화 히스토리를 우측 패널에서 확인하고, HTTP `/api/export`로 JSON(선택 Zip) 다운로드. 대용량은 `/api/export/stream`(NDJSON) 권장.
 - **멀티 AI 지원**: Claude, Gemini, Droid CLI 중 선택 가능
 - **세션 & 맥락 관리**: 대화 히스토리 길이 조절, 세션 유지/리셋 기능
 - **토큰 사용량 추적**: 모델별 토큰 사용량 실시간 표시 (Claude 지원)
@@ -269,6 +269,21 @@ curl -OJ "http://localhost:9000/api/export?scope=selected&room_ids=room1,room2&i
 # 기간 필터(전체, JSON)
 curl -OJ "http://localhost:9000/api/export?scope=full&start=2025-11-01&end=2025-11-12"
 ```
+
+NDJSON 스트리밍(대용량 권장)
+
+```bash
+# 단일 방(메시지+컨텍스트)
+curl -OJ "http://localhost:9000/api/export/stream?scope=single&room_id=default&include=messages,context"
+
+# 전체(메시지+토큰사용량)
+curl -OJ "http://localhost:9000/api/export/stream?scope=full&include=messages,token_usage"
+
+# 날짜 범위 필터
+curl -OJ "http://localhost:9000/api/export/stream?scope=single&room_id=default&start=2025-11-01&end=2025-11-12"
+```
+
+라인 타입: `meta`, `room`, `message`, `token_usage`, `end`
 
 라우팅(History API)
 - 클라이언트는 History API 라우팅을 사용합니다(`/`, `/rooms/:id`, `/rooms/:id/history`, `/backup`).

@@ -608,6 +608,10 @@ user_message → HistoryHandler (메모리 캐시)
 - 서버 시작 시 상위 디렉터리 자동 생성: `os.makedirs(Path(DB_PATH).parent, exist_ok=True)`
 - Docker: `data/` 볼륨 마운트(백업/보존 용이)
 
+WSL 권장 사항
+- 성능과 잠금 이슈를 피하기 위해 `/mnt/c`가 아닌 리눅스 파일시스템(예: `~/persona_chatbot/data`)을 사용하세요.
+- 레포 내부의 `data/chatbot.db`는 `.gitignore` 처리되어 커밋되지 않습니다. 장기 보존이 필요하면 `DB_PATH=/home/<user>/.persona_chatbot/chatbot.db`처럼 레포 밖 경로를 지정하세요.
+
 #### 5.2 WorkspaceHandler 수정
 - [ ] `list_rooms()`, `save_room()` 등 제거
 - [ ] `list_stories()`, `save_story()` 등 제거 또는 Export로 대체
