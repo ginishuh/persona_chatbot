@@ -246,7 +246,29 @@ persona_chatbot/
 | `set_session_retention` | 세션 유지 토글 (true/false) |
 
 HTTP Export
-- `GET /api/export?scope=single&room_id=<id>`: 단일 방 Export(JSON). `selected/full`도 지원, 추후 `format=zip` 등 확장 예정.
+
+| 파라미터 | 값 | 기본값 | 설명 |
+|---|---|---|---|
+| `scope` | `single`/`selected`/`full` | `single` | Export 범위 |
+| `room_id` | 문자열 | `default` | `scope=single`일 때 대상 방 |
+| `room_ids` | `a,b,c` | - | `scope=selected`일 때 대상 방 목록 |
+| `include` | `messages,context,token_usage` | `messages,context` | 포함 항목 선택 |
+| `start` | `YYYY-MM-DD` 또는 `YYYY-MM-DDTHH:MM:SS` | - | 시작 시점 필터 |
+| `end` | `YYYY-MM-DD` 또는 `YYYY-MM-DDTHH:MM:SS` | - | 종료 시점 필터 |
+| `format` | `json`/`zip` | `json` | zip은 내부에 JSON 1개 포함 |
+
+예시
+
+```bash
+# 단일 방(JSON)
+curl -OJ "http://localhost:9000/api/export?scope=single&room_id=default"
+
+# 선택 방 + 토큰 포함(Zip)
+curl -OJ "http://localhost:9000/api/export?scope=selected&room_ids=room1,room2&include=messages,context,token_usage&format=zip"
+
+# 기간 필터(전체, JSON)
+curl -OJ "http://localhost:9000/api/export?scope=full&start=2025-11-01&end=2025-11-12"
+```
 
 라우팅(History API)
 - 클라이언트는 History API 라우팅을 사용합니다(`/`, `/rooms/:id`, `/rooms/:id/history`, `/backup`).

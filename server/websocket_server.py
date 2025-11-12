@@ -398,16 +398,8 @@ async def handle_message(websocket, message):
             )
             return
 
-        # Git 상태
-        elif action == "git_status":
-            result = await git_handler.status()
-            await websocket.send(json.dumps({"action": "git_status", "data": result}))
-
-        # Git 커밋/푸시
-        elif action == "git_push":
-            message = data.get("message", "Update from web app")
-            result = await git_handler.commit_and_push(message)
-            await websocket.send(json.dumps({"action": "git_push", "data": result}))
+        elif action in {"git_status", "git_push"}:
+            pass  # 라우터 처리
 
         # 컨텍스트 설정
         elif action == "set_context":
@@ -537,20 +529,8 @@ async def handle_message(websocket, message):
         elif action in {"list_presets", "save_preset", "load_preset", "delete_preset"}:
             pass  # 라우터 처리
 
-        # 모드 확인
-        elif action == "mode_check":
-            result = await mode_handler.check_mode()
-            await websocket.send(json.dumps({"action": "mode_check", "data": result}))
-
-        # 챗봇 모드 전환
-        elif action == "mode_switch_chatbot":
-            result = await mode_handler.switch_to_chatbot()
-            await websocket.send(json.dumps({"action": "mode_switch_chatbot", "data": result}))
-
-        # 코딩 모드 전환
-        elif action == "mode_switch_coding":
-            result = await mode_handler.switch_to_coding()
-            await websocket.send(json.dumps({"action": "mode_switch_coding", "data": result}))
+        elif action in {"mode_check", "mode_switch_chatbot", "mode_switch_coding"}:
+            pass  # 라우터 처리
 
         elif action == "list_stories":
             pass  # 라우터 스텁 처리

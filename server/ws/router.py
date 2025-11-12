@@ -13,7 +13,9 @@ from server.core.app_context import AppContext
 from .actions import chat as chat_actions
 from .actions import config as config_actions
 from .actions import files as files_actions
+from .actions import git as git_actions
 from .actions import history as history_actions
+from .actions import mode as mode_actions
 from .actions import presets as presets_actions
 from .actions import rooms as rooms_actions
 from .actions import stories as stories_actions
@@ -55,6 +57,13 @@ ACTION_TABLE: dict[str, Handler] = {
     "resume_from_story": stories_actions.resume_from_story,
     # chat
     "chat": chat_actions.chat,
+    # git
+    "git_status": git_actions.git_status,
+    "git_push": git_actions.git_push,
+    # mode
+    "mode_check": mode_actions.mode_check,
+    "mode_switch_chatbot": mode_actions.mode_switch_chatbot,
+    "mode_switch_coding": mode_actions.mode_switch_coding,
 }
 
 
