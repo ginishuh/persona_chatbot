@@ -207,6 +207,50 @@ function setRefreshToken(token, expiresAt) {
     } catch (_) { /* ignore */ }
 }
 
+// ===== History API Router (스켈레톤) =====
+// 간단한 경로 → 화면 매핑. 현재 단계에서는 기존 화면 구조를 유지하면서 URL만 관리합니다.
+const routeTable = [
+    { pattern: /^\/$/, view: 'room-list' },
+    { pattern: /^\/rooms\/([^\/]+)$/, view: 'room-detail' },
+    { pattern: /^\/rooms\/([^\/]+)\/settings$/, view: 'room-settings' },
+    { pattern: /^\/rooms\/([^\/]+)\/history$/, view: 'room-history' },
+    { pattern: /^\/backup$/, view: 'backup' },
+];
+
+function parsePathname(pathname) {
+    for (const r of routeTable) {
+        const m = pathname.match(r.pattern);
+        if (m) {
+            return { view: r.view, params: m.slice(1) };
+        }
+    }
+    return { view: 'room-list', params: [] };
+}
+
+function renderCurrentScreenFrom(pathname) {
+    const { view, params } = parsePathname(pathname);
+    // 최소 동작: URL이 /rooms/:id 계열이면 현재 방만 전환하고 기존 UI 그대로 사용
+    if (view.startsWith('room-') && params[0]) {
+        const rid = decodeURIComponent(params[0]);
+        if (currentRoom !== rid) {
+            currentRoom = rid;
+            persistRooms();
+            renderRoomsUI();
+            sendMessage({ action: 'room_load', room_id: currentRoom });
+            sendMessage({ action: 'reset_sessions', room_id: currentRoom });
+            refreshRoomViews();
+        }
+    }
+    // 추후: 각 view별 전용 렌더러 연결 예정
+}
+
+function navigate(path) {
+    window.history.pushState({ path }, '', path);
+    renderCurrentScreenFrom(location.pathname);
+}
+
+window.addEventListener('popstate', () => renderCurrentScreenFrom(location.pathname));
+
 // ===== WebSocket 연결 =====
 
 async function loadAppConfig() {

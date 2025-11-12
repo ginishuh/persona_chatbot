@@ -45,6 +45,7 @@ persona_data/
 chatbot_workspace/CLAUDE.md
 chatbot_workspace/GEMINI.md
 .env
+data/
 
 # Local auth/config dirs (호스트 전용 보관)
 .factory/
