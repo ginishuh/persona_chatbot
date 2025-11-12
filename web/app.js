@@ -80,6 +80,7 @@ const storySelect = document.getElementById('storySelect');
 const loadStoryBtn = document.getElementById('loadStoryBtn');
 const deleteStoryBtn = document.getElementById('deleteStoryBtn');
 const resumeStoryBtn = document.getElementById('resumeStoryBtn');
+const STORIES_ENABLED = false;
 // 채팅방 UI
 const roomSelect = document.getElementById('roomSelect');
 const roomAddBtn = document.getElementById('roomAddBtn');
@@ -443,7 +444,7 @@ function initializeAppData() {
     loadFileList('situation', situationSelect);
     loadFileList('my_character', myCharacterSelect);
     loadPresetList();
-    loadStoryList();
+    if (!STORIES_ENABLED) hideStoriesUI();
 }
 
 // ===== 채팅방 관리 =====
@@ -479,7 +480,6 @@ function refreshRoomViews() {
     sendMessage({ action: 'get_narrative' });
     sendMessage({ action: 'get_history_settings' });
     sendMessage({ action: 'get_history_snapshot' });
-    loadStoryList();
 }
 
 if (roomSelect) {
@@ -518,7 +518,7 @@ if (roomDelBtn) {
             alert('기본 채팅방은 삭제할 수 없습니다.');
             return;
         }
-        if (!confirm(`채팅방 '${currentRoom}' 설정을 삭제하시겠습니까? (서사 파일은 보존)`)) return;
+        if (!confirm(`채팅방 '${currentRoom}' 설정을 삭제하시겠습니까?`)) return;
         sendMessage({ action: 'room_delete', room_id: currentRoom });
         rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== currentRoom);
         currentRoom = 'default';
@@ -1174,49 +1174,11 @@ function handleMessage(msg) {
         // 모드 전환 관련 메시지 제거됨
 
         case 'list_stories':
-            if (data.success) {
-                updateStoryList(data.files);
-            } else {
-                log(`서사 목록 로드 실패: ${data.error}`, 'error');
-            }
-            break;
-
         case 'save_story':
-            if (data.success) {
-                log(`서사 저장 완료: ${data.filename}`, 'success');
-                loadStoryList(); // 목록 새로고침
-            } else {
-                log(`서사 저장 실패: ${data.error}`, 'error');
-            }
-            break;
-
         case 'load_story':
-            if (data.success) {
-                displayStoryContent(data.content);
-                log(`서사 로드 완료: ${data.filename}`, 'success');
-            } else {
-                log(`서사 로드 실패: ${data.error}`, 'error');
-            }
-            break;
-
         case 'delete_story':
-            if (data.success) {
-                log(`서사 삭제 완료: ${data.filename}`, 'success');
-                loadStoryList(); // 목록 새로고침
-                narrativeContent.innerHTML = '<p class="placeholder">대화가 진행되면 여기에 서사가 기록됩니다.</p>';
-            } else {
-                log(`서사 삭제 실패: ${data.error}`, 'error');
-            }
-            break;
-
         case 'resume_from_story':
-            if (data.success) {
-                log(`이어하기 완료: 최근 ${data.injected_turns}턴 주입${data.summarized ? ' + 요약' : ''} (예상 토큰 ~${data.approx_tokens})`, 'success');
-                // 주입 후 스냅샷 받아 채팅창 복원
-                sendMessage({ action: 'get_history_snapshot' });
-            } else {
-                log(`이어하기 실패: ${data.error}`, 'error');
-            }
+            log('스토리 파일 기능은 비활성화되었습니다(히스토리 화면에서 확인하세요).', 'info');
             break;
 
         case 'get_history_snapshot':
@@ -2898,9 +2860,7 @@ deletePresetBtn.addEventListener('click', deletePreset);
 // ===== 서사 관리 =====
 
 // 서사 목록 로드
-function loadStoryList() {
-    sendMessage({ action: 'list_stories' });
-}
+function loadStoryList() { /* no-op: stories disabled */ }
 
 // 서사 목록 업데이트
 function updateStoryList(files) {
@@ -2956,55 +2916,13 @@ function updateRoomListUI() {
 }
 
 // 서사 표시
-function displayStoryContent(markdown) {
-    // 간단한 마크다운 렌더링
-    let html = markdown
-        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-        .replace(/^---$/gm, '<hr>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/^(.+)$/gm, '<p>$1</p>');
-
-    narrativeContent.innerHTML = html;
-}
+function displayStoryContent(_) { /* no-op: stories disabled */ }
 
 // 서사 로드 버튼
-loadStoryBtn.addEventListener('click', () => {
-    const filename = storySelect.value;
-    if (!filename) {
-        alert('불러올 서사를 선택하세요');
-        return;
-    }
-
-    sendMessage({
-        action: 'load_story',
-        filename: filename
-    });
-});
+loadStoryBtn?.addEventListener('click', () => alert('스토리 불러오기 기능은 비활성화되었습니다.'));
 
 // 서사 이어하기 버튼
-if (resumeStoryBtn) {
-    resumeStoryBtn.addEventListener('click', () => {
-        const filename = storySelect.value;
-        if (!filename) {
-            alert('이어할 서사를 선택하세요');
-            return;
-        }
-        // 불러올 턴 수: 기본 = 현재 슬라이더 값
-        const defaultTurns = currentHistoryLimit || HISTORY_LIMIT_DEFAULT;
-        const input = prompt('불러올 턴 수(최근 N턴):', String(defaultTurns));
-        if (!input) return;
-        const turns = Math.max(1, parseInt(input, 10) || defaultTurns);
-        const summarize = confirm('이전 구간을 간단히 요약해서 포함할까요?');
-
-        sendMessage({
-            action: 'resume_from_story',
-            filename: filename,
-            turns: turns,
-            summarize: summarize
-        });
-    });
-}
+resumeStoryBtn?.addEventListener('click', () => alert('스토리 이어하기 기능은 비활성화되었습니다.'));
 
 function renderHistorySnapshot(history) {
     try {
@@ -3025,37 +2943,10 @@ function renderHistorySnapshot(history) {
 }
 
 // 서사 삭제 버튼
-deleteStoryBtn.addEventListener('click', () => {
-    const filename = storySelect.value;
-    if (!filename) {
-        alert('삭제할 서사를 선택하세요');
-        return;
-    }
-
-    if (!confirm(`"${filename}" 서사를 삭제하시겠습니까?`)) {
-        return;
-    }
-
-    sendMessage({
-        action: 'delete_story',
-        filename: filename
-    });
-});
+deleteStoryBtn?.addEventListener('click', () => alert('스토리 삭제 기능은 비활성화되었습니다.'));
 
 // 서사 → 컨텍스트 주입 버튼
-if (injectStoryBtn) {
-    injectStoryBtn.addEventListener('click', () => {
-        const text = narrativeContent.innerText || '';
-        if (!text.trim()) {
-            alert('주입할 서사가 없습니다. 먼저 서사를 불러오세요.');
-            return;
-        }
-        // 기존 세계관에 서사를 덧붙임
-        const sep = worldInput.value.trim() ? '\n\n---\n\n' : '';
-        worldInput.value = worldInput.value + sep + text.trim();
-        log('서사를 세계관에 주입했습니다. 좌측의 "설정 적용"을 눌러 반영하세요.', 'success');
-    });
-}
+injectStoryBtn?.addEventListener('click', () => alert('스토리 주입 기능은 비활성화되었습니다.'));
 
 // ===== 햄버거 메뉴 (모바일) =====
 
