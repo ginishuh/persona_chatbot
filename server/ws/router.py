@@ -12,6 +12,7 @@ from server.core.app_context import AppContext
 
 from .actions import chat as chat_actions
 from .actions import config as config_actions
+from .actions import context as context_actions
 from .actions import files as files_actions
 from .actions import git as git_actions
 from .actions import history as history_actions
@@ -20,11 +21,15 @@ from .actions import presets as presets_actions
 from .actions import rooms as rooms_actions
 from .actions import session as session_actions
 from .actions import stories as stories_actions
+from .actions import token_usage as token_actions
 
 Handler = Callable[[AppContext, object, dict], Awaitable[None]]
 
 
 ACTION_TABLE: dict[str, Handler] = {
+    # context
+    "get_context": context_actions.get_context,
+    "set_context": context_actions.set_context,
     # workspace config
     "load_workspace_config": config_actions.load_workspace_config,
     "save_workspace_config": config_actions.save_workspace_config,
@@ -53,6 +58,8 @@ ACTION_TABLE: dict[str, Handler] = {
     # session settings
     "get_session_settings": session_actions.get_session_settings,
     "set_session_retention": session_actions.set_session_retention,
+    # token usage
+    "get_token_usage": token_actions.get_token_usage,
     # stories (deprecated) — keep stubs to avoid UI breakage
     "list_stories": stories_actions.list_stories,
     "save_story": stories_actions.save_story,

@@ -80,6 +80,14 @@ def run_http_server(ctx: AppContext):
             self.end_headers()
             self.wfile.write(content_bytes)
 
+        def _write_ndjson_line(self, obj: dict):
+            try:
+                line = (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+                self.wfile.write(line)
+            except Exception:
+                # best-effort streaming; ignore downstream disconnects
+                pass
+
         def do_GET(self):
             # 앱 설정
             if self.path == "/app-config.json":
@@ -253,6 +261,188 @@ def run_http_server(ctx: AppContext):
                         self._ok_zip(buf.getvalue(), f"backup_{tsname}.zip")
                     else:
                         self._ok_json(export_obj, filename=f"backup_{tsname}.json")
+                except Exception as e:
+                    body = json.dumps({"success": False, "error": str(e)}).encode("utf-8")
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                return
+
+            # Export 스트리밍(API, NDJSON)
+            if self.path.startswith("/api/export/stream"):
+                try:
+                    url = urlparse(self.path)
+                    qs = parse_qs(url.query)
+                    scope = (qs.get("scope", ["single"]))[0]
+                    room_id = (qs.get("room_id", ["default"]))[0]
+                    includes = set((qs.get("include", ["messages,context"]))[0].split(","))
+                    start = self._parse_date((qs.get("start", [None]))[0], end=False)
+                    end = self._parse_date((qs.get("end", [None]))[0], end=True)
+
+                    # 인증
+                    if ctx.login_required:
+                        token = None
+                        authz = self.headers.get("Authorization")
+                        if authz and authz.lower().startswith("bearer "):
+                            token = authz.split(" ", 1)[1].strip()
+                        if not token:
+                            token = (qs.get("token", [None]))[0]
+                        _, err = auth_verify_token(ctx, token, expected_type="access")
+                        if err:
+                            body = json.dumps(
+                                {"success": False, "error": f"unauthorized: {err}"}
+                            ).encode("utf-8")
+                            self.send_response(401)
+                            self.send_header("Content-Type", "application/json")
+                            self.send_header("Content-Length", str(len(body)))
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
+
+                    tsname = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/x-ndjson")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header(
+                        "Content-Disposition", f"attachment; filename=backup_{tsname}.ndjson"
+                    )
+                    self.end_headers()
+
+                    # meta 헤더 라인
+                    self._write_ndjson_line(
+                        {
+                            "type": "meta",
+                            "version": "1.0",
+                            "exported_at": datetime.utcnow().isoformat() + "Z",
+                            "scope": scope,
+                            "include": sorted(list(includes)),
+                            **({"start": start} if start else {}),
+                            **({"end": end} if end else {}),
+                        }
+                    )
+
+                    def stream_room(rid: str):
+                        # DB 우선
+                        try:
+                            if ctx.db_handler and getattr(ctx, "loop", None):
+                                base = {"room_id": rid}
+                                if "context" in includes:
+                                    room_row = asyncio.run_coroutine_threadsafe(
+                                        ctx.db_handler.get_room(rid), ctx.loop
+                                    ).result(timeout=5)
+                                    if room_row and room_row.get("context"):
+                                        try:
+                                            base["context"] = json.loads(room_row["context"])
+                                        except Exception:
+                                            base["context"] = {}
+                                self._write_ndjson_line({"type": "room", **base})
+
+                                # messages
+                                if "messages" in includes:
+                                    msgs = asyncio.run_coroutine_threadsafe(
+                                        ctx.db_handler.list_messages_range(
+                                            rid, start=start, end=end
+                                        ),
+                                        ctx.loop,
+                                    ).result(timeout=10)
+                                    for m in msgs or []:
+                                        self._write_ndjson_line(
+                                            {
+                                                "type": "message",
+                                                "room_id": rid,
+                                                "role": m.get("role"),
+                                                "content": m.get("content"),
+                                                "timestamp": str(m.get("timestamp")),
+                                            }
+                                        )
+
+                                # token usage
+                                if "token_usage" in includes:
+                                    usages = asyncio.run_coroutine_threadsafe(
+                                        ctx.db_handler.list_token_usage_range(
+                                            rid, start=start, end=end
+                                        ),
+                                        ctx.loop,
+                                    ).result(timeout=10)
+                                    for u in usages or []:
+                                        self._write_ndjson_line(
+                                            {
+                                                "type": "token_usage",
+                                                "room_id": rid,
+                                                "session_key": u.get("session_key"),
+                                                "provider": u.get("provider"),
+                                                "token_info": u.get("token_info"),
+                                                "timestamp": str(u.get("timestamp")),
+                                            }
+                                        )
+                                return
+                        except Exception:
+                            pass
+
+                        # 폴백: 메모리 세션
+                        try:
+                            for sess in ctx.sessions.values():
+                                room = sess.get("rooms", {}).get(rid)
+                                if room:
+                                    self._write_ndjson_line({"type": "room", "room_id": rid})
+                                    if "messages" in includes:
+                                        hist = room.get("history")
+                                        for m in getattr(hist, "full_history", []) or []:
+                                            self._write_ndjson_line(
+                                                {
+                                                    "type": "message",
+                                                    "room_id": rid,
+                                                    "role": m.get("role"),
+                                                    "content": m.get("content"),
+                                                    "timestamp": datetime.utcnow().isoformat()
+                                                    + "Z",
+                                                }
+                                            )
+                                    return
+                        except Exception:
+                            pass
+
+                    # 방 집합 계산 후 스트리밍
+                    seen: set[str] = set()
+                    if scope == "single":
+                        stream_room(room_id)
+                        seen.add(room_id)
+                    elif scope == "selected":
+                        room_ids = (
+                            (qs.get("room_ids", [""]))[0].split(",")
+                            if qs.get("room_ids")
+                            else [room_id]
+                        )
+                        for r in room_ids:
+                            rid = (r or "default").strip()
+                            if rid and rid not in seen:
+                                stream_room(rid)
+                                seen.add(rid)
+                    else:  # full
+                        # DB 방 우선 스트림
+                        try:
+                            if ctx.db_handler and getattr(ctx, "loop", None):
+                                db_rooms = asyncio.run_coroutine_threadsafe(
+                                    ctx.db_handler.list_all_rooms(), ctx.loop
+                                ).result(timeout=10)
+                                for rr in db_rooms or []:
+                                    rid = rr.get("room_id")
+                                    if rid and rid not in seen:
+                                        stream_room(rid)
+                                        seen.add(rid)
+                        except Exception:
+                            pass
+                        # 메모리 폴백
+                        for sess in ctx.sessions.values():
+                            for rid in sess.get("rooms", {}).keys():
+                                if rid not in seen:
+                                    stream_room(rid)
+                                    seen.add(rid)
+
+                    # 종료 라인
+                    self._write_ndjson_line({"type": "end", "rooms": len(seen)})
                 except Exception as e:
                     body = json.dumps({"success": False, "error": str(e)}).encode("utf-8")
                     self.send_response(500)
