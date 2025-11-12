@@ -1,8 +1,8 @@
 # UI/UX 재설계 계획서
 
 **작성일**: 2025-11-12
-**버전**: 1.1
-**상태**: 설계 단계 (History API 라우팅 채택, stories 의존 제거 반영)
+**버전**: 1.2
+**상태**: 적용 완료(History API 라우팅 + stories 제거 + Export HTTP)
 
 ---
 
@@ -827,12 +827,12 @@ body { font-size: 17px; line-height: 1.5; }
 
 ## 다음 단계
 
-1. ✅ **이 문서 리뷰** (History API/Export/스토리지 방향 반영)
-2. ⬜ 서버 SPA fallback 구현(`/api/*`·정적 제외 경로 → `index.html`)
-3. ⬜ 라우터 스켈레톤·URL 매핑 적용(`/`, `/rooms/:id`, ...)
-4. ⬜ DB 마이그레이션 계획과 통합(메시지 DB화, stories 의존 제거)
-5. ⬜ 브랜치 생성: `feat/ui-redesign`
-6. ⬜ 프로토타입 제작(Figma 또는 HTML) + 무한 스크롤/가상화 POC
+1. ✅ 서버 SPA fallback 구현(`/api/*`·정적 제외 경로 → `index.html`)
+2. ✅ 라우터 적용 및 화면 분리(History API)
+3. ✅ DB 연계(rooms/messages) 및 Export HTTP화
+4. ✅ stories 기능 제거 및 UI 정리
+5. ⬜ Export 옵션 확장(format=zip, 날짜 필터)
+6. ⬜ 접근성 개선(포커스/ARIA) 및 모바일 보완
 
 ---
 
