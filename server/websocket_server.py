@@ -5,9 +5,7 @@ import os
 import threading
 import uuid
 from datetime import datetime, timedelta
-from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
-from socketserver import TCPServer
 
 import jwt
 import websockets
@@ -22,6 +20,9 @@ from handlers.history_handler import HistoryHandler
 from handlers.mode_handler import ModeHandler
 from handlers.token_usage_handler import TokenUsageHandler
 from handlers.workspace_handler import WorkspaceHandler
+
+from server.core.app_context import AppContext
+from server.http.server import run_http_server as run_http_server_external
 
 # 로깅 설정
 logging.basicConfig(
@@ -61,6 +62,7 @@ mode_handler = ModeHandler(project_root=str(project_root))
 token_usage_handler = TokenUsageHandler()
 DB_PATH = os.getenv("DB_PATH", str(project_root / "data" / "chatbot.db"))
 db_handler: DBHandler | None = None
+APP_CTX: AppContext | None = None
 
 # 연결된 클라이언트들
 connected_clients = set()
@@ -1208,138 +1210,10 @@ async def websocket_handler(websocket):
 
 
 def run_http_server():
-    """HTTP 서버 실행 (정적 파일 서빙)"""
-    import os
-
-    # 현재 위치에서 상위 디렉토리의 web 폴더로 이동
-    web_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
-    os.chdir(web_dir)
-
-    app_config = {
-        "ws_url": os.getenv("APP_PUBLIC_WS_URL", ""),
-        "ws_port": int(os.getenv("WS_PORT", "8765")),
-        "login_required": LOGIN_REQUIRED,
-        "show_token_usage": bool(int(os.getenv("SHOW_TOKEN_USAGE", "1"))),
-    }
-
-    class CustomHandler(SimpleHTTPRequestHandler):
-        def log_message(self, format, *args):
-            logger.info(f"HTTP: {format % args}")
-
-        def do_GET(self):
-            # 앱 설정
-            if self.path == "/app-config.json":
-                payload = json.dumps(app_config).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("Content-Length", str(len(payload)))
-                self.end_headers()
-                self.wfile.write(payload)
-                return
-            # Export 다운로드(API)
-            if self.path.startswith("/api/export"):
-                try:
-                    # 간단 파서(소규모 구현): scope, room_id 등은 쿼리로 받지만 현재는 메모리 세션 기반으로 내보냄
-                    from urllib.parse import parse_qs, urlparse
-
-                    url = urlparse(self.path)
-                    qs = parse_qs(url.query)
-                    scope = (qs.get("scope", ["single"]))[0]
-                    room_id = (qs.get("room_id", ["default"]))[0]
-
-                    # 세션 메모리에서 export 스냅샷 구성(초기 단계, DB 도입 전 폴백)
-                    export_obj = {
-                        "version": "1.0",
-                        "export_type": scope,
-                        "exported_at": datetime.utcnow().isoformat() + "Z",
-                    }
-
-                    def room_snapshot(rid: str) -> dict:
-                        # 세션들에서 첫 번째로 해당 room 히스토리를 찾는다.
-                        for sess in sessions.values():
-                            room = sess.get("rooms", {}).get(rid)
-                            if room:
-                                hist = room.get("history")
-                                messages = []
-                                if hist:
-                                    for m in getattr(hist, "full_history", []):
-                                        messages.append(
-                                            {
-                                                "role": m.get("role"),
-                                                "content": m.get("content"),
-                                                "timestamp": datetime.utcnow().isoformat() + "Z",
-                                            }
-                                        )
-                                return {"room_id": rid, "title": rid, "messages": messages}
-                        return {"room_id": rid, "title": rid, "messages": []}
-
-                    if scope == "single":
-                        export_obj["rooms"] = [room_snapshot(room_id)]
-                    elif scope == "selected":
-                        room_ids = (
-                            (qs.get("room_ids", [""]))[0].split(",")
-                            if qs.get("room_ids")
-                            else [room_id]
-                        )
-                        export_obj["rooms"] = [
-                            room_snapshot(r.strip() or "default") for r in room_ids
-                        ]
-                    else:  # full
-                        # 모든 세션의 모든 방을 합친 간단 스냅샷
-                        seen = set()
-                        rooms_acc = []
-                        for sess in sessions.values():
-                            for rid in sess.get("rooms", {}).keys():
-                                if rid in seen:
-                                    continue
-                                seen.add(rid)
-                                rooms_acc.append(room_snapshot(rid))
-                        export_obj["rooms"] = rooms_acc
-
-                    payload = json.dumps(export_obj, ensure_ascii=False).encode("utf-8")
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Cache-Control", "no-store")
-                    self.send_header(
-                        "Content-Disposition",
-                        f"attachment; filename=backup_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.json",
-                    )
-                    self.send_header("Content-Length", str(len(payload)))
-                    self.end_headers()
-                    self.wfile.write(payload)
-                except Exception as e:
-                    body = json.dumps({"success": False, "error": str(e)}).encode("utf-8")
-                    self.send_response(500)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Content-Length", str(len(body)))
-                    self.end_headers()
-                    self.wfile.write(body)
-                return
-            # SPA Fallback: 정적/known 경로가 아니고 파일이 없으면 index.html 반환
-            try:
-                # 파일이 있으면 기본 동작
-                return super().do_GET()
-            except Exception:
-                pass
-            # 존재하지 않는 경로 → index.html
-            try:
-                with open("index.html", "rb") as f:
-                    data = f.read()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-                return
-            except FileNotFoundError:
-                return super().do_GET()
-            return super().do_GET()
-
-    http_port = int(os.getenv("HTTP_PORT", "9000"))
-    with TCPServer((BIND_HOST, http_port), CustomHandler) as httpd:
-        logger.info(f"HTTP server started on port {http_port}")
-        httpd.serve_forever()
+    """외부 HTTP 서버 모듈 호출 래퍼"""
+    if APP_CTX is None:
+        raise RuntimeError("App context is not initialized")
+    return run_http_server_external(APP_CTX)
 
 
 async def main():
@@ -1355,8 +1229,30 @@ async def main():
     except Exception:
         logger.exception("DB initialization failed; continuing without DB")
 
-    # HTTP 서버를 별도 스레드에서 실행
-    http_thread = threading.Thread(target=run_http_server, daemon=True)
+    # 컨텍스트 구성 (HTTP 서버 등 외부 모듈에 전달)
+    global APP_CTX
+    APP_CTX = AppContext(
+        project_root=project_root,
+        bind_host=BIND_HOST,
+        login_required=LOGIN_REQUIRED,
+        jwt_secret=JWT_SECRET,
+        jwt_algorithm=JWT_ALGORITHM,
+        access_ttl_seconds=ACCESS_TTL_SECONDS,
+        refresh_ttl_seconds=REFRESH_TTL_SECONDS,
+        login_username=LOGIN_USERNAME,
+        login_rate_limit_max_attempts=LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
+        login_rate_limit_window_seconds=int(os.getenv("APP_LOGIN_LOCK_MINUTES", "15")) * 60,
+        token_expired_grace_seconds=int(os.getenv("APP_JWT_GRACE_MINUTES", "60")) * 60,
+    )
+    APP_CTX.sessions = sessions
+    APP_CTX.websocket_to_session = websocket_to_session
+    APP_CTX.connected_clients = connected_clients
+    APP_CTX.login_attempts = login_attempts
+
+    # HTTP 서버를 별도 스레드에서 실행 (외부 모듈)
+    http_thread = threading.Thread(
+        target=run_http_server_external, kwargs={"ctx": APP_CTX}, daemon=True
+    )
     http_thread.start()
 
     # WebSocket 서버 시작
