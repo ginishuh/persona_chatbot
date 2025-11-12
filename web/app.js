@@ -243,6 +243,7 @@ function renderCurrentScreenFrom(pathname) {
         }
     }
     // 추후: 각 view별 전용 렌더러 연결 예정
+    focusMainAfterRoute();
 }
 
 function navigate(path) {
@@ -251,6 +252,140 @@ function navigate(path) {
 }
 
 window.addEventListener('popstate', () => renderCurrentScreenFrom(location.pathname));
+
+// ===== 접근성(A11y) 보완 =====
+function focusMainAfterRoute() {
+    // 채팅 입력으로 포커스 이동, 없으면 첫 번째 헤더로
+    try {
+        if (chatInput && !chatInput.disabled) {
+            chatInput.focus();
+            return;
+        }
+        const h1 = document.querySelector('main h1, header h1');
+        if (h1) h1.tabIndex = -1, h1.focus();
+    } catch (_) {}
+}
+
+function applyARIA() {
+    const pairs = [
+        [sendChatBtn, '메시지 전송'],
+        [clearHistoryBtn, '대화 히스토리 초기화'],
+        [resetSessionsBtn, '세션 초기화'],
+        [roomAddBtn, '채팅방 추가'],
+        [roomDelBtn, '채팅방 삭제'],
+        [roomSaveBtn, '채팅방 설정 저장'],
+        [saveContextBtn, '컨텍스트 저장'],
+        [narrativeMenuBtn, '히스토리 패널 열기'],
+        [moreMenuBtn, '더보기 메뉴 열기'],
+        [document.getElementById('participantsBtn'), '참여자 관리'],
+        [document.getElementById('settingsBtn'), '설정 열기'],
+        [document.getElementById('hamburgerBtn'), '좌측 패널 토글'],
+        [document.getElementById('narrativeMenuBtn'), '우측 패널 토글'],
+        [document.getElementById('loginButton'), '로그인 제출'],
+        [document.getElementById('autoLoginButton'), '자동 로그인']
+    ];
+    pairs.forEach(([el, label]) => { try { el?.setAttribute('aria-label', label); } catch (_) {} });
+    try { narrativeContent?.setAttribute('aria-live', 'polite'); } catch (_) {}
+}
+
+function injectSkipLink() {
+    try {
+        const a = document.createElement('a');
+        a.href = '#';
+        a.className = 'skip-link';
+        a.textContent = '본문으로 건너뛰기';
+        a.style.position = 'absolute';
+        a.style.left = '-9999px';
+        a.style.top = '0';
+        a.style.zIndex = '10000';
+        a.addEventListener('focus', () => { a.style.left = '8px'; a.style.top = '8px'; });
+        a.addEventListener('blur', () => { a.style.left = '-9999px'; });
+        a.addEventListener('click', (e) => { e.preventDefault(); focusMainAfterRoute(); });
+        document.body.prepend(a);
+    } catch (_) {}
+}
+
+// 초기 접근성 적용
+applyARIA();
+injectSkipLink();
+
+// ===== A11y: 포커스 트랩 =====
+const __focusTrap = new Map();
+
+function getFocusable(el) {
+    return el.querySelectorAll('a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])');
+}
+
+function enableFocusTrap(modalEl) {
+    try {
+        if (!modalEl) return;
+        const handler = (e) => {
+            if (e.key !== 'Tab') return;
+            const nodes = Array.from(getFocusable(modalEl)).filter(n => !n.disabled && n.tabIndex !== -1);
+            if (!nodes.length) return;
+            const first = nodes[0];
+            const last = nodes[nodes.length - 1];
+            if (e.shiftKey) {
+                if (document.activeElement === first || !modalEl.contains(document.activeElement)) {
+                    e.preventDefault();
+                    last.focus();
+                }
+            } else {
+                if (document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        };
+        modalEl.addEventListener('keydown', handler);
+        __focusTrap.set(modalEl, handler);
+        // 초점 진입
+        setTimeout(() => {
+            const nodes = Array.from(getFocusable(modalEl)).filter(n => !n.disabled && n.tabIndex !== -1);
+            (nodes[0] || modalEl).focus();
+        }, 0);
+    } catch (_) {}
+}
+
+function disableFocusTrap(modalEl) {
+    try {
+        const handler = __focusTrap.get(modalEl);
+        if (handler) modalEl.removeEventListener('keydown', handler);
+        __focusTrap.delete(modalEl);
+    } catch (_) {}
+}
+
+// ===== A11y: 상태 안내 =====
+function announce(message) {
+    try {
+        const live = document.getElementById('ariaLive');
+        if (!live) return;
+        live.textContent = '';
+        // SR이 같은 문장을 무시하지 않도록 미세 지연
+        setTimeout(() => { live.textContent = message; }, 10);
+    } catch (_) {}
+}
+
+// ESC로 닫기(로그인 모달 제외)
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const login = document.getElementById('loginModal');
+    const settings = document.getElementById('settingsModal');
+    const participants = document.getElementById('participantsModal');
+    const editor = document.getElementById('characterEditorModal');
+    const tryClose = (el) => {
+        if (el && !el.classList.contains('hidden')) {
+            el.classList.add('hidden');
+            disableFocusTrap(el);
+            return true;
+        }
+        return false;
+    };
+    // 로그인 모달은 ESC로 닫지 않음(정책상 로그인 필요 환경 고려)
+    if (tryClose(editor)) return;
+    if (tryClose(participants)) return;
+    if (tryClose(settings)) return;
+});
 
 // ===== WebSocket 연결 =====
 
@@ -444,7 +579,6 @@ function initializeAppData() {
     loadFileList('situation', situationSelect);
     loadFileList('my_character', myCharacterSelect);
     loadPresetList();
-    if (!STORIES_ENABLED) hideStoriesUI();
 }
 
 // ===== 채팅방 관리 =====
@@ -474,6 +608,7 @@ function renderRoomsUI() {
     const hasCurrent = (rooms || []).some(x => (typeof x === 'string' ? x : x.room_id) === currentRoom);
     if (!hasCurrent) currentRoom = 'default';
     roomSelect.value = currentRoom;
+    announce(`채팅방 전환: ${currentRoom}`);
 }
 
 function refreshRoomViews() {
@@ -493,6 +628,7 @@ if (roomSelect) {
         // 서사/히스토리 뷰 갱신
         refreshRoomViews();
         log(`채팅방 전환: ${currentRoom}`, 'info');
+        announce(`채팅방 전환: ${currentRoom}`);
     });
 }
 if (roomAddBtn) {
@@ -510,6 +646,7 @@ if (roomAddBtn) {
         setTimeout(() => sendMessage({ action: 'room_list' }), 300);
         refreshRoomViews();
         log(`채팅방 추가: ${r}`, 'success');
+        announce(`채팅방 추가: ${r}`);
     });
 }
 if (roomDelBtn) {
@@ -526,6 +663,7 @@ if (roomDelBtn) {
         renderRoomsUI();
         refreshRoomViews();
         log('채팅방 삭제 완료', 'success');
+        announce('채팅방 삭제 완료');
     });
 }
 if (roomSaveBtn) {
@@ -752,6 +890,12 @@ function mapAuthError(code) {
 function showLoginModal() {
     if (!loginModal) return;
     loginModal.classList.remove('hidden');
+    try {
+        loginModal.setAttribute('role', 'dialog');
+        loginModal.setAttribute('aria-modal', 'true');
+        loginModal.setAttribute('aria-label', '로그인 대화상자');
+    } catch (_) {}
+    enableFocusTrap(loginModal);
     // 아이디/체크박스 초기화
     try {
         const savedUser = localStorage.getItem(LOGIN_USER_KEY) || '';
@@ -774,6 +918,7 @@ function hideLoginModal() {
     loginError.textContent = '';
     chatInput.disabled = false;
     sendChatBtn.disabled = false;
+    disableFocusTrap(loginModal);
 }
 
 function submitLogin() {
@@ -2115,7 +2260,9 @@ const settingsModalOverlay = document.querySelector('.settings-modal-overlay');
 // 설정 모달 열기
 if (settingsBtn) {
     settingsBtn.addEventListener('click', () => {
+        try { window.__lastSettingsTrigger = document.activeElement; } catch (_) {}
         settingsModal.classList.remove('hidden');
+        enableFocusTrap(settingsModal);
     });
 }
 
@@ -2123,6 +2270,8 @@ if (settingsBtn) {
 if (closeSettingsBtn) {
     closeSettingsBtn.addEventListener('click', () => {
         settingsModal.classList.add('hidden');
+        disableFocusTrap(settingsModal);
+        try { window.__lastSettingsTrigger?.focus?.(); } catch (_) {}
     });
 }
 
@@ -2130,6 +2279,8 @@ if (closeSettingsBtn) {
 if (settingsModalOverlay) {
     settingsModalOverlay.addEventListener('click', () => {
         settingsModal.classList.add('hidden');
+        disableFocusTrap(settingsModal);
+        try { window.__lastSettingsTrigger?.focus?.(); } catch (_) {}
     });
 }
 
@@ -2478,13 +2629,17 @@ function openCharacterEditor(characterDiv) {
     // 템플릿 목록 갱신
     loadCharTemplateList(document.getElementById('ceTemplateSelect'));
 
+    try { window.__lastEditorTrigger = document.activeElement; } catch (_) {}
     modal.classList.remove('hidden');
+    enableFocusTrap(modal);
 }
 
 function closeCharacterEditor() {
     const modal = document.getElementById('characterEditorModal');
     modal.classList.add('hidden');
+    disableFocusTrap(modal);
     currentEditingCharacterItem = null;
+    try { window.__lastEditorTrigger?.focus?.(); } catch (_) {}
 }
 
 function applyCharacterEditorToItem() {
@@ -2555,11 +2710,15 @@ function openParticipantsModal() {
     loadCharTemplateList(document.getElementById('pmTemplateSelect'));
     renderParticipantsManagerList();
     modal.classList.remove('hidden');
+    enableFocusTrap(modal);
 }
 
 function closeParticipantsModal() {
     const modal = document.getElementById('participantsModal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) {
+        modal.classList.add('hidden');
+        disableFocusTrap(modal);
+    }
 }
 
 function renderParticipantsLeftPanel() {
@@ -2857,63 +3016,7 @@ deletePresetBtn.addEventListener('click', deletePreset);
 
 // (제거됨) 모드 관리 UI/로직은 더 이상 사용하지 않습니다.
 
-// ===== 서사 관리 =====
-
-// 서사 목록 로드
-function loadStoryList() { /* no-op: stories disabled */ }
-
-// 서사 목록 업데이트
-function updateStoryList(files) {
-    const currentValue = storySelect.value;
-    storySelect.innerHTML = '<option value="">채팅방 선택...</option>';
-
-    files.forEach(file => {
-        const option = document.createElement('option');
-        option.value = file.name;
-        option.textContent = file.name;
-        storySelect.appendChild(option);
-    });
-
-    // 현재 선택 복원 또는 첫 항목 선택
-    let desired = currentRoom || currentValue;
-    const names = files.map(f => f.name);
-    if (desired && names.includes(desired)) {
-        storySelect.value = desired;
-    } else if (names.length) {
-        storySelect.value = names[0];
-        desired = names[0];
-    } else {
-        storySelect.value = '';
-        desired = 'default';
-    }
-    currentRoom = desired;
-    try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
-    latestStories = files || [];
-    updateRoomListUI();
-}
-
-function updateRoomListUI() {
-    if (!roomList) return;
-    roomList.innerHTML = '';
-    const q = (roomSearch?.value || '').trim();
-    const items = (latestStories || []).filter(f => !q || f.name.includes(q));
-    if (!items.length) {
-        roomList.innerHTML = '<div class="empty">저장된 채팅방이 없습니다.</div>';
-        return;
-    }
-    items.forEach(f => {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-sm';
-        btn.style = 'width:100%; text-align:left; margin-bottom:4px;';
-        btn.textContent = f.name;
-        btn.title = `${f.name} (${Math.round((f.size || 0)/1024)} KB)`;
-        btn.addEventListener('click', () => {
-            storySelect.value = f.name;
-            storySelect.dispatchEvent(new Event('change'));
-        });
-        roomList.appendChild(btn);
-    });
-}
+// ===== 서사 관리(dead) 제거됨: UI는 비활성화됨(서버 스텁 유지) =====
 
 // 서사 표시
 function displayStoryContent(_) { /* no-op: stories disabled */ }
@@ -2937,6 +3040,7 @@ function renderHistorySnapshot(history) {
         });
         // 서사 패널도 최신으로 갱신
         sendMessage({ action: 'get_narrative' });
+        announce('히스토리가 갱신되었습니다');
     } catch (e) {
         console.error('renderHistorySnapshot error', e);
     }
@@ -3051,6 +3155,7 @@ document.getElementById('moreSettingsBtn')?.addEventListener('click', () => {
     closeMoreMenu();
     const settingsModal = document.getElementById('settingsModal');
     settingsModal?.classList.remove('hidden');
+    enableFocusTrap(settingsModal);
 });
 
 document.getElementById('moreParticipantsBtn')?.addEventListener('click', () => {
@@ -3170,17 +3275,4 @@ window.addEventListener('load', async () => {
     connect();
 });
 // 서사(=채팅방) 선택 시 방 전환 처리
-if (storySelect) {
-    storySelect.addEventListener('change', () => {
-        currentRoom = storySelect.value || 'default';
-        try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
-        // 방 전환: 세션 초기화 + 뷰 갱신
-        sendMessage({ action: 'reset_sessions', room_id: currentRoom });
-        refreshRoomViews();
-        log(`채팅방 전환: ${currentRoom}`, 'info');
-    });
-}
-
-if (roomSearch) {
-    roomSearch.addEventListener('input', () => updateRoomListUI());
-}
+// stories UI는 비활성화 상태이므로 관련 이벤트 없음

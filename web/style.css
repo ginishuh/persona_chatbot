@@ -12,6 +12,41 @@ body {
     overflow: hidden;
 }
 
+/* 화면리더 전용 텍스트 */
+.sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+/* 접근성: 포커스 표시 */
+:focus-visible {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+}
+
+/* 접근성: 터치 타겟 최소 크기 */
+button, .btn, .more-menu-btn, .narrative-menu-btn, .hamburger-btn {
+    min-width: 44px;
+    min-height: 44px;
+}
+
+/* 비활성/포커스 시각 상태 */
+.btn:disabled, button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.btn:focus-visible, button:focus-visible {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+}
+
 .container {
     display: flex;
     flex-direction: column;
@@ -515,6 +550,16 @@ header h1 {
     margin-bottom: 0.75rem;
     transition: all 0.2s;
 }
+
+/* stories UI 제거(비활성화) */
+#storySelect,
+#loadStoryBtn,
+#resumeStoryBtn,
+#injectStoryBtn,
+#deleteStoryBtn,
+#saveNarrativeBtn,
+#roomSearch,
+#roomList { display: none !important; }
 
 .character-item:hover {
     border-color: #cbd5e0;
