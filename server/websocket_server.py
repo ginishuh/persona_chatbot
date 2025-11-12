@@ -1197,6 +1197,17 @@ async def main():
     APP_CTX.websocket_to_session = websocket_to_session
     APP_CTX.connected_clients = connected_clients
     APP_CTX.login_attempts = login_attempts
+    # 핸들러 주입
+    APP_CTX.file_handler = file_handler
+    APP_CTX.git_handler = git_handler
+    APP_CTX.claude_handler = claude_handler
+    APP_CTX.droid_handler = droid_handler
+    APP_CTX.gemini_handler = gemini_handler
+    APP_CTX.context_handler = context_handler
+    APP_CTX.workspace_handler = workspace_handler
+    APP_CTX.mode_handler = mode_handler
+    APP_CTX.token_usage_handler = token_usage_handler
+    APP_CTX.db_handler = db_handler
 
     # HTTP 서버를 별도 스레드에서 실행 (외부 모듈)
     http_thread = threading.Thread(

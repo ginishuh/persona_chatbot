@@ -10,6 +10,7 @@ from collections.abc import Awaitable, Callable
 
 from server.core.app_context import AppContext
 
+from .actions import chat as chat_actions
 from .actions import config as config_actions
 from .actions import files as files_actions
 from .actions import history as history_actions
@@ -52,6 +53,8 @@ ACTION_TABLE: dict[str, Handler] = {
     "load_story": stories_actions.load_story,
     "delete_story": stories_actions.delete_story,
     "resume_from_story": stories_actions.resume_from_story,
+    # chat
+    "chat": chat_actions.chat,
 }
 
 
