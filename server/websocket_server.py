@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import threading
-import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -21,8 +20,12 @@ from handlers.mode_handler import ModeHandler
 from handlers.token_usage_handler import TokenUsageHandler
 from handlers.workspace_handler import WorkspaceHandler
 
+from server.core import session_manager as sm
 from server.core.app_context import AppContext
+from server.core.auth import send_auth_required as auth_send_auth_required
+from server.core.auth import verify_token as auth_verify_token
 from server.http.server import run_http_server as run_http_server_external
+from server.ws.router import dispatch as ws_dispatch
 
 # 로깅 설정
 logging.basicConfig(
@@ -78,88 +81,39 @@ sessions: dict = {}
 
 
 def _get_or_create_session(websocket, data: dict | None):
-    """세션키를 해석하고(메시지에서 우선), 없으면 생성합니다.
-
-    반환: (session_key, session_dict)
-    """
-    key = None
-    if isinstance(data, dict):
-        key = data.get("session_key") or None
-
-    if key and key in sessions:
-        websocket_to_session[websocket] = key
-    else:
-        key = websocket_to_session.get(websocket)
-        if not key or key not in sessions:
-            # 새 세션 생성 (로그인 요구 환경에서는 성인동의 True 기본)
-            key = uuid.uuid4().hex
-            sessions[key] = {
-                "settings": {"retention_enabled": False, "adult_consent": bool(LOGIN_REQUIRED)},
-                "rooms": {},
-            }
-            websocket_to_session[websocket] = key
-    return key, sessions[key]
+    if APP_CTX is None:
+        raise RuntimeError("App context not initialized")
+    return sm.get_or_create_session(APP_CTX, websocket, data)
 
 
 def _get_room(session: dict, room_id: str | None):
-    """세션 내 채팅방 객체 반환(없으면 생성). room_id가 없으면 'default'."""
-    rid = room_id or "default"
-    rooms = session.setdefault("rooms", {})
-    room = rooms.get(rid)
-    if not room:
-        room = {
-            "history": HistoryHandler(max_turns=30),
-            "provider_sessions": {},
-        }
-        rooms[rid] = room
-    return rid, room
+    if APP_CTX is None:
+        raise RuntimeError("App context not initialized")
+    return sm.get_room(APP_CTX, session, room_id)
 
 
 def initialize_client_state(websocket):
-    """웹소켓 연결 시 세션 매핑만 준비(상태는 세션에 저장)."""
-    _get_or_create_session(websocket, None)
+    if APP_CTX is None:
+        raise RuntimeError("App context not initialized")
+    sm.initialize_client_state(APP_CTX, websocket)
 
 
 def clear_client_sessions(websocket, room_id: str | None = None):
-    """프로바이더 세션 초기화.
-
-    room_id가 주어지면 해당 방만, 없으면 세션의 모든 방에 대해 초기화합니다.
-    히스토리는 유지합니다.
-    """
-    key = websocket_to_session.get(websocket)
-    if key and key in sessions:
-        # Claude 세션 ID 수집 (누적 토큰 초기화용)
-        claude_session_ids = []
-
-        if room_id:
-            rid = room_id or "default"
-            room = sessions[key].get("rooms", {}).get(rid)
-            if room:
-                provider_sessions = room.get("provider_sessions", {})
-                if "claude" in provider_sessions:
-                    claude_session_ids.append(provider_sessions["claude"])
-                room["provider_sessions"] = {}
-        else:
-            for room in sessions[key].get("rooms", {}).values():
-                provider_sessions = room.get("provider_sessions", {})
-                if "claude" in provider_sessions:
-                    claude_session_ids.append(provider_sessions["claude"])
-                room["provider_sessions"] = {}
-
-        # Claude handler의 누적 토큰도 초기화
-        for session_id in claude_session_ids:
-            claude_handler.clear_session_tokens(session_id)
+    if APP_CTX is None:
+        raise RuntimeError("App context not initialized")
+    sm.clear_client_sessions(APP_CTX, websocket, room_id)
 
 
 def remove_client_sessions(websocket):
-    """연결 종료 시 웹소켓↔세션 매핑만 제거(세션 상태는 보존)."""
-    websocket_to_session.pop(websocket, None)
+    if APP_CTX is None:
+        raise RuntimeError("App context not initialized")
+    sm.remove_client_sessions(APP_CTX, websocket)
 
 
 def is_session_retention_enabled(websocket, session: dict | None = None):
-    sess = session or _get_or_create_session(websocket, None)[1]
-    settings = sess.get("settings", {})
-    return settings.get("retention_enabled", False)
+    if APP_CTX is None:
+        raise RuntimeError("App context not initialized")
+    return sm.is_session_retention_enabled(APP_CTX, websocket, session)
 
 
 def _parse_story_markdown(md: str) -> list[dict]:
@@ -242,27 +196,15 @@ def issue_refresh_token():
 
 
 def verify_token(token, expected_type: str = "access"):
-    """JWT 검증: (payload, error_code) 반환. expected_type: 'access' | 'refresh'"""
-    if not JWT_SECRET:
-        return None, "jwt_disabled"
-    if not token:
-        return None, "missing_token"
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        typ = payload.get("typ", "access")
-        if expected_type and typ != expected_type:
-            return None, "invalid_token_type"
-        return payload, None
-    except jwt.ExpiredSignatureError:
-        return None, "token_expired"
-    except jwt.InvalidTokenError:
-        return None, "invalid_token"
+    if APP_CTX is None:
+        raise RuntimeError("App context not initialized")
+    return auth_verify_token(APP_CTX, token, expected_type)
 
 
 async def send_auth_required(websocket, reason="missing_token"):
-    await websocket.send(
-        json.dumps({"action": "auth_required", "data": {"required": True, "reason": reason}})
-    )
+    if APP_CTX is None:
+        raise RuntimeError("App context not initialized")
+    await auth_send_auth_required(APP_CTX, websocket, reason)
 
 
 async def handle_login_action(websocket, data):
@@ -482,12 +424,19 @@ async def handle_message(websocket, message):
 
         if LOGIN_REQUIRED:
             token = data.get("token")
-            _, token_error = verify_token(token, expected_type="access")
+            _, token_error = auth_verify_token(APP_CTX, token, expected_type="access")
             if token_error:
-                await send_auth_required(websocket, token_error)
+                await auth_send_auth_required(APP_CTX, websocket, token_error)
                 return
 
-        # 파일 목록 조회
+        # 라우터 우선 위임(등록된 액션이면 여기서 종료)
+        try:
+            if await ws_dispatch(APP_CTX, websocket, data):
+                return
+        except Exception:
+            logger.exception("Router dispatch error")
+
+        # 파일 목록 조회(레거시)
         if action == "list_files":
             result = await file_handler.list_files()
             await websocket.send(json.dumps({"action": "list_files", "data": result}))
