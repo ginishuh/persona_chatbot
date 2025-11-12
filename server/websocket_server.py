@@ -483,31 +483,12 @@ async def handle_message(websocket, message):
 
         # history 관련 액션은 라우터에서만 처리합니다.
 
-        # 세션 설정 조회(세션 단위)
+        # 세션 설정 조회(라우터 처리)
         elif action == "get_session_settings":
-            _, sess = _get_or_create_session(websocket, data)
-            settings = sess.get("settings", {"retention_enabled": False})
-            await websocket.send(
-                json.dumps(
-                    {"action": "get_session_settings", "data": {"success": True, **settings}}
-                )
-            )
+            pass
 
-        # 세션 유지 토글(세션 단위)
         elif action == "set_session_retention":
-            enabled = bool(data.get("enabled"))
-            _, sess = _get_or_create_session(websocket, data)
-            sess.setdefault("settings", {})["retention_enabled"] = enabled
-            if not enabled:
-                clear_client_sessions(websocket)
-            await websocket.send(
-                json.dumps(
-                    {
-                        "action": "set_session_retention",
-                        "data": {"success": True, "retention_enabled": enabled},
-                    }
-                )
-            )
+            pass
 
         elif action == "get_narrative":
             pass  # 라우터 처리
