@@ -545,92 +545,7 @@ async def handle_message(websocket, message):
                 )
             )
 
-        # 히스토리 초기화(채팅방 단위)
-        elif action == "clear_history":
-            session_key, session_obj = _get_or_create_session(websocket, data)
-            room_id = data.get("room_id")
-            _, room = _get_room(session_obj, room_id)
-            room["history"].clear()
-            clear_client_sessions(websocket, room_id=room_id)
-            # 토큰 사용량도 초기화
-            token_usage_handler.clear_usage(session_key, room_id)
-            await websocket.send(
-                json.dumps(
-                    {
-                        "action": "clear_history",
-                        "data": {"success": True, "message": "대화 히스토리가 초기화되었습니다"},
-                    }
-                )
-            )
-
-        # 히스토리 설정 조회(채팅방 단위)
-        elif action == "get_history_settings":
-            session_key, session_obj = _get_or_create_session(websocket, data)
-            room_id = data.get("room_id")
-            _, room = _get_room(session_obj, room_id)
-            await websocket.send(
-                json.dumps(
-                    {
-                        "action": "get_history_settings",
-                        "data": {"success": True, "max_turns": room["history"].max_turns},
-                    }
-                )
-            )
-
-        # 세션 리셋
-        elif action == "reset_sessions":
-            room_id = data.get("room_id")
-            clear_client_sessions(websocket, room_id=room_id)
-            await websocket.send(
-                json.dumps(
-                    {
-                        "action": "reset_sessions",
-                        "data": {"success": True, "message": "프로바이더 세션이 초기화되었습니다."},
-                    }
-                )
-            )
-
-        # 히스토리 길이 조정(채팅방 단위)
-        elif action == "set_history_limit":
-            requested = data.get("max_turns")
-            try:
-                if requested is None:
-                    new_limit = None
-                else:
-                    new_limit = int(requested)
-                    if new_limit < 5 or new_limit > 1000:
-                        raise ValueError(
-                            f"맥락 길이는 5~1000 사이여야 합니다 (입력값: {new_limit})"
-                        )
-
-                session_key, session_obj = _get_or_create_session(websocket, data)
-                room_id = data.get("room_id")
-                _, room = _get_room(session_obj, room_id)
-                room["history"].set_max_turns(new_limit)
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "action": "set_history_limit",
-                            "data": {"success": True, "max_turns": room["history"].max_turns},
-                        }
-                    )
-                )
-            except (ValueError, TypeError) as exc:
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "action": "set_history_limit",
-                            "data": {
-                                "success": False,
-                                "error": (
-                                    str(exc)
-                                    if isinstance(exc, ValueError)
-                                    else "올바른 숫자(5~1000) 또는 null을 입력하세요."
-                                ),
-                            },
-                        }
-                    )
-                )
+        # history 관련 액션은 라우터에서만 처리합니다.
 
         # 세션 설정 조회(세션 단위)
         elif action == "get_session_settings":
@@ -658,107 +573,25 @@ async def handle_message(websocket, message):
                 )
             )
 
-        # 서사 가져오기 (마크다운, 채팅방 연동)
         elif action == "get_narrative":
-            _, sess = _get_or_create_session(websocket, data)
-            room_id = data.get("room_id")
-            _, room = _get_room(sess, room_id)
-            narrative_md = room["history"].get_narrative_markdown()
-            await websocket.send(
-                json.dumps(
-                    {"action": "get_narrative", "data": {"success": True, "markdown": narrative_md}}
-                )
-            )
+            pass  # 라우터 처리
 
-        # 워크스페이스 파일 목록
-        elif action == "list_workspace_files":
-            file_type = data.get("file_type")
-            result = await workspace_handler.list_files(file_type)
-            await websocket.send(json.dumps({"action": "list_workspace_files", "data": result}))
+        elif action in {
+            "list_workspace_files",
+            "load_workspace_file",
+            "save_workspace_file",
+            "delete_workspace_file",
+        }:
+            pass  # 라우터 처리
 
-        # 워크스페이스 파일 읽기
-        elif action == "load_workspace_file":
-            file_type = data.get("file_type")
-            filename = data.get("filename")
-            result = await workspace_handler.read_file(file_type, filename)
-            await websocket.send(json.dumps({"action": "load_workspace_file", "data": result}))
+        elif action in {"room_list", "room_save", "room_load", "room_delete"}:
+            pass  # 라우터 처리
 
-        # 워크스페이스 파일 저장
-        elif action == "save_workspace_file":
-            file_type = data.get("file_type")
-            filename = data.get("filename")
-            content = data.get("content")
-            result = await workspace_handler.save_file(file_type, filename, content)
-            await websocket.send(json.dumps({"action": "save_workspace_file", "data": result}))
+        elif action in {"load_workspace_config", "save_workspace_config"}:
+            pass  # 라우터 처리
 
-        # 워크스페이스 파일 삭제
-        elif action == "delete_workspace_file":
-            file_type = data.get("file_type")
-            filename = data.get("filename")
-            result = await workspace_handler.delete_file(file_type, filename)
-            await websocket.send(json.dumps({"action": "delete_workspace_file", "data": result}))
-
-        # 채팅방 목록
-        elif action == "room_list":
-            result = await workspace_handler.list_rooms()
-            await websocket.send(json.dumps({"action": "room_list", "data": result}))
-
-        # 채팅방 저장(설정)
-        elif action == "room_save":
-            room_id = data.get("room_id") or "default"
-            # 클라이언트에서 보낸 conf 우선, 없으면 현재 컨텍스트를 사용
-            conf = data.get("config")
-            if not isinstance(conf, dict) or not conf:
-                conf = {"room_id": room_id, "context": context_handler.get_context()}
-            result = await workspace_handler.save_room(room_id, conf)
-            await websocket.send(json.dumps({"action": "room_save", "data": result}))
-
-        # 채팅방 로드(설정)
-        elif action == "room_load":
-            room_id = data.get("room_id") or "default"
-            result = await workspace_handler.load_room(room_id)
-            await websocket.send(json.dumps({"action": "room_load", "data": result}))
-
-        # 채팅방 삭제(설정만 제거)
-        elif action == "room_delete":
-            room_id = data.get("room_id") or "default"
-            result = await workspace_handler.delete_room(room_id)
-            await websocket.send(json.dumps({"action": "room_delete", "data": result}))
-
-        # 워크스페이스 설정 로드
-        elif action == "load_workspace_config":
-            result = await workspace_handler.load_config()
-            await websocket.send(json.dumps({"action": "load_workspace_config", "data": result}))
-
-        # 워크스페이스 설정 저장
-        elif action == "save_workspace_config":
-            config = data.get("config", {})
-            result = await workspace_handler.save_config(config)
-            await websocket.send(json.dumps({"action": "save_workspace_config", "data": result}))
-
-        # 프리셋 목록
-        elif action == "list_presets":
-            result = await workspace_handler.list_presets()
-            await websocket.send(json.dumps({"action": "list_presets", "data": result}))
-
-        # 프리셋 저장
-        elif action == "save_preset":
-            filename = data.get("filename")
-            preset_data = data.get("preset")
-            result = await workspace_handler.save_preset(filename, preset_data)
-            await websocket.send(json.dumps({"action": "save_preset", "data": result}))
-
-        # 프리셋 로드
-        elif action == "load_preset":
-            filename = data.get("filename")
-            result = await workspace_handler.load_preset(filename)
-            await websocket.send(json.dumps({"action": "load_preset", "data": result}))
-
-        # 프리셋 삭제
-        elif action == "delete_preset":
-            filename = data.get("filename")
-            result = await workspace_handler.delete_preset(filename)
-            await websocket.send(json.dumps({"action": "delete_preset", "data": result}))
+        elif action in {"list_presets", "save_preset", "load_preset", "delete_preset"}:
+            pass  # 라우터 처리
 
         # 모드 확인
         elif action == "mode_check":
@@ -775,142 +608,24 @@ async def handle_message(websocket, message):
             result = await mode_handler.switch_to_coding()
             await websocket.send(json.dumps({"action": "mode_switch_coding", "data": result}))
 
-        # 서사 목록(채팅방 연동)
         elif action == "list_stories":
-            room_id = data.get("room_id")
-            result = await workspace_handler.list_stories(room_id=room_id)
-            await websocket.send(json.dumps({"action": "list_stories", "data": result}))
+            pass  # 라우터 스텁 처리
 
         # 서사 저장 (append/use_server 옵션 지원, 채팅방 연동)
         elif action == "save_story":
-            filename = data.get("filename")
-            content = data.get("content")
-            use_server = bool(data.get("use_server", False))
-            append = bool(data.get("append", False))
-            room_id = data.get("room_id")
-            if use_server:
-                # 채팅방 원본 서사 사용
-                _, sess = _get_or_create_session(websocket, data)
-                _, room = _get_room(sess, room_id)
-                content = room["history"].get_narrative_markdown()
-            result = await workspace_handler.save_story(
-                filename, content, append=append, room_id=room_id
-            )
-            await websocket.send(json.dumps({"action": "save_story", "data": result}))
+            pass  # 라우터 스텁 처리
 
         # 서사 로드(채팅방 연동)
         elif action == "load_story":
-            filename = data.get("filename")
-            room_id = data.get("room_id")
-            result = await workspace_handler.load_story(filename, room_id=room_id)
-            await websocket.send(json.dumps({"action": "load_story", "data": result}))
+            pass  # 라우터 스텁 처리
 
         # 서사 삭제(채팅방 연동)
         elif action == "delete_story":
-            filename = data.get("filename")
-            room_id = data.get("room_id")
-            result = await workspace_handler.delete_story(filename, room_id=room_id)
-            await websocket.send(json.dumps({"action": "delete_story", "data": result}))
+            pass  # 라우터 스텁 처리
 
         # 서사에서 이어하기 (히스토리 주입, 채팅방 연동)
         elif action == "resume_from_story":
-            filename = data.get("filename")
-            room_id = data.get("room_id")
-            turns_req = data.get("turns")
-            summarize = bool(data.get("summarize", False))
-            try:
-                # 서사 로드
-                loaded = await workspace_handler.load_story(filename, room_id=room_id)
-                if not loaded.get("success"):
-                    raise ValueError(loaded.get("error") or "서사를 불러오지 못했습니다")
-
-                md = loaded.get("content", "")
-                all_msgs = _parse_story_markdown(md)
-                if not all_msgs:
-                    raise ValueError("서사에서 대화를 파싱하지 못했습니다")
-
-                # 불러올 턴 수 계산
-                try:
-                    # 방별 히스토리 설정 우선
-                    _, sess = _get_or_create_session(websocket, data)
-                    _, room = _get_room(sess, room_id)
-                    room_limit = room["history"].max_turns
-                    if turns_req is None:
-                        turns = room_limit or 30
-                    else:
-                        turns = int(turns_req)
-                except Exception:
-                    turns = 30
-
-                if turns <= 0:
-                    turns = 10
-
-                # 최근 N턴
-                inject = all_msgs[-turns:]
-
-                # 이전 구간 요약(옵션, 간단 요약)
-                summary_text = None
-                if summarize and len(all_msgs) > len(inject):
-                    prev = all_msgs[: len(all_msgs) - len(inject)]
-                    # 매우 단순한 요약: 각 메시지 첫 줄의 앞부분 1문장씩 최대 15줄
-                    bullets = []
-                    import re
-
-                    for m in prev:
-                        text = (m.get("content") or "").splitlines()[0]
-                        # 문장 단위로 자르기
-                        parts = re.split(r"[\.\!\?。？！]", text)
-                        first = parts[0].strip() if parts else text.strip()
-                        if first:
-                            bullets.append(
-                                f"- {('사용자' if m['role']=='user' else 'AI')}: {first}"
-                            )
-                        if len(bullets) >= 15:
-                            break
-                    if bullets:
-                        summary_text = "요약:\n" + "\n".join(bullets)
-
-                # 히스토리 교체(채팅방)
-                _, sess = _get_or_create_session(websocket, data)
-                _, room = _get_room(sess, room_id)
-                room_hist = room["history"]
-                room_hist.clear()
-                if summary_text:
-                    room_hist.add_assistant_message(summary_text)
-                for m in inject:
-                    if m["role"] == "user":
-                        room_hist.add_user_message(m["content"])
-                    else:
-                        room_hist.add_assistant_message(m["content"])
-
-                # 대략 토큰 추정
-                total_chars = sum(len(m["content"]) for m in inject) + (
-                    len(summary_text) if summary_text else 0
-                )
-                approx_tokens = int(total_chars / 4)
-
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "action": "resume_from_story",
-                            "data": {
-                                "success": True,
-                                "injected_turns": len(inject),
-                                "summarized": bool(summary_text),
-                                "approx_tokens": approx_tokens,
-                            },
-                        }
-                    )
-                )
-            except Exception as exc:
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "action": "resume_from_story",
-                            "data": {"success": False, "error": str(exc)},
-                        }
-                    )
-                )
+            pass  # 라우터 스텁 처리
 
         # 토큰 사용량 조회(채팅방 단위)
         elif action == "get_token_usage":
