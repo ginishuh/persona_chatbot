@@ -82,11 +82,24 @@ class DBHandler:
         await self._conn.commit()
 
     # ===== Rooms =====
+    async def upsert_session(self, session_key: str) -> None:
+        assert self._conn is not None
+        async with self._lock:
+            await self._conn.execute(
+                """
+                INSERT INTO sessions(session_key) VALUES(?)
+                ON CONFLICT(session_key) DO UPDATE SET last_accessed=CURRENT_TIMESTAMP
+                """,
+                (session_key,),
+            )
+            await self._conn.commit()
+
     async def upsert_room(
         self, room_id: str, session_key: str, title: str, context_json: str | None
     ) -> None:
         assert self._conn is not None
         async with self._lock:
+            await self.upsert_session(session_key)
             await self._conn.execute(
                 """
                 INSERT INTO rooms(room_id, session_key, title, context)
@@ -119,6 +132,12 @@ class DBHandler:
         row = await cur.fetchone()
         return dict(row) if row else None
 
+    async def delete_room(self, room_id: str) -> None:
+        assert self._conn is not None
+        async with self._lock:
+            await self._conn.execute("DELETE FROM rooms WHERE room_id = ?", (room_id,))
+            await self._conn.commit()
+
     # ===== Messages =====
     async def save_message(self, room_id: str, role: str, content: str) -> None:
         assert self._conn is not None
@@ -137,6 +156,14 @@ class DBHandler:
             sql += " LIMIT ?"
             params = (room_id, limit)
         cur = await self._conn.execute(sql, params)
+        rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def list_all_rooms(self) -> list[dict[str, Any]]:
+        assert self._conn is not None
+        cur = await self._conn.execute(
+            "SELECT room_id, title, session_key, created_at, updated_at FROM rooms ORDER BY updated_at DESC"
+        )
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
 

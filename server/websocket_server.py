@@ -1217,6 +1217,9 @@ async def main():
 
     # WebSocket 서버 시작
     ws_port = int(os.getenv("WS_PORT", "8765"))
+    # 현재 이벤트 루프를 AppContext에 보관(HTTP 스레드에서 DB 접근에 사용)
+    if APP_CTX is not None:
+        APP_CTX.loop = asyncio.get_running_loop()
     async with websockets.serve(websocket_handler, BIND_HOST, ws_port):
         logger.info(f"WebSocket server started on port {ws_port}")
         logger.info("Server is ready!")

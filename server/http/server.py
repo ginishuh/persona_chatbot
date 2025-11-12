@@ -7,6 +7,7 @@ History API 라우팅을 지원하기 위해 존재하지 않는 경로를 index
 Export는 초기 단계에서 메모리 세션 스냅샷 기반 JSON 다운로드를 제공합니다.
 """
 
+import asyncio
 import json
 import os
 from datetime import datetime
@@ -68,6 +69,30 @@ def run_http_server(ctx: AppContext):
                     }
 
                     def room_snapshot(rid: str) -> dict:
+                        # DB 우선: 다른 스레드의 이벤트 루프에서 실행
+                        try:
+                            if ctx.db_handler and getattr(ctx, "loop", None):
+                                fut = asyncio.run_coroutine_threadsafe(
+                                    ctx.db_handler.list_messages(rid), ctx.loop
+                                )
+                                msgs = fut.result(timeout=5)
+                                if msgs:
+                                    return {
+                                        "room_id": rid,
+                                        "title": rid,
+                                        "messages": [
+                                            {
+                                                "role": m.get("role"),
+                                                "content": m.get("content"),
+                                                "timestamp": str(m.get("timestamp")),
+                                            }
+                                            for m in msgs
+                                        ],
+                                    }
+                        except Exception:
+                            pass
+
+                        # 폴백: 메모리 세션
                         for sess in ctx.sessions.values():
                             room = sess.get("rooms", {}).get(rid)
                             if room:
@@ -99,6 +124,21 @@ def run_http_server(ctx: AppContext):
                     else:  # full
                         seen = set()
                         rooms_acc = []
+                        try:
+                            if ctx.db_handler and getattr(ctx, "loop", None):
+                                fut = asyncio.run_coroutine_threadsafe(
+                                    ctx.db_handler.list_all_rooms(), ctx.loop
+                                )
+                                db_rooms = fut.result(timeout=5)
+                                for r in db_rooms:
+                                    rid = r.get("room_id")
+                                    if not rid or rid in seen:
+                                        continue
+                                    seen.add(rid)
+                                    rooms_acc.append(room_snapshot(rid))
+                        except Exception:
+                            pass
+                        # 폴백: 메모리 rooms
                         for sess in ctx.sessions.values():
                             for rid in sess.get("rooms", {}).keys():
                                 if rid in seen:

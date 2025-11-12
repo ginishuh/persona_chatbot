@@ -49,8 +49,15 @@ async def chat(ctx: AppContext, websocket, data: dict):
     except Exception:
         pass
 
-    # 사용자 메시지 추가
+    # 사용자 메시지 추가 + DB에 세션/방 보장 후 저장
     room["history"].add_user_message(prompt)
+    try:
+        if ctx.db_handler:
+            await ctx.db_handler.upsert_session(session_key)
+            await ctx.db_handler.upsert_room(rid, session_key, rid, None)
+            await ctx.db_handler.save_message(rid, "user", prompt)
+    except Exception:
+        pass
 
     # 히스토리 텍스트 주입 여부 결정
     provider_supports_session = provider in ("claude", "droid")
@@ -97,7 +104,13 @@ async def chat(ctx: AppContext, websocket, data: dict):
 
     # 응답 히스토리 반영
     if result.get("success") and result.get("message"):
-        room["history"].add_assistant_message(result["message"])
+        msg = result["message"]
+        room["history"].add_assistant_message(msg)
+        try:
+            if ctx.db_handler:
+                await ctx.db_handler.save_message(rid, "assistant", msg)
+        except Exception:
+            pass
 
     # 토큰 사용량 집계
     token_info = result.get("token_info")
