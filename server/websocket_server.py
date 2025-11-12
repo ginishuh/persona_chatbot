@@ -116,57 +116,7 @@ def is_session_retention_enabled(websocket, session: dict | None = None):
     return sm.is_session_retention_enabled(APP_CTX, websocket, session)
 
 
-def _parse_story_markdown(md: str) -> list[dict]:
-    """서사(.md)에서 히스토리 리스트로 변환
-
-    포맷 가정:
-    - "## n. 사용자" 섹션과 "## n. <이름>" 섹션이 번갈아 등장
-    - 섹션 본문은 다음 '## ' 전까지의 텍스트(--- 구분선은 무시)
-    반환: [{"role":"user"|"assistant","content":str}, ...]
-    """
-    try:
-        lines = md.splitlines()
-        items: list[dict] = []
-        i = 0
-        current_role = None
-        buf: list[str] = []
-
-        def flush():
-            nonlocal buf, current_role
-            if current_role and buf:
-                # 구분선 제거
-                text = "\n".join([ln for ln in buf if ln.strip() != "---"]).strip()
-                if text:
-                    items.append({"role": current_role, "content": text})
-            buf = []
-
-        import re
-
-        header_re = re.compile(r"^##\s+\d+\.\s*(.+?)\s*$")
-
-        while i < len(lines):
-            m = header_re.match(lines[i])
-            if m:
-                # 이전 섹션 flush
-                flush()
-                title = m.group(1)
-                if "사용자" in title:
-                    current_role = "user"
-                else:
-                    current_role = "assistant"
-                buf = []
-                i += 1
-                continue
-            else:
-                if current_role:
-                    buf.append(lines[i])
-                i += 1
-
-        flush()
-        return items
-    except Exception:
-        # 파싱 실패 시 빈 배열
-        return []
+## stories 파서는 제거되었습니다(스토리 기능 비활성화).
 
 
 def _issue_token(ttl_seconds: int, typ: str):
@@ -436,23 +386,17 @@ async def handle_message(websocket, message):
         except Exception:
             logger.exception("Router dispatch error")
 
-        # 파일 목록 조회(레거시)
-        if action == "list_files":
-            result = await file_handler.list_files()
-            await websocket.send(json.dumps({"action": "list_files", "data": result}))
-
-        # 파일 읽기
-        elif action == "read_file":
-            file_path = data.get("path")
-            result = await file_handler.read_file(file_path)
-            await websocket.send(json.dumps({"action": "read_file", "data": result}))
-
-        # 파일 쓰기
-        elif action == "write_file":
-            file_path = data.get("path")
-            content = data.get("content")
-            result = await file_handler.write_file(file_path, content)
-            await websocket.send(json.dumps({"action": "write_file", "data": result}))
+        # 파일(레거시 STORIES) 관련 액션은 제거되었습니다.
+        if action in {"list_files", "read_file", "write_file"}:
+            await websocket.send(
+                json.dumps(
+                    {
+                        "action": action,
+                        "data": {"success": False, "error": "legacy API removed"},
+                    }
+                )
+            )
+            return
 
         # Git 상태
         elif action == "git_status":
