@@ -8,14 +8,17 @@ Export는 초기 단계에서 메모리 세션 스냅샷 기반 JSON 다운로�
 """
 
 import asyncio
+import io
 import json
 import os
+import zipfile
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler
 from socketserver import TCPServer
 from urllib.parse import parse_qs, urlparse
 
 from server.core.app_context import AppContext
+from server.core.auth import verify_token as auth_verify_token
 
 
 def run_http_server(ctx: AppContext):
@@ -42,6 +45,41 @@ def run_http_server(ctx: AppContext):
         def log_message(self, format, *args):
             logger.info(f"HTTP: {format % args}")
 
+        def _parse_bool(self, v: str | None, default: bool = False) -> bool:
+            if v is None:
+                return default
+            return v.lower() in {"1", "true", "yes", "on"}
+
+        def _parse_date(self, v: str | None, end: bool = False) -> str | None:
+            if not v:
+                return None
+            try:
+                if "T" in v:
+                    return v.replace("T", " ")[:19]
+                return f"{v} 23:59:59" if end else f"{v} 00:00:00"
+            except Exception:
+                return None
+
+        def _ok_json(self, obj: dict, filename: str | None = None):
+            payload = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-store")
+            if filename:
+                self.send_header("Content-Disposition", f"attachment; filename={filename}")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def _ok_zip(self, content_bytes: bytes, filename: str):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Disposition", f"attachment; filename={filename}")
+            self.send_header("Content-Length", str(len(content_bytes)))
+            self.end_headers()
+            self.wfile.write(content_bytes)
+
         def do_GET(self):
             # 앱 설정
             if self.path == "/app-config.json":
@@ -61,6 +99,30 @@ def run_http_server(ctx: AppContext):
                     qs = parse_qs(url.query)
                     scope = (qs.get("scope", ["single"]))[0]
                     room_id = (qs.get("room_id", ["default"]))[0]
+                    fmt = (qs.get("format", ["json"]))[0].lower()  # json | zip
+                    includes = set((qs.get("include", ["messages,context"]))[0].split(","))
+                    start = self._parse_date((qs.get("start", [None]))[0], end=False)
+                    end = self._parse_date((qs.get("end", [None]))[0], end=True)
+
+                    # 인증: 로그인 환경에서는 JWT 필요
+                    if ctx.login_required:
+                        token = None
+                        authz = self.headers.get("Authorization")
+                        if authz and authz.lower().startswith("bearer "):
+                            token = authz.split(" ", 1)[1].strip()
+                        if not token:
+                            token = (qs.get("token", [None]))[0]
+                        _, err = auth_verify_token(ctx, token, expected_type="access")
+                        if err:
+                            body = json.dumps(
+                                {"success": False, "error": f"unauthorized: {err}"}
+                            ).encode("utf-8")
+                            self.send_response(401)
+                            self.send_header("Content-Type", "application/json")
+                            self.send_header("Content-Length", str(len(body)))
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
 
                     export_obj = {
                         "version": "1.0",
@@ -72,14 +134,19 @@ def run_http_server(ctx: AppContext):
                         # DB 우선: 다른 스레드의 이벤트 루프에서 실행
                         try:
                             if ctx.db_handler and getattr(ctx, "loop", None):
-                                fut = asyncio.run_coroutine_threadsafe(
-                                    ctx.db_handler.list_messages(rid), ctx.loop
-                                )
-                                msgs = fut.result(timeout=5)
+                                msgs = None
+                                if "messages" in includes:
+                                    fut = asyncio.run_coroutine_threadsafe(
+                                        ctx.db_handler.list_messages_range(
+                                            rid, start=start, end=end
+                                        ),
+                                        ctx.loop,
+                                    )
+                                    msgs = fut.result(timeout=5)
+                                base = {"room_id": rid, "title": rid}
                                 if msgs:
                                     return {
-                                        "room_id": rid,
-                                        "title": rid,
+                                        **base,
                                         "messages": [
                                             {
                                                 "role": m.get("role"),
@@ -88,6 +155,32 @@ def run_http_server(ctx: AppContext):
                                             }
                                             for m in msgs
                                         ],
+                                        **(
+                                            {
+                                                "token_usage": asyncio.run_coroutine_threadsafe(
+                                                    ctx.db_handler.list_token_usage_range(
+                                                        rid, start=start, end=end
+                                                    ),
+                                                    ctx.loop,
+                                                ).result(timeout=5)
+                                            }
+                                            if "token_usage" in includes
+                                            else {}
+                                        ),
+                                        **(
+                                            {
+                                                "context": json.loads(
+                                                    asyncio.run_coroutine_threadsafe(
+                                                        ctx.db_handler.get_room(rid), ctx.loop
+                                                    )
+                                                    .result(timeout=5)
+                                                    .get("context")
+                                                    or "{}"
+                                                )
+                                            }
+                                            if "context" in includes
+                                            else {}
+                                        ),
                                     }
                         except Exception:
                             pass
@@ -98,7 +191,7 @@ def run_http_server(ctx: AppContext):
                             if room:
                                 hist = room.get("history")
                                 messages = []
-                                if hist:
+                                if hist and "messages" in includes:
                                     for m in getattr(hist, "full_history", []):
                                         messages.append(
                                             {
@@ -107,7 +200,10 @@ def run_http_server(ctx: AppContext):
                                                 "timestamp": datetime.utcnow().isoformat() + "Z",
                                             }
                                         )
-                                return {"room_id": rid, "title": rid, "messages": messages}
+                                base = {"room_id": rid, "title": rid}
+                                if messages:
+                                    base["messages"] = messages
+                                return base
                         return {"room_id": rid, "title": rid, "messages": []}
 
                     if scope == "single":
@@ -147,17 +243,16 @@ def run_http_server(ctx: AppContext):
                                 rooms_acc.append(room_snapshot(rid))
                         export_obj["rooms"] = rooms_acc
 
-                    payload = json.dumps(export_obj, ensure_ascii=False).encode("utf-8")
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Cache-Control", "no-store")
-                    self.send_header(
-                        "Content-Disposition",
-                        f"attachment; filename=backup_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.json",
-                    )
-                    self.send_header("Content-Length", str(len(payload)))
-                    self.end_headers()
-                    self.wfile.write(payload)
+                    tsname = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+                    if fmt == "zip":
+                        buf = io.BytesIO()
+                        with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+                            zf.writestr(
+                                f"export_{tsname}.json", json.dumps(export_obj, ensure_ascii=False)
+                            )
+                        self._ok_zip(buf.getvalue(), f"backup_{tsname}.zip")
+                    else:
+                        self._ok_json(export_obj, filename=f"backup_{tsname}.json")
                 except Exception as e:
                     body = json.dumps({"success": False, "error": str(e)}).encode("utf-8")
                     self.send_response(500)

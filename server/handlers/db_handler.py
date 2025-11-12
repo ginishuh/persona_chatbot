@@ -159,6 +159,47 @@ class DBHandler:
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
 
+    async def list_messages_range(
+        self, room_id: str, start: str | None = None, end: str | None = None
+    ) -> list[dict[str, Any]]:
+        """방 메시지 조회(날짜 범위 필터). start/end는 'YYYY-MM-DD HH:MM:SS' 문자열.
+
+        SQLite의 TIMESTAMP 텍스트 비교 특성을 활용합니다.
+        """
+        assert self._conn is not None
+        clauses = ["room_id = ?"]
+        params: list[Any] = [room_id]
+        if start:
+            clauses.append("timestamp >= ?")
+            params.append(start)
+        if end:
+            clauses.append("timestamp <= ?")
+            params.append(end)
+        where = " AND ".join(clauses)
+        sql = f"SELECT message_id, role, content, timestamp FROM messages WHERE {where} ORDER BY message_id ASC"
+        cur = await self._conn.execute(sql, params)
+        rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def list_token_usage_range(
+        self, room_id: str, start: str | None = None, end: str | None = None
+    ) -> list[dict[str, Any]]:
+        """방별 토큰 사용량 조회(날짜 범위)."""
+        assert self._conn is not None
+        clauses = ["room_id = ?"]
+        params: list[Any] = [room_id]
+        if start:
+            clauses.append("timestamp >= ?")
+            params.append(start)
+        if end:
+            clauses.append("timestamp <= ?")
+            params.append(end)
+        where = " AND ".join(clauses)
+        sql = f"SELECT usage_id, session_key, provider, token_info, timestamp FROM token_usage WHERE {where} ORDER BY usage_id ASC"
+        cur = await self._conn.execute(sql, params)
+        rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
     async def list_all_rooms(self) -> list[dict[str, Any]]:
         assert self._conn is not None
         cur = await self._conn.execute(
