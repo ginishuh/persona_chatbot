@@ -10,15 +10,20 @@ from collections.abc import Awaitable, Callable
 
 from server.core.app_context import AppContext
 
+from .actions import config as config_actions
 from .actions import files as files_actions
 from .actions import history as history_actions
 from .actions import presets as presets_actions
 from .actions import rooms as rooms_actions
+from .actions import stories as stories_actions
 
 Handler = Callable[[AppContext, object, dict], Awaitable[None]]
 
 
 ACTION_TABLE: dict[str, Handler] = {
+    # workspace config
+    "load_workspace_config": config_actions.load_workspace_config,
+    "save_workspace_config": config_actions.save_workspace_config,
     # workspace files
     "list_workspace_files": files_actions.list_workspace_files,
     "load_workspace_file": files_actions.load_workspace_file,
@@ -41,6 +46,12 @@ ACTION_TABLE: dict[str, Handler] = {
     "clear_history": history_actions.clear_history,
     "get_history_snapshot": history_actions.get_history_snapshot,
     "reset_sessions": history_actions.reset_sessions,
+    # stories (deprecated) — keep stubs to avoid UI breakage
+    "list_stories": stories_actions.list_stories,
+    "save_story": stories_actions.save_story,
+    "load_story": stories_actions.load_story,
+    "delete_story": stories_actions.delete_story,
+    "resume_from_story": stories_actions.resume_from_story,
 }
 
 
