@@ -316,6 +316,11 @@ curl -OJ "http://localhost:9000/api/export/stream?scope=single&room_id=default&s
 참고
 - 현재는 WS 중심. 대용량 업로드가 필요하면 HTTP `POST /api/import`를 추가 예정입니다.
 
+### /backup UI (클라이언트)
+
+- 주소창에 `/backup`으로 진입하거나, 앱 내에서 백업 모달을 열어 파라미터를 구성하고 다운로드할 수 있습니다.
+- scope/include/date/format(JSON/ZIP/NDJSON)를 선택하면 적합한 HTTP 경로(`/api/export` 또는 `/api/export/stream`)를 호출합니다.
+
 라우팅(History API)
 - 클라이언트는 History API 라우팅을 사용합니다(`/`, `/rooms/:id`, `/rooms/:id/history`, `/backup`).
 - 서버는 SPA fallback을 제공해 새로고침 404가 발생하지 않습니다.
