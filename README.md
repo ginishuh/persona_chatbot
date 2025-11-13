@@ -285,6 +285,37 @@ curl -OJ "http://localhost:9000/api/export/stream?scope=single&room_id=default&s
 
 라인 타입: `meta`, `room`, `message`, `token_usage`, `end`
 
+### Import (초기: WebSocket)
+
+간단한 Import는 WebSocket 액션으로 지원합니다. JSON 스키마는 Export 결과(single_room/full_backup)를 그대로 사용합니다.
+
+요청
+```json
+{
+  "action": "import_data",
+  "import_mode": "new",           // "new" | "merge"
+  "target_room_id": "room1",      // merge일 때 대상 방
+  "duplicate_policy": "skip",     // "skip" | "add"
+  "json_data": { /* export JSON */ }
+}
+```
+
+응답
+```json
+{
+  "action": "import_data",
+  "data": {
+    "success": true,
+    "rooms_imported": 1,
+    "messages_imported": 245,
+    "new_room_ids": ["fantasy_adventure_001"]
+  }
+}
+```
+
+참고
+- 현재는 WS 중심. 대용량 업로드가 필요하면 HTTP `POST /api/import`를 추가 예정입니다.
+
 라우팅(History API)
 - 클라이언트는 History API 라우팅을 사용합니다(`/`, `/rooms/:id`, `/rooms/:id/history`, `/backup`).
 - 서버는 SPA fallback을 제공해 새로고침 404가 발생하지 않습니다.

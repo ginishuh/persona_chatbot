@@ -16,6 +16,7 @@ from .actions import context as context_actions
 from .actions import files as files_actions
 from .actions import git as git_actions
 from .actions import history as history_actions
+from .actions import importer as import_actions
 from .actions import mode as mode_actions
 from .actions import presets as presets_actions
 from .actions import rooms as rooms_actions
@@ -60,6 +61,8 @@ ACTION_TABLE: dict[str, Handler] = {
     "set_session_retention": session_actions.set_session_retention,
     # token usage
     "get_token_usage": token_actions.get_token_usage,
+    # import
+    "import_data": import_actions.import_data,
     # stories (deprecated) — keep stubs to avoid UI breakage
     "list_stories": stories_actions.list_stories,
     "save_story": stories_actions.save_story,
