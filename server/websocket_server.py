@@ -163,18 +163,9 @@ async def handle_login_action(websocket, data):
     변경점:
     - 로그인 성공 시 성인동의를 자동으로 True로 설정합니다.
     - 세션키(session_key)를 발급/반환하여 재연결 시 상태를 유지합니다.
-    - 로그인 환경에서는 username을 session_key로 사용하여 다중 기기 동기화 지원
     """
-    # 로그인 환경에서는 username을 세션키로 사용 (다중 기기 동기화)
-    username = data.get("username", "") if isinstance(data, dict) else ""
-    if LOGIN_REQUIRED and LOGIN_USERNAME and username == LOGIN_USERNAME:
-        # username을 session_key로 사용하여 모든 기기에서 동일한 세션 공유
-        data_with_user_session = dict(data) if data else {}
-        data_with_user_session["session_key"] = f"user:{username}"
-        session_key, session_obj = _get_or_create_session(websocket, data_with_user_session)
-    else:
-        # 비로그인 또는 로그인 전: 기존 방식 (랜덤 세션키)
-        session_key, session_obj = _get_or_create_session(websocket, data)
+    # 세션 확보 및 성인 동의 자동 설정
+    session_key, session_obj = _get_or_create_session(websocket, data)
     try:
         session_obj.setdefault("settings", {})["adult_consent"] = True
     except Exception:
