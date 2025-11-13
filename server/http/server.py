@@ -622,6 +622,27 @@ def run_http_server(ctx: AppContext):
             # Import API
             if self.path.startswith("/api/import"):
                 try:
+                    # JWT 인증 (Export와 동일)
+                    if ctx.login_required:
+                        parsed = urlparse(self.path)
+                        qs = parse_qs(parsed.query)
+                        token = None
+                        authz = self.headers.get("Authorization")
+                        if authz and authz.lower().startswith("bearer "):
+                            token = authz.split(" ", 1)[1].strip()
+                        if not token:
+                            token = (qs.get("token", [None]))[0]
+                        _, err = auth_verify_token(ctx, token, expected_type="access")
+                        if err:
+                            body = json.dumps(
+                                {"success": False, "error": f"unauthorized: {err}"}
+                            ).encode()
+                            self.send_response(401)
+                            self.send_header("Content-Type", "application/json")
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
+
                     # Content-Length 파싱
                     content_length = int(self.headers.get("Content-Length", 0))
                     if content_length > 100 * 1024 * 1024:  # 100MB 제한
@@ -706,11 +727,11 @@ def run_http_server(ctx: AppContext):
                                 "new_room_ids": new_room_ids,
                             }
 
-                        # 이벤트 루프에서 실행
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        result = loop.run_until_complete(run_import())
-                        loop.close()
+                        # 기존 이벤트 루프에서 실행 (새 루프 생성 금지)
+                        if not ctx.loop:
+                            raise RuntimeError("Event loop not available in AppContext")
+                        future = asyncio.run_coroutine_threadsafe(run_import(), ctx.loop)
+                        result = future.result(timeout=60)
 
                         # 성공 응답
                         self.send_response(200)

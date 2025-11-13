@@ -34,6 +34,17 @@ async def room_save(ctx: AppContext, websocket, data: dict):
     logger = logging.getLogger(__name__)
     logger.info("[DEBUG] room_save 시작")
 
+    if not ctx.db_handler:
+        await websocket.send(
+            json.dumps(
+                {
+                    "action": "room_save",
+                    "data": {"success": False, "error": "DB를 사용할 수 없습니다"},
+                }
+            )
+        )
+        return
+
     room_id = data.get("room_id") or "default"
     conf = data.get("config")
     if not isinstance(conf, dict) or not conf:
@@ -97,6 +108,17 @@ async def room_load(ctx: AppContext, websocket, data: dict):
 
 
 async def room_delete(ctx: AppContext, websocket, data: dict):
+    if not ctx.db_handler:
+        await websocket.send(
+            json.dumps(
+                {
+                    "action": "room_delete",
+                    "data": {"success": False, "error": "DB를 사용할 수 없습니다"},
+                }
+            )
+        )
+        return
+
     room_id = data.get("room_id") or "default"
     await ctx.db_handler.delete_room(room_id)
     await websocket.send(

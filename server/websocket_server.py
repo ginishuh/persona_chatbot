@@ -656,6 +656,7 @@ async def main():
         logger.info(f"SQLite initialized at: {DB_PATH}")
     except Exception:
         logger.exception("DB initialization failed; continuing without DB")
+        db_handler = None  # 실패 시 None으로 설정
 
     # 컨텍스트 구성 (HTTP 서버 등 외부 모듈에 전달)
     global APP_CTX
