@@ -13,31 +13,13 @@ from .app_context import AppContext
 def get_or_create_session(ctx: AppContext, websocket, data: dict | None):
     """세션키 해석 및 생성.
 
-    username이 있으면 user:{username} 형태의 session_key 사용 (다중 기기 동기화)
+    인증 후 명시적으로 전달된 session_key만 사용 (DoS 방지)
 
     반환: (session_key, session_dict)
     """
     key = None
-    username = None
-
     if isinstance(data, dict):
         key = data.get("session_key") or None
-        username = data.get("username") or None
-
-    # username 기반 session_key 우선 (로그인된 사용자)
-    if username and ctx.login_required:
-        user_key = f"user:{username}"
-        if user_key in ctx.sessions:
-            ctx.websocket_to_session[websocket] = user_key
-            return user_key, ctx.sessions[user_key]
-        # username 기반 새 세션 생성
-        ctx.sessions[user_key] = {
-            "settings": {"retention_enabled": False, "adult_consent": True},
-            "rooms": {},
-            "username": username,  # 저장해두기
-        }
-        ctx.websocket_to_session[websocket] = user_key
-        return user_key, ctx.sessions[user_key]
 
     # 기존 session_key 사용 (data에 명시적으로 전달됨)
     if key and key in ctx.sessions:
@@ -46,7 +28,7 @@ def get_or_create_session(ctx: AppContext, websocket, data: dict | None):
         # websocket에 연결된 기존 세션 찾기
         key = ctx.websocket_to_session.get(websocket)
         if not key or key not in ctx.sessions:
-            # 랜덤 UUID로 새 세션 생성 (비로그인 사용자)
+            # 랜덤 UUID로 새 세션 생성
             key = uuid.uuid4().hex
             ctx.sessions[key] = {
                 "settings": {"retention_enabled": False, "adult_consent": bool(ctx.login_required)},

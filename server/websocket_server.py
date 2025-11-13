@@ -297,11 +297,33 @@ async def handle_login_action(websocket, data):
 
     if password and password == LOGIN_PASSWORD:
         # 로그인 성공: username 기반 세션으로 전환 (다중 기기 동기화)
-        if username and LOGIN_USERNAME:
+        if username and LOGIN_USERNAME and db_handler:
             user_session_key = f"user:{username}"
-            # 기존 랜덤 세션이 있었다면 제거
+
+            # 기존 UUID 세션의 rooms를 user:{username}으로 마이그레이션 (1회성)
+            # DB의 모든 non-user: session_key를 찾아서 변경
+            try:
+                all_rooms = await db_handler.list_all_rooms()
+                migrated_count = 0
+                for room in all_rooms:
+                    old_key = room.get("session_key", "")
+                    # UUID 패턴 (user: 접두사가 없는 것)
+                    if old_key and not old_key.startswith("user:"):
+                        room_id = room.get("room_id")
+                        title = room.get("title", room_id)
+                        context = room.get("context")
+                        # user:{username}으로 재저장
+                        await db_handler.upsert_room(room_id, user_session_key, title, context)
+                        migrated_count += 1
+                if migrated_count > 0:
+                    logger.info(f"Migrated {migrated_count} rooms from UUID to {user_session_key}")
+            except Exception as e:
+                logger.error(f"Migration failed: {e}")
+
+            # 기존 랜덤 세션 제거
             if session_key != user_session_key and session_key in sessions:
                 sessions.pop(session_key, None)
+
             # username 기반 세션 생성 또는 재사용
             if user_session_key not in sessions:
                 sessions[user_session_key] = {
