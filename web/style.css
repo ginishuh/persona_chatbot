@@ -568,9 +568,7 @@ header h1 {
 #resumeStoryBtn,
 #injectStoryBtn,
 #deleteStoryBtn,
-#saveNarrativeBtn,
-#roomSearch,
-#roomList { display: none !important; }
+#saveNarrativeBtn { display: none !important; }
 
 .character-item:hover {
     border-color: #cbd5e0;

@@ -793,6 +793,36 @@ document.getElementById('rmNewBtn')?.addEventListener('click', () => {
     navigate(`/rooms/${encodeURIComponent(r)}`);
 });
 
+// ===== 3열 우측 패널: 방 목록 렌더 =====
+function renderRoomsRightPanelList() {
+    const list = document.getElementById('roomList');
+    const search = document.getElementById('roomSearch');
+    if (!list) return;
+    const q = (search?.value || '').trim().toLowerCase();
+    list.innerHTML = '';
+    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        return { rid, title };
+    }).filter(x => !q || x.title.toLowerCase().includes(q) || x.rid.toLowerCase().includes(q));
+    if (!items.length) {
+        list.innerHTML = '<div class="empty">저장된 채팅방이 없습니다.</div>';
+        return;
+    }
+    items.forEach(it => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm';
+        btn.style = 'width:100%; text-align:left; margin-bottom:4px;';
+        btn.textContent = it.title;
+        btn.addEventListener('click', () => {
+            navigate(`/rooms/${encodeURIComponent(it.rid)}`);
+        });
+        list.appendChild(btn);
+    });
+}
+
+document.getElementById('roomSearch')?.addEventListener('input', renderRoomsRightPanelList);
+
 // ===== WebSocket 연결 =====
 
 async function loadAppConfig() {
@@ -1051,7 +1081,7 @@ if (roomAddBtn) {
         // 현재 설정으로 방 저장
         const config = collectRoomConfig(r);
         sendMessage({ action: 'room_save', room_id: r, config });
-        setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+        setTimeout(() => { sendMessage({ action: 'room_list' }); renderRoomsRightPanelList(); }, 300);
         refreshRoomViews();
         log(`채팅방 추가: ${r}`, 'success');
         announce(`채팅방 추가: ${r}`);
@@ -1068,7 +1098,7 @@ if (roomDelBtn) {
         rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== currentRoom);
         currentRoom = 'default';
         persistRooms();
-        renderRoomsUI();
+        renderRoomsUI(); renderRoomsRightPanelList();
         refreshRoomViews();
         log('채팅방 삭제 완료', 'success');
         announce('채팅방 삭제 완료');
@@ -1079,7 +1109,7 @@ if (roomSaveBtn) {
         const r = currentRoom || 'default';
         const config = collectRoomConfig(r);
         sendMessage({ action: 'room_save', room_id: r, config });
-        setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+        setTimeout(() => { sendMessage({ action: 'room_list' }); renderRoomsRightPanelList(); }, 300);
         log('채팅방 설정 저장 완료', 'success');
     });
 }
@@ -1613,6 +1643,7 @@ function handleMessage(msg) {
                 rooms = data.rooms || [];
                 try { localStorage.setItem(ROOMS_KEY, JSON.stringify(rooms)); } catch (_) {}
                 renderRoomsUI();
+                renderRoomsRightPanelList();
             } else {
                 log(`방 목록 로드 실패: ${data.error}`, 'error');
             }
