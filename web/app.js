@@ -819,6 +819,8 @@ function connect() {
             if (savedCurrent) currentRoom = savedCurrent;
             renderRoomsUI();
         } catch (_) {}
+        // 초기 라우트 반영
+        try { renderCurrentScreenFrom(location.pathname); } catch (_) {}
     };
 
     ws.onmessage = (event) => {
@@ -3758,6 +3760,8 @@ window.addEventListener('load', async () => {
     document.getElementById('mobileOverlay')?.classList.remove('active');
     document.getElementById('participantsModal')?.classList.add('hidden');
     connect();
+    // 연결 전이라도 라우트 화면을 먼저 표시(데이터는 연결 후 갱신)
+    try { renderCurrentScreenFrom(location.pathname); } catch (_) {}
 });
 // 서사(=채팅방) 선택 시 방 전환 처리
 // stories UI는 비활성화 상태이므로 관련 이벤트 없음
