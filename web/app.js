@@ -820,6 +820,9 @@ function populateRoomsModal() {
             e.stopPropagation();
             if (!confirm(`채팅방 '${it.title}' 을(를) 삭제하시겠습니까?`)) return;
             sendMessage({ action: 'room_delete', room_id: it.rid });
+            // DB 삭제 후 목록 재동기화
+            setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+            // 로컬 상태는 즉시 업데이트 (UX)
             rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
             if (currentRoom === it.rid) {
                 currentRoom = rooms.length > 0 ? (typeof rooms[0] === 'string' ? rooms[0] : rooms[0].room_id) : null;
@@ -910,6 +913,9 @@ function renderRoomsRightPanelList() {
             e.stopPropagation();
             if (!confirm(`채팅방 '${it.title}' 을(를) 삭제하시겠습니까?`)) return;
             sendMessage({ action: 'room_delete', room_id: it.rid });
+            // DB 삭제 후 목록 재동기화
+            setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+            // 로컬 상태는 즉시 업데이트 (UX)
             rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
             if (currentRoom === it.rid) {
                 currentRoom = rooms.length > 0 ? (typeof rooms[0] === 'string' ? rooms[0] : rooms[0].room_id) : null;
