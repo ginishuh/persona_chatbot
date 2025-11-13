@@ -130,6 +130,8 @@ let lastRequest = null; // 재전송용 마지막 사용자 액션
 let sessionKey = '';
 let rooms = ['default'];
 let currentRoom = 'default';
+let pendingRoutePath = null; // 로그인 이후 복원할 경로
+let autoLoginRequested = false; // 비로그인 환경 자동 로그인 시도 여부
 const RETRY_ACTIONS = new Set([
     'set_context', 'chat',
     'save_workspace_file', 'delete_workspace_file',
@@ -233,7 +235,29 @@ function parsePathname(pathname) {
     return { view: 'room-list', params: [] };
 }
 
+function rememberPendingRoute(pathname) {
+    pendingRoutePath = pathname || '/';
+}
+
+function resumePendingRoute() {
+    if (!pendingRoutePath) return;
+    if (appConfig.login_required && !isAuthenticated) {
+        return;
+    }
+    const target = pendingRoutePath;
+    pendingRoutePath = null;
+    try {
+        renderCurrentScreenFrom(target);
+    } catch (_) {}
+}
+
 function renderCurrentScreenFrom(pathname) {
+    if (appConfig.login_required && !isAuthenticated) {
+        rememberPendingRoute(pathname);
+        showLoginModal();
+        hideScreen();
+        return;
+    }
     const { view, params } = parsePathname(pathname);
     // 3열 메인 레이아웃 유지: 전용 화면 숨기고(main-content 표시), 라우트에 맞게 모달/패널만 제어
     hideScreen();
@@ -762,6 +786,10 @@ function populateRoomsModal() {
 }
 
 function openRoomsModal() {
+    if (appConfig.login_required && !isAuthenticated) {
+        showLoginModal();
+        return;
+    }
     const modal = document.getElementById('roomsModal');
     if (!modal) return;
     populateRoomsModal();
@@ -879,6 +907,7 @@ function connect() {
         log('연결이 끊어졌습니다. 5초 후 재연결...', 'error');
         authRequired = false;
         isAuthenticated = false;
+        autoLoginRequested = false;
         hideLoginModal();
         clearTimeout(tokenRefreshTimeout);
         tokenRefreshTimeout = null;
@@ -1414,6 +1443,7 @@ function handleMessage(msg) {
             if (data && data.login_required) {
                 authRequired = true;
                 isAuthenticated = false;
+                autoLoginRequested = false;
                 if (authToken) {
                     const consent = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
                     sendMessage({ action: 'login', adult_consent: consent || undefined });
@@ -1437,6 +1467,11 @@ function handleMessage(msg) {
                 authRequired = false;
                 isAuthenticated = true;
                 hideLoginModal();
+                resumePendingRoute();
+                if (!autoLoginRequested) {
+                    autoLoginRequested = true;
+                    sendMessage({ action: 'login' }, { skipToken: true });
+                }
                 initializeAppData();
             }
             break;
@@ -1444,6 +1479,9 @@ function handleMessage(msg) {
         case 'auth_required':
             authRequired = true;
             isAuthenticated = false;
+            if (appConfig.login_required) {
+                rememberPendingRoute(location.pathname);
+            }
             // refresh 토큰으로 자동 갱신 시도
             if (!refreshInProgress && refreshToken) {
                 refreshInProgress = true;
@@ -1476,7 +1514,8 @@ function handleMessage(msg) {
                     sessionKey = data.session_key;
                     try { localStorage.setItem(SESSION_KEY_KEY, sessionKey); } catch (_) {}
                 }
-                log('로그인 성공', 'success');
+                const handshakeOnly = !appConfig.login_required && !data.token && !data.refresh_token;
+                log(handshakeOnly ? '세션 키 동기화 완료' : '로그인 성공', 'success');
                 // 아이디/자동로그인 저장
                 try {
                     const user = (loginUsernameInput?.value || '').trim();
@@ -1504,7 +1543,10 @@ function handleMessage(msg) {
                     sendMessage(payload, { skipRetry: true });
                     lastRequest = null;
                 }
-                initializeAppData();
+                if (appConfig.login_required || data.token || data.refresh_token) {
+                    initializeAppData();
+                }
+                resumePendingRoute();
             } else {
                 const errorMsg = mapAuthError(data.code) || data.error || '로그인에 실패했습니다.';
                 clearAuthToken();

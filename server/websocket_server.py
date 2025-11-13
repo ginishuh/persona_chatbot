@@ -172,7 +172,16 @@ async def handle_login_action(websocket, data):
         pass
     if not LOGIN_REQUIRED:
         await websocket.send(
-            json.dumps({"action": "login", "data": {"success": True, "token": None}})
+            json.dumps(
+                {
+                    "action": "login",
+                    "data": {
+                        "success": True,
+                        "token": None,
+                        "session_key": session_key,
+                    },
+                }
+            )
         )
         return
 
