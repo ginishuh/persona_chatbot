@@ -40,4 +40,4 @@ RUN chown -R node:node /app
 EXPOSE 8765 9000
 
 # 서버 실행
-CMD ["python3", "server/websocket_server.py"]
+CMD ["python3", "-m", "server.websocket_server"]
