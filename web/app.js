@@ -218,7 +218,7 @@ function setRefreshToken(token, expiresAt) {
 // ===== History API Router (스켈레톤) =====
 // 간단한 경로 → 화면 매핑. 현재 단계에서는 기존 화면 구조를 유지하면서 URL만 관리합니다.
 const routeTable = [
-    { pattern: /^\/$/, view: 'room-list' },
+    // 루트 경로는 매핑하지 않음 - ChatGPT 스타일 환영 화면만 표시
     { pattern: /^\/rooms\/([^\/]+)$/, view: 'room-detail' },
     { pattern: /^\/rooms\/([^\/]+)\/settings$/, view: 'room-settings' },
     { pattern: /^\/rooms\/([^\/]+)\/history$/, view: 'room-history' },
