@@ -617,6 +617,149 @@ def run_http_server(ctx: AppContext):
                 # index.html도 없으면 404
                 return super().do_GET()
 
+        def do_POST(self):
+            """POST 요청 처리 (Import API)"""
+            # Import API
+            if self.path.startswith("/api/import"):
+                try:
+                    # Content-Length 파싱
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    if content_length > 100 * 1024 * 1024:  # 100MB 제한
+                        self.send_response(413)  # Payload Too Large
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {"success": False, "error": "파일이 너무 큽니다 (최대 100MB)"}
+                            ).encode()
+                        )
+                        return
+
+                    # Content-Type 확인
+                    content_type = self.headers.get("Content-Type", "")
+
+                    # JSON 직접 업로드
+                    if "application/json" in content_type:
+                        # JSON 데이터 읽기
+                        body = self.rfile.read(content_length)
+                        request_data = json.loads(body.decode("utf-8"))
+
+                        # Import 파라미터 추출
+                        duplicate_policy = request_data.get("duplicate_policy", "skip")
+                        target_room_id = request_data.get("target_room_id")
+                        json_data = request_data.get("json_data", {})
+
+                        # Import 로직 실행 (동기 래퍼 필요)
+                        import asyncio
+
+                        from server.ws.actions.importer import _import_single_room
+
+                        # 세션 키 생성 또는 추출
+                        session_key = request_data.get("session_key", "http_import")
+
+                        # 비동기 import 실행
+                        async def run_import():
+                            exported_type = json_data.get("export_type", "").lower()
+                            new_room_ids = []
+                            messages_imported = 0
+
+                            if exported_type == "single_room":
+                                room = json_data.get("room", {})
+                                rid, cnt = await _import_single_room(
+                                    ctx,
+                                    session_key,
+                                    room,
+                                    target_room_id=target_room_id,
+                                    duplicate_policy=duplicate_policy,
+                                )
+                                new_room_ids.append(rid)
+                                messages_imported += cnt
+                            elif exported_type in {"full_backup", "selected"}:
+                                rooms = json_data.get("rooms", [])
+                                for r in rooms:
+                                    rid, cnt = await _import_single_room(
+                                        ctx,
+                                        session_key,
+                                        r,
+                                        target_room_id=None,
+                                        duplicate_policy=duplicate_policy,
+                                    )
+                                    new_room_ids.append(rid)
+                                    messages_imported += cnt
+                            else:
+                                # 포맷이 명시되지 않은 경우
+                                room = json_data.get("room") or json_data
+                                rid, cnt = await _import_single_room(
+                                    ctx,
+                                    session_key,
+                                    room,
+                                    target_room_id=target_room_id,
+                                    duplicate_policy=duplicate_policy,
+                                )
+                                new_room_ids.append(rid)
+                                messages_imported += cnt
+
+                            return {
+                                "success": True,
+                                "rooms_imported": len(new_room_ids),
+                                "messages_imported": messages_imported,
+                                "new_room_ids": new_room_ids,
+                            }
+
+                        # 이벤트 루프에서 실행
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        result = loop.run_until_complete(run_import())
+                        loop.close()
+
+                        # 성공 응답
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        response_data = json.dumps(result, ensure_ascii=False).encode("utf-8")
+                        self.send_header("Content-Length", str(len(response_data)))
+                        self.end_headers()
+                        self.wfile.write(response_data)
+                        return
+
+                    else:
+                        # 지원하지 않는 Content-Type
+                        self.send_response(415)  # Unsupported Media Type
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {
+                                    "success": False,
+                                    "error": f"지원하지 않는 Content-Type: {content_type}. application/json을 사용하세요.",
+                                }
+                            ).encode()
+                        )
+                        return
+
+                except json.JSONDecodeError as e:
+                    self.send_response(400)  # Bad Request
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps(
+                            {"success": False, "error": f"JSON 파싱 실패: {str(e)}"}
+                        ).encode()
+                    )
+                    return
+                except Exception as e:
+                    logger.exception("Import API error")
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode())
+                    return
+
+            # 다른 POST 요청은 405
+            self.send_response(405)  # Method Not Allowed
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": "Method not allowed"}).encode())
+
     http_port = int(os.getenv("HTTP_PORT", "9000"))
     with TCPServer((ctx.bind_host, http_port), CustomHandler) as httpd:
         logger.info(f"HTTP server started on port {http_port}")
