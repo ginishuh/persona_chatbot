@@ -300,29 +300,31 @@ async def handle_login_action(websocket, data):
         if username and LOGIN_USERNAME and db_handler:
             user_session_key = f"user:{username}"
 
-            # 기존 UUID 세션의 rooms를 user:{username}으로 마이그레이션 (1회성)
-            # DB의 모든 non-user: session_key를 찾아서 변경
-            try:
-                all_rooms = await db_handler.list_all_rooms()
-                migrated_count = 0
-                for room in all_rooms:
-                    old_key = room.get("session_key", "")
-                    # UUID 패턴 (user: 접두사가 없는 것)
-                    if old_key and not old_key.startswith("user:"):
+            # 현재 websocket의 이전 session_key만 마이그레이션 (안전)
+            # 로그인 직전의 UUID 세션으로 저장된 rooms만 user:{username}으로 전환
+            old_session_key = session_key
+            if old_session_key != user_session_key and not old_session_key.startswith("user:"):
+                try:
+                    # 이 session_key로 저장된 rooms만 조회
+                    old_rooms = await db_handler.list_rooms(old_session_key)
+                    migrated_count = 0
+                    for room in old_rooms:
                         room_id = room.get("room_id")
                         title = room.get("title", room_id)
                         context = room.get("context")
                         # user:{username}으로 재저장
                         await db_handler.upsert_room(room_id, user_session_key, title, context)
                         migrated_count += 1
-                if migrated_count > 0:
-                    logger.info(f"Migrated {migrated_count} rooms from UUID to {user_session_key}")
-            except Exception as e:
-                logger.error(f"Migration failed: {e}")
+                    if migrated_count > 0:
+                        logger.info(
+                            f"Migrated {migrated_count} rooms from {old_session_key} to {user_session_key}"
+                        )
+                except Exception as e:
+                    logger.error(f"Migration failed: {e}")
 
             # 기존 랜덤 세션 제거
-            if session_key != user_session_key and session_key in sessions:
-                sessions.pop(session_key, None)
+            if old_session_key != user_session_key and old_session_key in sessions:
+                sessions.pop(old_session_key, None)
 
             # username 기반 세션 생성 또는 재사용
             if user_session_key not in sessions:
