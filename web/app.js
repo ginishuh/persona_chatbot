@@ -232,7 +232,7 @@ function parsePathname(pathname) {
             return { view: r.view, params: m.slice(1) };
         }
     }
-    return { view: 'room-list', params: [] };
+    return { view: null, params: [] }; // 매치되지 않으면 아무 모달도 열지 않음
 }
 
 function rememberPendingRoute(pathname) {
