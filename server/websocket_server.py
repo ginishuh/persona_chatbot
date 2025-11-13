@@ -296,6 +296,22 @@ async def handle_login_action(websocket, data):
             return
 
     if password and password == LOGIN_PASSWORD:
+        # 로그인 성공: username 기반 세션으로 전환 (다중 기기 동기화)
+        if username and LOGIN_USERNAME:
+            user_session_key = f"user:{username}"
+            # 기존 랜덤 세션이 있었다면 제거
+            if session_key != user_session_key and session_key in sessions:
+                sessions.pop(session_key, None)
+            # username 기반 세션 생성 또는 재사용
+            if user_session_key not in sessions:
+                sessions[user_session_key] = {
+                    "settings": {"retention_enabled": False, "adult_consent": True},
+                    "rooms": {},
+                    "username": username,
+                }
+            websocket_to_session[websocket] = user_session_key
+            session_key = user_session_key
+
         issued, expires_at = issue_access_token()
         refresh, refresh_exp = issue_refresh_token()
         await websocket.send(
