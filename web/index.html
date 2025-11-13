@@ -455,6 +455,59 @@
         </div>
     </div>
 
+    <!-- 백업(Export) 모달 -->
+    <div id="backupModal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="backupTitle">
+        <div class="settings-modal-overlay"></div>
+        <div class="settings-modal-content">
+            <div class="settings-modal-header">
+                <h2 id="backupTitle">📦 백업 내보내기</h2>
+                <button id="bkCloseBtn" class="btn-icon" title="닫기">✕</button>
+            </div>
+            <div class="settings-modal-body">
+                <div class="context-section">
+                    <label>범위(scope)</label>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+                        <label class="checkbox-label"><input type="radio" name="bkScope" id="bkScopeSingle" value="single" checked> <span>현재 방</span></label>
+                        <label class="checkbox-label"><input type="radio" name="bkScope" id="bkScopeSelected" value="selected"> <span>선택한 방</span></label>
+                        <label class="checkbox-label"><input type="radio" name="bkScope" id="bkScopeFull" value="full"> <span>전체</span></label>
+                    </div>
+                    <div id="bkRoomsWrap" style="margin-top:0.5rem; display:none; border:1px solid #e8ecef; border-radius:6px; padding:0.5rem; max-height:160px; overflow:auto;"></div>
+                </div>
+
+                <div class="context-section">
+                    <label>포함 항목(include)</label>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+                        <label class="checkbox-label"><input type="checkbox" id="bkIncMessages" checked> <span>messages</span></label>
+                        <label class="checkbox-label"><input type="checkbox" id="bkIncContext" checked> <span>context</span></label>
+                        <label class="checkbox-label"><input type="checkbox" id="bkIncToken" > <span>token_usage</span></label>
+                    </div>
+                </div>
+
+                <div class="context-section">
+                    <label>기간(start/end)</label>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+                        <input type="datetime-local" id="bkStart" class="input" style="min-width:220px;">
+                        <input type="datetime-local" id="bkEnd" class="input" style="min-width:220px;">
+                    </div>
+                </div>
+
+                <div class="context-section">
+                    <label>형식(format)</label>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+                        <label class="checkbox-label"><input type="radio" name="bkFormat" id="bkFmtJson" value="json" checked> <span>JSON</span></label>
+                        <label class="checkbox-label"><input type="radio" name="bkFormat" id="bkFmtZip" value="zip"> <span>ZIP(JSON)</span></label>
+                        <label class="checkbox-label"><input type="radio" name="bkFormat" id="bkFmtNdjson" value="ndjson"> <span>Stream(NDJSON)</span></label>
+                    </div>
+                </div>
+
+                <div class="context-section">
+                    <button id="bkDownloadBtn" class="btn btn-primary" style="width:100%;">⬇️ 다운로드</button>
+                    <p class="hint" style="margin-top:0.5rem;">로그인 환경에서는 토큰이 자동으로 쿼리에 포함됩니다.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 스크린리더 상태 안내 영역 -->
     <div id="ariaLive" class="sr-only" aria-live="polite" role="status"></div>
 

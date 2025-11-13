@@ -230,8 +230,13 @@ function parsePathname(pathname) {
 
 function renderCurrentScreenFrom(pathname) {
     const { view, params } = parsePathname(pathname);
-    // 최소 동작: URL이 /rooms/:id 계열이면 현재 방만 전환하고 기존 UI 그대로 사용
-    if (view.startsWith('room-') && params[0]) {
+    // 최소 라우팅 동작 구현
+    if (view === 'room-list') {
+        // 기본 레이아웃 유지. 추후 전용 리스트 뷰 제공 예정.
+        focusMainAfterRoute();
+        return;
+    }
+    if (view === 'room-detail' && params[0]) {
         const rid = decodeURIComponent(params[0]);
         if (currentRoom !== rid) {
             currentRoom = rid;
@@ -241,8 +246,39 @@ function renderCurrentScreenFrom(pathname) {
             sendMessage({ action: 'reset_sessions', room_id: currentRoom });
             refreshRoomViews();
         }
+        focusMainAfterRoute();
+        return;
     }
-    // 추후: 각 view별 전용 렌더러 연결 예정
+    if (view === 'room-settings' && params[0]) {
+        const rid = decodeURIComponent(params[0]);
+        if (currentRoom !== rid) {
+            currentRoom = rid;
+            persistRooms();
+            renderRoomsUI();
+            sendMessage({ action: 'room_load', room_id: currentRoom });
+        }
+        // 설정 모달 오픈
+        const modal = document.getElementById('settingsModal');
+        if (modal) { modal.classList.remove('hidden'); enableFocusTrap(modal); }
+        return;
+    }
+    if (view === 'room-history' && params[0]) {
+        const rid = decodeURIComponent(params[0]);
+        if (currentRoom !== rid) {
+            currentRoom = rid;
+            persistRooms();
+            renderRoomsUI();
+            refreshRoomViews();
+        }
+        // 모바일에서는 우측 패널 열기
+        try { openMobilePanel('right'); } catch (_) {}
+        focusMainAfterRoute();
+        return;
+    }
+    if (view === 'backup') {
+        openBackupModal();
+        return;
+    }
     focusMainAfterRoute();
 }
 
@@ -385,6 +421,90 @@ document.addEventListener('keydown', (e) => {
     if (tryClose(editor)) return;
     if (tryClose(participants)) return;
     if (tryClose(settings)) return;
+});
+
+// ===== 백업(Export) 모달 =====
+function buildExportUrl() {
+    const scope = document.getElementById('bkScopeFull').checked ? 'full'
+        : (document.getElementById('bkScopeSelected').checked ? 'selected' : 'single');
+    const inc = [];
+    if (document.getElementById('bkIncMessages').checked) inc.push('messages');
+    if (document.getElementById('bkIncContext').checked) inc.push('context');
+    if (document.getElementById('bkIncToken').checked) inc.push('token_usage');
+    const start = document.getElementById('bkStart').value;
+    const end = document.getElementById('bkEnd').value;
+    const ndjson = document.getElementById('bkFmtNdjson').checked;
+    const zip = document.getElementById('bkFmtZip').checked;
+
+    const base = ndjson ? '/api/export/stream' : '/api/export';
+    const params = new URLSearchParams();
+    params.set('scope', scope);
+    if (scope === 'single') {
+        params.set('room_id', currentRoom || 'default');
+    }
+    if (scope === 'selected') {
+        const sel = Array.from(document.querySelectorAll('#bkRoomsWrap input[type="checkbox"]:checked')).map(x => x.value);
+        if (sel.length) params.set('room_ids', sel.join(',')); else params.set('room_ids', currentRoom || 'default');
+    }
+    if (inc.length) params.set('include', inc.join(','));
+    if (start) params.set('start', start.replace('T','T')); // 그대로 전달
+    if (end) params.set('end', end.replace('T','T'));
+    if (!ndjson && zip) params.set('format','zip');
+    if (appConfig.login_required && authToken) params.set('token', authToken);
+    return `${base}?${params.toString()}`;
+}
+
+function populateBackupRooms() {
+    const wrap = document.getElementById('bkRoomsWrap');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const items = Array.isArray(rooms) ? rooms : [];
+    if (!items.length) { wrap.innerHTML = '<p class="hint">저장된 방이 없습니다.</p>'; return; }
+    items.forEach(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        const id = `bk-room-${rid}`;
+        const row = document.createElement('label');
+        row.className = 'checkbox-label';
+        row.innerHTML = `<input type="checkbox" value="${rid}" id="${id}"> <span>${title}</span>`;
+        wrap.appendChild(row);
+        if (rid === currentRoom) {
+            row.querySelector('input').checked = true;
+        }
+    });
+}
+
+function openBackupModal() {
+    const modal = document.getElementById('backupModal');
+    if (!modal) return;
+    populateBackupRooms();
+    modal.classList.remove('hidden');
+    enableFocusTrap(modal);
+}
+
+function closeBackupModal() {
+    const modal = document.getElementById('backupModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    disableFocusTrap(modal);
+}
+
+document.getElementById('bkCloseBtn')?.addEventListener('click', closeBackupModal);
+document.querySelector('#backupModal .settings-modal-overlay')?.addEventListener('click', closeBackupModal);
+document.getElementById('bkDownloadBtn')?.addEventListener('click', () => {
+    const url = buildExportUrl();
+    try { window.open(url, '_blank'); } catch (_) { location.href = url; }
+});
+
+// scope 라디오 변경 시 방 목록 표시/숨김
+['bkScopeSingle','bkScopeSelected','bkScopeFull'].forEach(id => {
+    const el = document.getElementById(id);
+    el?.addEventListener('change', () => {
+        const show = document.getElementById('bkScopeSelected').checked;
+        const wrap = document.getElementById('bkRoomsWrap');
+        if (wrap) wrap.style.display = show ? 'block' : 'none';
+        if (show) populateBackupRooms();
+    });
 });
 
 // ===== WebSocket 연결 =====
