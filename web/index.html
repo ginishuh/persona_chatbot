@@ -508,6 +508,24 @@
         </div>
     </div>
 
+    <!-- 방 목록(Home) 모달 -->
+    <div id="roomsModal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="roomsTitle">
+        <div class="settings-modal-overlay"></div>
+        <div class="settings-modal-content">
+            <div class="settings-modal-header">
+                <h2 id="roomsTitle">💬 채팅방 목록</h2>
+                <button id="rmCloseBtn" class="btn-icon" title="닫기">✕</button>
+            </div>
+            <div class="settings-modal-body">
+                <input id="rmSearch" type="text" class="input" placeholder="채팅방 검색" style="width:100%; margin-bottom:0.5rem;" />
+                <div id="rmList" style="max-height: 320px; overflow:auto; border:1px solid #e8ecef; border-radius:6px; padding:0.5rem; background:#fff;"></div>
+                <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                    <button id="rmNewBtn" class="btn btn-primary" style="flex:1;">+ 새 채팅방</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 스크린리더 상태 안내 영역 -->
     <div id="ariaLive" class="sr-only" aria-live="polite" role="status"></div>
 

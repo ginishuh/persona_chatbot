@@ -232,7 +232,7 @@ function renderCurrentScreenFrom(pathname) {
     const { view, params } = parsePathname(pathname);
     // 최소 라우팅 동작 구현
     if (view === 'room-list') {
-        // 기본 레이아웃 유지. 추후 전용 리스트 뷰 제공 예정.
+        openRoomsModal();
         focusMainAfterRoute();
         return;
     }
@@ -505,6 +505,66 @@ document.getElementById('bkDownloadBtn')?.addEventListener('click', () => {
         if (wrap) wrap.style.display = show ? 'block' : 'none';
         if (show) populateBackupRooms();
     });
+});
+
+// ===== 방 목록(Home) 모달 =====
+function populateRoomsModal() {
+    const wrap = document.getElementById('rmList');
+    const q = (document.getElementById('rmSearch')?.value || '').trim().toLowerCase();
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        return { rid, title };
+    }).filter(x => !q || x.title.toLowerCase().includes(q) || x.rid.toLowerCase().includes(q));
+    if (!items.length) {
+        wrap.innerHTML = '<div class="empty">채팅방이 없습니다.</div>';
+        return;
+    }
+    items.forEach(it => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm';
+        btn.style = 'width:100%; text-align:left; margin-bottom:6px;';
+        btn.textContent = it.title;
+        btn.addEventListener('click', () => {
+            closeRoomsModal();
+            navigate(`/rooms/${encodeURIComponent(it.rid)}`);
+        });
+        wrap.appendChild(btn);
+    });
+}
+
+function openRoomsModal() {
+    const modal = document.getElementById('roomsModal');
+    if (!modal) return;
+    populateRoomsModal();
+    modal.classList.remove('hidden');
+    enableFocusTrap(modal);
+}
+
+function closeRoomsModal() {
+    const modal = document.getElementById('roomsModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    disableFocusTrap(modal);
+}
+
+document.getElementById('rmCloseBtn')?.addEventListener('click', closeRoomsModal);
+document.querySelector('#roomsModal .settings-modal-overlay')?.addEventListener('click', closeRoomsModal);
+document.getElementById('rmSearch')?.addEventListener('input', populateRoomsModal);
+document.getElementById('rmNewBtn')?.addEventListener('click', () => {
+    const name = prompt('새 채팅방 이름', 'room_' + Math.random().toString(36).slice(2, 6));
+    if (!name) return;
+    const r = sanitizeRoomName(name);
+    if (!rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) rooms.push(r);
+    currentRoom = r;
+    persistRooms();
+    renderRoomsUI();
+    const config = collectRoomConfig(r);
+    sendMessage({ action: 'room_save', room_id: r, config });
+    setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+    navigate(`/rooms/${encodeURIComponent(r)}`);
 });
 
 // ===== WebSocket 연결 =====
