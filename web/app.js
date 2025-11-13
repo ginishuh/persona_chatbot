@@ -345,7 +345,7 @@ function applyARIA() {
         [clearHistoryBtn, '대화 히스토리 초기화'],
         [resetSessionsBtn, '세션 초기화'],
         [roomAddBtn, '채팅방 추가'],
-        [roomDelBtn, '채팅방 삭제'],
+        // [roomDelBtn, '채팅방 삭제'], // 제거됨 - 개별 삭제 버튼으로 대체
         [roomSaveBtn, '채팅방 설정 저장'],
         [saveContextBtn, '컨텍스트 저장'],
         [document.getElementById('narrativeMenuBtn'), '히스토리 패널 열기'],
