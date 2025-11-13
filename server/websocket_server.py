@@ -381,7 +381,10 @@ async def handle_message(websocket, message):
 
         # 라우터 우선 위임(등록된 액션이면 여기서 종료)
         try:
-            if await ws_dispatch(APP_CTX, websocket, data):
+            logger.info(f"[DEBUG] ws_dispatch 호출 전 - action={action}")
+            result = await ws_dispatch(APP_CTX, websocket, data)
+            logger.info(f"[DEBUG] ws_dispatch 결과: {result}")
+            if result:
                 return
         except Exception:
             logger.exception("Router dispatch error")
@@ -410,11 +413,13 @@ async def handle_message(websocket, message):
 
         # AI 채팅 (컨텍스트 + 히스토리 포함, 채팅방 단위)
         elif action == "chat":
+            logger.info(f"chat 액션 처리 시작 - prompt 길이: {len(data.get('prompt', ''))}")
             prompt = data.get("prompt", "")
             # provider 파라미터 (없으면 컨텍스트의 기본값 사용)
             provider = data.get(
                 "provider", context_handler.get_context().get("ai_provider", "claude")
             )
+            logger.info(f"provider 선택: {provider}")
             # 세션/채팅방 해석
             key, sess = _get_or_create_session(websocket, data)
             rid, room = _get_room(sess, data.get("room_id"))

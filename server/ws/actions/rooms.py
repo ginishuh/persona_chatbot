@@ -29,18 +29,30 @@ async def room_list(ctx: AppContext, websocket, data: dict):
 
 
 async def room_save(ctx: AppContext, websocket, data: dict):
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("[DEBUG] room_save 시작")
+
     room_id = data.get("room_id") or "default"
     conf = data.get("config")
     if not isinstance(conf, dict) or not conf:
         conf = {"room_id": room_id, "context": ctx.context_handler.get_context()}
 
+    logger.info(f"[DEBUG] room_id={room_id}, conf 타입={type(conf)}")
     session_key, _ = sm.get_or_create_session(ctx, websocket, data)
+    logger.info(f"[DEBUG] session_key={session_key}")
+
     title = conf.get("title") or room_id
     context_json = json.dumps(conf.get("context") or {}, ensure_ascii=False)
+    logger.info("[DEBUG] upsert_room 호출 전")
     await ctx.db_handler.upsert_room(room_id, session_key, title, context_json)
+    logger.info("[DEBUG] upsert_room 완료")
+
     await websocket.send(
         json.dumps({"action": "room_save", "data": {"success": True, "room_id": room_id}})
     )
+    logger.info("[DEBUG] room_save 응답 전송 완료")
 
 
 async def room_load(ctx: AppContext, websocket, data: dict):

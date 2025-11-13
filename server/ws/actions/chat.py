@@ -19,8 +19,14 @@ async def chat(ctx: AppContext, websocket, data: dict):
           room_id?: string
         }
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("[DEBUG] chat 핸들러 시작")
+
     prompt = data.get("prompt", "")
     provider = data.get("provider", ctx.context_handler.get_context().get("ai_provider", "claude"))
+    logger.info(f"[DEBUG] provider={provider}, prompt 길이={len(prompt)}")
 
     # 세션/채팅방
     session_key, sess = sm.get_or_create_session(ctx, websocket, data)
@@ -94,12 +100,16 @@ async def chat(ctx: AppContext, websocket, data: dict):
         )
     else:
         handler = ctx.claude_handler
+        logger.info(f"[DEBUG] Claude handler 호출 전 - handler={handler}")
         result = await handler.send_message(
             prompt,
             system_prompt=system_prompt,
             callback=stream_callback,
             session_id=provider_session_id,
             model=model,
+        )
+        logger.info(
+            f"[DEBUG] Claude handler 호출 후 - result={result.get('success') if result else None}"
         )
 
     # 응답 히스토리 반영

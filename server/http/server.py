@@ -590,10 +590,20 @@ def run_http_server(ctx: AppContext):
                 return
 
             # 정적 파일 시도 → 실패 시 SPA fallback
-            try:
+            # URL 경로를 파일 경로로 변환 (쿼리 파라미터 제거)
+            path = self.path.split("?")[0]
+            if path.startswith("/"):
+                path = path[1:]  # 앞의 / 제거
+            if not path:
+                path = "index.html"
+
+            # 파일이 존재하는지 확인
+            file_path = os.path.join(os.getcwd(), path)
+            if os.path.isfile(file_path):
+                # 실제 파일이 존재하면 정상 처리
                 return super().do_GET()
-            except Exception:
-                pass
+
+            # 파일이 없으면 SPA fallback (index.html 반환)
             try:
                 with open("index.html", "rb") as f:
                     data = f.read()
@@ -604,6 +614,7 @@ def run_http_server(ctx: AppContext):
                 self.wfile.write(data)
                 return
             except FileNotFoundError:
+                # index.html도 없으면 404
                 return super().do_GET()
 
     http_port = int(os.getenv("HTTP_PORT", "9000"))
