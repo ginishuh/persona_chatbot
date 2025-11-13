@@ -82,16 +82,21 @@ class DBHandler:
         await self._conn.commit()
 
     # ===== Rooms =====
+    async def _upsert_session_unlocked(self, session_key: str) -> None:
+        """Lock 없이 세션 upsert (내부용)"""
+        assert self._conn is not None
+        await self._conn.execute(
+            """
+            INSERT INTO sessions(session_key) VALUES(?)
+            ON CONFLICT(session_key) DO UPDATE SET last_accessed=CURRENT_TIMESTAMP
+            """,
+            (session_key,),
+        )
+
     async def upsert_session(self, session_key: str) -> None:
         assert self._conn is not None
         async with self._lock:
-            await self._conn.execute(
-                """
-                INSERT INTO sessions(session_key) VALUES(?)
-                ON CONFLICT(session_key) DO UPDATE SET last_accessed=CURRENT_TIMESTAMP
-                """,
-                (session_key,),
-            )
+            await self._upsert_session_unlocked(session_key)
             await self._conn.commit()
 
     async def upsert_room(
@@ -99,7 +104,7 @@ class DBHandler:
     ) -> None:
         assert self._conn is not None
         async with self._lock:
-            await self.upsert_session(session_key)
+            await self._upsert_session_unlocked(session_key)
             await self._conn.execute(
                 """
                 INSERT INTO rooms(room_id, session_key, title, context)
