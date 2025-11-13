@@ -8,22 +8,22 @@ from pathlib import Path
 
 import jwt
 import websockets
-from handlers.claude_handler import ClaudeCodeHandler
-from handlers.context_handler import ContextHandler
-from handlers.db_handler import DBHandler
-from handlers.droid_handler import DroidHandler
-from handlers.file_handler import FileHandler
-from handlers.gemini_handler import GeminiHandler
-from handlers.git_handler import GitHandler
-from handlers.history_handler import HistoryHandler
-from handlers.mode_handler import ModeHandler
-from handlers.token_usage_handler import TokenUsageHandler
-from handlers.workspace_handler import WorkspaceHandler
 
 from server.core import session_manager as sm
 from server.core.app_context import AppContext
 from server.core.auth import send_auth_required as auth_send_auth_required
 from server.core.auth import verify_token as auth_verify_token
+from server.handlers.claude_handler import ClaudeCodeHandler
+from server.handlers.context_handler import ContextHandler
+from server.handlers.db_handler import DBHandler
+from server.handlers.droid_handler import DroidHandler
+from server.handlers.file_handler import FileHandler
+from server.handlers.gemini_handler import GeminiHandler
+from server.handlers.git_handler import GitHandler
+from server.handlers.history_handler import HistoryHandler
+from server.handlers.mode_handler import ModeHandler
+from server.handlers.token_usage_handler import TokenUsageHandler
+from server.handlers.workspace_handler import WorkspaceHandler
 from server.http.server import run_http_server as run_http_server_external
 from server.ws.router import dispatch as ws_dispatch
 
