@@ -516,18 +516,18 @@ CREATE INDEX idx_token_usage_room ON token_usage(room_id);
 
 ## 구현 계획
 
-### Phase 1: DB 기반 구조 구축 (완료)
+### Phase 1: DB 기반 구조 구축 ✅ 완료
 
 #### 1.1 DB Handler 구현
-- [ ] `server/handlers/db_handler.py` 생성
-- [ ] aiosqlite 기반 비동기 DB 작업
-- [ ] 스키마 초기화 및 마이그레이션(`PRAGMA foreign_keys=ON`, `PRAGMA user_version` 관리)
-- [ ] CRUD 메서드 구현
+- [x] `server/handlers/db_handler.py` 생성
+- [x] aiosqlite 기반 비동기 DB 작업
+- [x] 스키마 초기화 및 마이그레이션(`PRAGMA foreign_keys=ON`, `PRAGMA user_version` 관리)
+- [x] CRUD 메서드 구현
 
 #### 1.2 기존 Handler 연동
-- [ ] `HistoryHandler` → DB 읽기/쓰기 추가
-- [ ] `TokenUsageHandler` → DB 저장
-- [ ] `websocket_server.py` → 세션/채팅방 DB 조회
+- [x] `HistoryHandler` → DB 읽기/쓰기 추가
+- [x] `TokenUsageHandler` → DB 저장
+- [x] `websocket_server.py` → 세션/채팅방 DB 조회
 
 #### 1.3 데이터 흐름 변경
 ```python
@@ -548,35 +548,37 @@ user_message → HistoryHandler (메모리 캐시)
 4. 각 채팅방의 최근 N개 메시지를 HistoryHandler로 로드
 ```
 
-### Phase 2: Export/Import 기능 (진행 중)
+### Phase 2: Export/Import 기능 ⏳ Export 완료 / Import WS만 구현
 
-#### 2.1 Export 구현(HTTP 기본)
-- [ ] HTTP `GET /api/export` 추가(토큰 검증 포함)
-- [ ] DB에서 데이터 조회 및 JSON/ZIP 스트리밍 응답
-- [ ] 날짜 필터, 선택적 포함 옵션 처리
-- [ ] 프론트엔드: Export UI에서 HTTP 다운로드 사용(WS 폴백 허용)
+#### 2.1 Export 구현(HTTP 기본) ✅ 완료
+- [x] HTTP `GET /api/export` 추가(토큰 검증 포함)
+- [x] DB에서 데이터 조회 및 JSON/ZIP 스트리밍 응답
+- [x] 날짜 필터, 선택적 포함 옵션 처리
+- [x] NDJSON 스트리밍 (`/api/export/stream`) 추가 구현
+- [x] Markdown Export (`/api/export/md`) 추가 구현
+- [ ] 프론트엔드: Export UI에서 HTTP 다운로드 사용 (미완료)
 
-#### 2.2 Import 구현(WS 우선, HTTP 선택)
-- [ ] WebSocket `import_data` 액션(초기)
-- [ ] JSON 파싱 및 유효성 검사, 중복 검사/병합
+#### 2.2 Import 구현(WS 우선, HTTP 선택) ⏳ WS만 완료
+- [x] WebSocket `import_data` 액션(초기)
+- [x] JSON 파싱 및 유효성 검사, 중복 검사/병합
 - [ ] 프론트엔드: Import UI 추가(파일→JSON 읽어 WS로 전송)
 - [ ] (선택) HTTP `POST /api/import` 추가 및 큰 파일 업로드 지원
 
 #### 2.3 파일 다운로드/업로드
-- [ ] 프론트엔드: JSON 파일 다운로드
+- [ ] 프론트엔드: JSON 파일 다운로드 (서버 완료, 클라이언트 미연동)
 - [ ] 프론트엔드: 파일 선택 및 업로드
 
-### Phase 3: UI/UX 개선 + 라우팅 연계 (완료)
-- [ ] History API 라우팅과 Export/Import 화면 연결(`/backup`)
+### Phase 3: UI/UX 개선 + 라우팅 연계 ✅ 완료
+- [x] History API 라우팅과 Export/Import 화면 연결(`/backup`)
 
 #### 3.1 메뉴 추가
-- [ ] 상단 메뉴바: "백업" 드롭다운
-- [ ] 채팅방 목록: 우클릭 컨텍스트 메뉴
+- [x] 상단 메뉴바: "백업" 드롭다운
+- [x] 채팅방 목록: 우클릭 컨텍스트 메뉴
 
 #### 3.2 피드백 및 진행상황
-- [ ] Export/Import 진행률 표시
-- [ ] 성공/실패 알림
-- [ ] 에러 메시지 개선
+- [x] Export/Import 진행률 표시
+- [x] 성공/실패 알림
+- [x] 에러 메시지 개선
 
 ### Phase 4: 테스트 및 문서화 (1일)
 
@@ -592,12 +594,13 @@ user_message → HistoryHandler (메모리 캐시)
 - [ ] DB 스키마 문서
 - [ ] 마이그레이션 가이드 (기존 사용자용)
 
-### Phase 5: persona_data 정리(완료)
+### Phase 5: persona_data 정리 ✅ 완료
 
 #### 5.1 디렉토리 정리
-- [ ] `persona_data/rooms/` 제거(또는 아카이브)
-- [ ] `persona_data/stories/` 제거(파일 기반 서사 폐기)
-- [ ] `.gitignore` 업데이트(이미 `data/` 포함)
+- [x] `persona_data/rooms/` 제거(아카이브로 이동)
+- [x] `persona_data/stories/` 제거(아카이브로 이동)
+- [x] 루트 `STORIES/` 제거(아카이브로 이동)
+- [x] `.gitignore` 업데이트(`persona_data_archive/` 추가)
 
 ---
 
@@ -613,8 +616,8 @@ WSL 권장 사항
 - 레포 내부의 `data/chatbot.db`는 `.gitignore` 처리되어 커밋되지 않습니다. 장기 보존이 필요하면 `DB_PATH=/home/<user>/.persona_chatbot/chatbot.db`처럼 레포 밖 경로를 지정하세요.
 
 #### 5.2 WorkspaceHandler 수정
-- [ ] `list_rooms()`, `save_room()` 등 제거
-- [ ] `list_stories()`, `save_story()` 등 제거 또는 Export로 대체
+- [x] `list_rooms()`, `save_room()` 등 DB 기반으로 전환
+- [x] `list_stories()`, `save_story()` 등 비활성화 (Export로 대체)
 
 ---
 

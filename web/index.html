@@ -309,7 +309,8 @@
                 </div>
                 <div class="narrative-controls">
                     <div style="padding: 0.75rem 1rem; border-bottom: 2px solid #e8ecef;">
-                        <select id="storySelect" class="select-input" style="width: 100%; margin-bottom: 0.75rem;" title="채팅방(서사)">
+                        <!-- Stories 기능 비활성화: storySelect 숨김 -->
+                        <select id="storySelect" class="select-input stories-only" style="width: 100%; margin-bottom: 0.75rem; display: none;" title="채팅방(서사)">
                             <option value="">채팅방 선택...</option>
                         </select>
                         <input id="roomSearch" type="text" class="input" placeholder="채팅방 검색" style="width:100%; margin: 0.25rem 0 0.5rem 0;" />
@@ -318,7 +319,8 @@
                             <button id="roomAddBtn" class="btn btn-sm" title="새 채팅방 추가" style="flex: 1;">➕ 새 채팅방</button>
                             <button id="roomDelBtn" class="btn btn-sm btn-remove" title="현재 채팅방 삭제">🗑️</button>
                         </div>
-                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <!-- Stories 기능 비활성화: 관련 버튼들 숨김 -->
+                        <div class="stories-only" style="display: none; gap: 0.5rem; flex-wrap: wrap;">
                             <button id="loadStoryBtn" class="btn btn-sm" title="서사 불러오기">📤</button>
                             <button id="resumeStoryBtn" class="btn btn-sm" title="이 서사에서 이어하기">▶</button>
                             <button id="injectStoryBtn" class="btn btn-sm" title="이 서사를 컨텍스트에 주입">➡</button>

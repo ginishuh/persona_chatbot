@@ -42,6 +42,7 @@ coverage/
 
 # User data (별도 git 레포로 관리)
 persona_data/
+persona_data_archive/
 chatbot_workspace/CLAUDE.md
 chatbot_workspace/GEMINI.md
 .env
