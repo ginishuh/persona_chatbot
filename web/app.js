@@ -3828,6 +3828,66 @@ function closeMobilePanel() {
     currentMobilePanel = null;
 }
 
+// ===== 스와이프 제스처 =====
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartTime = 0;
+const SWIPE_THRESHOLD = 50; // 최소 이동 거리 (px)
+const SWIPE_VELOCITY_THRESHOLD = 0.3; // 최소 속도 (px/ms)
+const SWIPE_MAX_VERTICAL_RATIO = 0.5; // 수직 이동 비율 제한
+
+function handleTouchStart(e) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+}
+
+function handleTouchEnd(e) {
+    if (!currentMobilePanel) return;
+
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const touchEndTime = Date.now();
+
+    const deltaX = touchEndX - touchStartX;
+    const deltaY = touchEndY - touchStartY;
+    const deltaTime = touchEndTime - touchStartTime;
+
+    // 수직 이동이 너무 크면 스와이프로 인식하지 않음
+    if (Math.abs(deltaY) > Math.abs(deltaX) * SWIPE_MAX_VERTICAL_RATIO) {
+        return;
+    }
+
+    const distance = Math.abs(deltaX);
+    const velocity = distance / deltaTime;
+
+    // 최소 거리 또는 최소 속도 조건 만족 시 스와이프로 인식
+    if (distance < SWIPE_THRESHOLD && velocity < SWIPE_VELOCITY_THRESHOLD) {
+        return;
+    }
+
+    // 좌측 패널: 좌측으로 스와이프 → 닫기
+    if (currentMobilePanel === 'left' && deltaX < 0) {
+        closeMobilePanel();
+    }
+
+    // 우측 패널: 우측으로 스와이프 → 닫기
+    if (currentMobilePanel === 'right' && deltaX > 0) {
+        closeMobilePanel();
+    }
+}
+
+// 패널에 스와이프 이벤트 리스너 추가
+if (leftPanel) {
+    leftPanel.addEventListener('touchstart', handleTouchStart, { passive: true });
+    leftPanel.addEventListener('touchend', handleTouchEnd, { passive: true });
+}
+
+if (rightPanel) {
+    rightPanel.addEventListener('touchstart', handleTouchStart, { passive: true });
+    rightPanel.addEventListener('touchend', handleTouchEnd, { passive: true });
+}
+
 // 오버레이 클릭 시 패널 닫기
 if (mobileOverlay) {
     mobileOverlay.addEventListener('click', closeMobilePanel);
