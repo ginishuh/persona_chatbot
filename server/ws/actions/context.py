@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 async def set_context(ctx: AppContext, websocket, data: dict[str, Any]):
     """컨텍스트 설정 (History/API 라우팅 이후 공용 액션)
 
+    - room_id가 있으면 해당 채팅방의 context를 DB에 저장
+    - room_id가 없으면 전역 context만 업데이트 (기존 동작)
     - 컨텍스트 변경 시 핵심 프롬프트 관련 키 변화가 있으면 프로바이더 세션을 리셋합니다.
     """
     ch = ctx.context_handler
@@ -27,6 +29,7 @@ async def set_context(ctx: AppContext, websocket, data: dict[str, Any]):
         )
         return
 
+    room_id = data.get("room_id")
     world = data.get("world", "")
     situation = data.get("situation", "")
     user_character = data.get("user_character", "")
@@ -61,6 +64,22 @@ async def set_context(ctx: AppContext, websocket, data: dict[str, Any]):
     if choice_count is not None:
         ch.set_choice_count(choice_count)
 
+    # room_id가 있으면 DB에 저장
+    if room_id and ctx.db_handler:
+        try:
+            session_key = sm.get_session_key(ctx, websocket)
+            if session_key:
+                # 기존 room 정보 가져오기 (title 유지)
+                existing_room = await ctx.db_handler.get_room(room_id)
+                title = existing_room["title"] if existing_room else room_id
+
+                # context를 JSON으로 변환하여 저장
+                context_json = json.dumps(ch.get_context(), ensure_ascii=False)
+                await ctx.db_handler.upsert_room(room_id, session_key, title, context_json)
+                logger.info(f"Room context saved to DB: room_id={room_id}")
+        except Exception as e:
+            logger.error(f"Failed to save room context to DB: {e}")
+
     await websocket.send(
         json.dumps(
             {"action": "set_context", "data": {"success": True, "context": ch.get_context()}}
@@ -87,7 +106,12 @@ async def set_context(ctx: AppContext, websocket, data: dict[str, Any]):
         pass
 
 
-async def get_context(ctx: AppContext, websocket, _data: dict[str, Any]):
+async def get_context(ctx: AppContext, websocket, data: dict[str, Any]):
+    """컨텍스트 가져오기
+
+    - room_id가 있으면 DB에서 해당 채팅방의 context를 로드하여 ContextHandler에 적용
+    - room_id가 없으면 현재 ContextHandler의 context 반환 (기존 동작)
+    """
     ch = ctx.context_handler
     if ch is None:
         await websocket.send(
@@ -99,6 +123,22 @@ async def get_context(ctx: AppContext, websocket, _data: dict[str, Any]):
             )
         )
         return
+
+    room_id = data.get("room_id")
+
+    # room_id가 있으면 DB에서 로드
+    if room_id and ctx.db_handler:
+        try:
+            room = await ctx.db_handler.get_room(room_id)
+            if room and room.get("context"):
+                # JSON 문자열을 dict로 파싱
+                context_dict = json.loads(room["context"])
+                # ContextHandler에 적용
+                ch.load_from_dict(context_dict)
+                logger.info(f"Room context loaded from DB: room_id={room_id}")
+        except Exception as e:
+            logger.error(f"Failed to load room context from DB: {e}")
+
     await websocket.send(
         json.dumps(
             {"action": "get_context", "data": {"success": True, "context": ch.get_context()}}

@@ -44,6 +44,11 @@ async def room_save(ctx: AppContext, websocket, data: dict):
 
 
 async def room_load(ctx: AppContext, websocket, data: dict):
+    """채팅방 로드 (DB에서)
+
+    - 채팅방 정보를 DB에서 로드
+    - context가 있으면 ContextHandler에 자동 적용
+    """
     room_id = data.get("room_id") or "default"
     db_row = await ctx.db_handler.get_room(room_id) if ctx.db_handler else None
     if not db_row:
@@ -57,6 +62,11 @@ async def room_load(ctx: AppContext, websocket, data: dict):
         ctx_obj = json.loads(db_row.get("context") or "{}")
     except Exception:
         ctx_obj = {}
+
+    # ContextHandler에 자동 적용 (채팅방별 독립 설정)
+    if ctx_obj and ctx.context_handler:
+        ctx.context_handler.load_from_dict(ctx_obj)
+
     await websocket.send(
         json.dumps(
             {
