@@ -200,6 +200,37 @@ class DBHandler:
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
 
+    async def save_token_usage(
+        self,
+        session_key: str,
+        room_id: str,
+        provider: str,
+        token_info: dict | str | None,
+    ) -> None:
+        """토큰 사용량 저장.
+
+        token_info는 dict 또는 JSON 문자열 허용. None이면 저장하지 않음.
+        """
+        if token_info is None:
+            return
+        assert self._conn is not None
+        import json as _json
+
+        info_str = (
+            _json.dumps(token_info, ensure_ascii=False)
+            if isinstance(token_info, dict)
+            else str(token_info)
+        )
+        async with self._lock:
+            await self._conn.execute(
+                """
+                INSERT INTO token_usage(session_key, room_id, provider, token_info)
+                VALUES(?, ?, ?, ?)
+                """,
+                (session_key, room_id, provider, info_str),
+            )
+            await self._conn.commit()
+
     async def list_all_rooms(self) -> list[dict[str, Any]]:
         assert self._conn is not None
         cur = await self._conn.execute(

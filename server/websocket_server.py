@@ -443,8 +443,15 @@ async def handle_message(websocket, message):
             except Exception:
                 pass
 
-            # 사용자 메시지를 히스토리에 추가(채팅방)
+            # 사용자 메시지를 히스토리에 추가(채팅방) + DB 영속화(가능 시)
             room["history"].add_user_message(prompt)
+            try:
+                if APP_CTX and APP_CTX.db_handler:
+                    # 세션/방이 DB에 없을 수 있으므로 방 upsert 보장(컨텍스트는 room_save에서 관리)
+                    await APP_CTX.db_handler.upsert_room(rid, key, rid, None)
+                    await APP_CTX.db_handler.save_message(rid, "user", prompt)
+            except Exception:
+                logger.exception("DB save (user message) failed; continuing without DB persistence")
 
             # 히스토리 텍스트 가져오기(채팅방)
             # 제공자별 세션 지원 여부 확인
@@ -502,9 +509,14 @@ async def handle_message(websocket, message):
             else:
                 result = {"success": False, "error": f"Unknown provider: {provider}"}
 
-            # AI 응답을 히스토리에 추가(채팅방)
+            # AI 응답을 히스토리에 추가(채팅방) + DB 영속화
             if result.get("success") and result.get("message"):
                 room["history"].add_assistant_message(result["message"])
+                try:
+                    if APP_CTX and APP_CTX.db_handler:
+                        await APP_CTX.db_handler.save_message(rid, "assistant", result["message"])
+                except Exception:
+                    logger.exception("DB save (assistant message) failed; continuing")
 
             # 토큰 사용량 수집 및 누적
             token_info = result.get("token_info")
@@ -515,6 +527,16 @@ async def handle_message(websocket, message):
                     provider=provider,
                     token_info=token_info,
                 )
+                try:
+                    if APP_CTX and APP_CTX.db_handler:
+                        await APP_CTX.db_handler.save_token_usage(
+                            session_key=key,
+                            room_id=rid,
+                            provider=provider,
+                            token_info=token_info,
+                        )
+                except Exception:
+                    logger.exception("DB save (token usage) failed; continuing")
 
             # 토큰 사용량 요약 생성
             token_summary = token_usage_handler.get_formatted_summary(
