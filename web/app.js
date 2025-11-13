@@ -257,9 +257,9 @@ function renderCurrentScreenFrom(pathname) {
             renderRoomsUI();
             sendMessage({ action: 'room_load', room_id: currentRoom });
         }
-        // 설정 모달 오픈
-        const modal = document.getElementById('settingsModal');
-        if (modal) { modal.classList.remove('hidden'); enableFocusTrap(modal); }
+        renderSettingsScreenView(rid);
+        // 최신 컨텍스트 불러와 반영
+        sendMessage({ action: 'get_context' });
         return;
     }
     if (view === 'room-history' && params[0]) {
@@ -273,7 +273,7 @@ function renderCurrentScreenFrom(pathname) {
         return;
     }
     if (view === 'backup') {
-        openBackupModal();
+        renderBackupScreenView();
         return;
     }
     focusMainAfterRoute();
@@ -503,6 +503,113 @@ document.getElementById('bkDownloadBtn')?.addEventListener('click', () => {
         if (show) populateBackupRooms();
     });
 });
+
+// Backup 전용 화면
+function buildExportUrlFrom(prefix) {
+    const byId = (id) => document.getElementById(prefix + id);
+    const scope = byId('ScopeFull')?.checked ? 'full' : (byId('ScopeSelected')?.checked ? 'selected' : 'single');
+    const inc = [];
+    if (byId('IncMessages')?.checked) inc.push('messages');
+    if (byId('IncContext')?.checked) inc.push('context');
+    if (byId('IncToken')?.checked) inc.push('token_usage');
+    const start = byId('Start')?.value;
+    const end = byId('End')?.value;
+    const ndjson = byId('FmtNdjson')?.checked;
+    const zip = byId('FmtZip')?.checked;
+    const base = ndjson ? '/api/export/stream' : '/api/export';
+    const params = new URLSearchParams();
+    params.set('scope', scope);
+    if (scope === 'single') params.set('room_id', currentRoom || 'default');
+    if (scope === 'selected') {
+        const sel = Array.from(document.querySelectorAll('#sbkRoomsWrap input[type="checkbox"]:checked')).map(x => x.value);
+        if (sel.length) params.set('room_ids', sel.join(',')); else params.set('room_ids', currentRoom || 'default');
+    }
+    if (inc.length) params.set('include', inc.join(','));
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
+    if (!ndjson && zip) params.set('format','zip');
+    if (appConfig.login_required && authToken) params.set('token', authToken);
+    return `${base}?${params.toString()}`;
+}
+
+function populateBackupRoomsScreen() {
+    const wrap = document.getElementById('sbkRoomsWrap');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const items = Array.isArray(rooms) ? rooms : [];
+    items.forEach(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        const id = `sbk-room-${rid}`;
+        const row = document.createElement('label');
+        row.className = 'checkbox-label';
+        row.innerHTML = `<input type="checkbox" value="${rid}" id="${id}"> <span>${title}</span>`;
+        wrap.appendChild(row);
+        if (rid === currentRoom) row.querySelector('input').checked = true;
+    });
+}
+
+function renderBackupScreenView() {
+    const html = `
+    <section aria-labelledby="backupScreenTitle">
+      <h1 id="backupScreenTitle">백업 내보내기</h1>
+      <div class="context-section">
+        <label>범위(scope)</label>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+          <label class="checkbox-label"><input type="radio" name="sbkScope" id="sbkScopeSingle" checked> <span>현재 방</span></label>
+          <label class="checkbox-label"><input type="radio" name="sbkScope" id="sbkScopeSelected"> <span>선택한 방</span></label>
+          <label class="checkbox-label"><input type="radio" name="sbkScope" id="sbkScopeFull"> <span>전체</span></label>
+        </div>
+        <div id="sbkRoomsWrap" style="margin-top:0.5rem; display:none; border:1px solid #e8ecef; border-radius:6px; padding:0.5rem; max-height:160px; overflow:auto;"></div>
+      </div>
+      <div class="context-section">
+        <label>포함 항목(include)</label>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+          <label class="checkbox-label"><input type="checkbox" id="sbkIncMessages" checked> <span>messages</span></label>
+          <label class="checkbox-label"><input type="checkbox" id="sbkIncContext" checked> <span>context</span></label>
+          <label class="checkbox-label"><input type="checkbox" id="sbkIncToken"> <span>token_usage</span></label>
+        </div>
+      </div>
+      <div class="context-section">
+        <label>기간(start/end)</label>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+          <input type="datetime-local" id="sbkStart" class="input" style="min-width:220px;">
+          <input type="datetime-local" id="sbkEnd" class="input" style="min-width:220px;">
+        </div>
+      </div>
+      <div class="context-section">
+        <label>형식(format)</label>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+          <label class="checkbox-label"><input type="radio" name="sbkFormat" id="sbkFmtJson" checked> <span>JSON</span></label>
+          <label class="checkbox-label"><input type="radio" name="sbkFormat" id="sbkFmtZip"> <span>ZIP(JSON)</span></label>
+          <label class="checkbox-label"><input type="radio" name="sbkFormat" id="sbkFmtNdjson"> <span>Stream(NDJSON)</span></label>
+        </div>
+      </div>
+      <div class="context-section" style="display:flex; gap:0.5rem;">
+        <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(currentRoom||'default')}')">← 돌아가기</button>
+        <button id="sbkDownloadBtn" class="btn btn-primary">⬇️ 다운로드</button>
+      </div>
+    </section>`;
+    showScreen(html);
+    // events
+    document.getElementById('sbkDownloadBtn')?.addEventListener('click', () => {
+        const idmap = {
+          ScopeFull: 'sbkScopeFull', ScopeSelected: 'sbkScopeSelected', IncMessages:'sbkIncMessages', IncContext:'sbkIncContext', IncToken:'sbkIncToken', Start:'sbkStart', End:'sbkEnd', FmtNdjson:'sbkFmtNdjson', FmtZip:'sbkFmtZip'
+        };
+        // helper expects prefix mapping; we alias by setting IDs; simpler: temporarily map
+        const url = buildExportUrlFrom('sbk');
+        try { window.open(url, '_blank'); } catch (_) { location.href = url; }
+    });
+    // scope radio
+    ['sbkScopeSingle','sbkScopeSelected','sbkScopeFull'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', () => {
+            const show = document.getElementById('sbkScopeSelected').checked;
+            const wrap = document.getElementById('sbkRoomsWrap');
+            if (wrap) wrap.style.display = show ? 'block' : 'none';
+            if (show) populateBackupRoomsScreen();
+        });
+    });
+}
 
 // ===== 전용 화면 컨테이너 토글 =====
 function showScreen(html) {
@@ -1362,6 +1469,7 @@ function handleMessage(msg) {
         case 'get_context':
             if (data.success) {
                 loadContext(data.context);
+                applyContextToSettingsScreen(data.context);
             }
             break;
 
@@ -1590,6 +1698,7 @@ function handleMessage(msg) {
         case 'get_history_snapshot':
             if (data.success) {
                 renderHistorySnapshot(data.history || []);
+                renderHistorySnapshotScreen(data.history || []);
             } else {
                 log(`스냅샷 로드 실패: ${data.error}`, 'error');
             }
@@ -2303,6 +2412,84 @@ function loadContext(context) {
     renderParticipantsLeftPanel();
     renderParticipantsManagerList();
 }
+
+// 설정 전용 화면 채우기
+function applyContextToSettingsScreen(ctx) {
+    const w = document.getElementById('sWorld');
+    const s = document.getElementById('sSituation');
+    const u = document.getElementById('sUserChar');
+    const ne = document.getElementById('sNarratorEnabled');
+    const ap = document.getElementById('sAiProvider');
+    if (!w && !s && !u) return; // 화면 아닐 때
+    try { if (w) w.value = ctx.world || ''; } catch (_) {}
+    try { if (s) s.value = ctx.situation || ''; } catch (_) {}
+    try { if (u) u.value = ctx.user_character || ''; } catch (_) {}
+    try { if (ne) ne.checked = !!ctx.narrator_enabled; } catch (_) {}
+    try { if (ap && ctx.ai_provider) ap.value = ctx.ai_provider; } catch (_) {}
+}
+
+function renderSettingsScreenView(roomId) {
+    const html = `
+      <section aria-labelledby="settingsScreenTitle">
+        <h1 id="settingsScreenTitle">설정 — ${roomId}</h1>
+        <div style="display:grid; gap:0.75rem; max-width:920px;">
+          <div>
+            <label class="field-label">🌍 세계관/배경</label>
+            <textarea id="sWorld" rows="4" class="input" placeholder="세계관..."></textarea>
+          </div>
+          <div>
+            <label class="field-label">📍 현재 상황</label>
+            <textarea id="sSituation" rows="3" class="input" placeholder="상황..."></textarea>
+          </div>
+          <div>
+            <label class="field-label">🙋 나의 캐릭터</label>
+            <textarea id="sUserChar" rows="3" class="input" placeholder="캐릭터 요약..."></textarea>
+          </div>
+          <div>
+            <label class="checkbox-label"><input type="checkbox" id="sNarratorEnabled"> <span>AI 진행자</span></label>
+          </div>
+          <div>
+            <label class="field-label">🤖 AI 제공자</label>
+            <select id="sAiProvider" class="select-input">
+              <option value="claude">Claude</option>
+              <option value="droid">Droid</option>
+              <option value="gemini">Gemini</option>
+            </select>
+          </div>
+          <div style="display:flex; gap:0.5rem;">
+            <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(roomId)}')">← 돌아가기</button>
+            <button id="sSaveBtn" class="btn btn-primary">저장</button>
+          </div>
+        </div>
+      </section>`;
+    showScreen(html);
+    // 기존 UI 값 복사(빠른 프리필)
+    try {
+        applyContextToSettingsScreen({
+            world: worldInput?.value || '',
+            situation: situationInput?.value || '',
+            user_character: userCharacterInput?.value || '',
+            narrator_enabled: !!narratorEnabled?.checked,
+            ai_provider: aiProvider?.value || 'claude'
+        });
+    } catch (_) {}
+
+    const save = document.getElementById('sSaveBtn');
+    save?.addEventListener('click', () => {
+        const ctx = {
+            world: document.getElementById('sWorld')?.value || '',
+            situation: document.getElementById('sSituation')?.value || '',
+            user_character: document.getElementById('sUserChar')?.value || '',
+            narrator_enabled: !!document.getElementById('sNarratorEnabled')?.checked,
+            ai_provider: document.getElementById('sAiProvider')?.value || 'claude',
+        };
+        sendMessage({ action: 'set_context', ...ctx });
+        const config = { room_id: roomId, title: roomId, context: ctx };
+        sendMessage({ action: 'room_save', room_id: roomId, config });
+        navigate(`/rooms/${encodeURIComponent(roomId)}`);
+    });
+}
+
 
 // ===== 히스토리 초기화 =====
 
