@@ -89,7 +89,7 @@ const STORIES_ENABLED = false;
 // 채팅방 UI
 const roomSelect = document.getElementById('roomSelect');
 const roomAddBtn = document.getElementById('roomAddBtn');
-const roomDelBtn = document.getElementById('roomDelBtn');
+// const roomDelBtn = document.getElementById('roomDelBtn'); // 제거됨 - 개별 삭제 버튼으로 대체
 const roomSaveBtn = document.getElementById('roomSaveBtn');
 
 // 로그인 요소
@@ -799,15 +799,41 @@ function populateRoomsModal() {
         return;
     }
     items.forEach(it => {
+        const container = document.createElement('div');
+        container.style = 'display:flex; gap:0.25rem; margin-bottom:6px; align-items:stretch;';
+
         const btn = document.createElement('button');
         btn.className = 'btn btn-sm';
-        btn.style = 'width:100%; text-align:left; margin-bottom:6px;';
+        btn.style = 'flex:1; text-align:left;';
         btn.textContent = it.title;
         btn.addEventListener('click', () => {
             closeRoomsModal();
             navigate(`/rooms/${encodeURIComponent(it.rid)}`);
         });
-        wrap.appendChild(btn);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-sm btn-remove';
+        delBtn.textContent = '🗑️';
+        delBtn.title = '삭제';
+        delBtn.style = 'padding: 0.25rem 0.5rem;';
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!confirm(`채팅방 '${it.title}' 을(를) 삭제하시겠습니까?`)) return;
+            sendMessage({ action: 'room_delete', room_id: it.rid });
+            rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
+            if (currentRoom === it.rid) {
+                currentRoom = rooms.length > 0 ? (typeof rooms[0] === 'string' ? rooms[0] : rooms[0].room_id) : null;
+            }
+            persistRooms();
+            populateRoomsModal();
+            renderRoomsUI();
+            renderRoomsRightPanelList();
+            log('채팅방 삭제 완료', 'success');
+        });
+
+        container.appendChild(btn);
+        container.appendChild(delBtn);
+        wrap.appendChild(container);
     });
 }
 
@@ -864,14 +890,40 @@ function renderRoomsRightPanelList() {
         return;
     }
     items.forEach(it => {
+        const container = document.createElement('div');
+        container.style = 'display:flex; gap:0.25rem; margin-bottom:4px; align-items:stretch;';
+
         const btn = document.createElement('button');
         btn.className = 'btn btn-sm';
-        btn.style = 'width:100%; text-align:left; margin-bottom:4px;';
+        btn.style = 'flex:1; text-align:left;';
         btn.textContent = it.title;
         btn.addEventListener('click', () => {
             navigate(`/rooms/${encodeURIComponent(it.rid)}`);
         });
-        list.appendChild(btn);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-sm btn-remove';
+        delBtn.textContent = '🗑️';
+        delBtn.title = '삭제';
+        delBtn.style = 'padding: 0.25rem 0.5rem;';
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!confirm(`채팅방 '${it.title}' 을(를) 삭제하시겠습니까?`)) return;
+            sendMessage({ action: 'room_delete', room_id: it.rid });
+            rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
+            if (currentRoom === it.rid) {
+                currentRoom = rooms.length > 0 ? (typeof rooms[0] === 'string' ? rooms[0] : rooms[0].room_id) : null;
+            }
+            persistRooms();
+            renderRoomsUI();
+            renderRoomsRightPanelList();
+            refreshRoomViews();
+            log('채팅방 삭제 완료', 'success');
+        });
+
+        container.appendChild(btn);
+        container.appendChild(delBtn);
+        list.appendChild(container);
     });
 }
 
@@ -1218,31 +1270,7 @@ if (roomAddBtn) {
         announce(`채팅방 추가: ${r}`);
     });
 }
-if (roomDelBtn) {
-    roomDelBtn.addEventListener('click', () => {
-        if (!currentRoom) {
-            alert('삭제할 채팅방을 선택해주세요.');
-            return;
-        }
-        if (!confirm(`채팅방 '${currentRoom}' 설정을 삭제하시겠습니까?`)) return;
-        sendMessage({ action: 'room_delete', room_id: currentRoom });
-        rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== currentRoom);
-
-        // 삭제 후 다른 방이 있으면 첫 번째 방 선택, 없으면 null
-        if (rooms.length > 0) {
-            const firstRoom = rooms[0];
-            currentRoom = typeof firstRoom === 'string' ? firstRoom : (firstRoom.room_id || null);
-        } else {
-            currentRoom = null;
-        }
-
-        persistRooms();
-        renderRoomsUI(); renderRoomsRightPanelList();
-        refreshRoomViews();
-        log('채팅방 삭제 완료', 'success');
-        announce('채팅방 삭제 완료');
-    });
-}
+// roomDelBtn 제거됨 - 각 채팅방 옆에 개별 삭제 버튼으로 대체
 if (roomSaveBtn) {
     roomSaveBtn.addEventListener('click', () => {
         if (!currentRoom) {
