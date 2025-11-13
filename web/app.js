@@ -128,8 +128,8 @@ let refreshRetryCount = 0;
 let refreshInProgress = false;
 let lastRequest = null; // 재전송용 마지막 사용자 액션
 let sessionKey = '';
-let rooms = ['default'];
-let currentRoom = 'default';
+let rooms = []; // 초기에는 빈 배열 (사용자가 명시적으로 생성해야 함)
+let currentRoom = null; // 초기에는 채팅방 없음 (ChatGPT/Claude.ai 스타일)
 let pendingRoutePath = null; // 로그인 이후 복원할 경로
 let autoLoginRequested = false; // 비로그인 환경 자동 로그인 시도 여부
 const RETRY_ACTIONS = new Set([
@@ -477,11 +477,22 @@ function buildExportUrl() {
     const params = new URLSearchParams();
     params.set('scope', scope);
     if (scope === 'single') {
-        params.set('room_id', currentRoom || 'default');
+        if (!currentRoom) {
+            alert('내보낼 채팅방을 선택해주세요.');
+            return null;
+        }
+        params.set('room_id', currentRoom);
     }
     if (scope === 'selected') {
         const sel = Array.from(document.querySelectorAll('#bkRoomsWrap input[type="checkbox"]:checked')).map(x => x.value);
-        if (sel.length) params.set('room_ids', sel.join(',')); else params.set('room_ids', currentRoom || 'default');
+        if (sel.length) {
+            params.set('room_ids', sel.join(','));
+        } else if (currentRoom) {
+            params.set('room_ids', currentRoom);
+        } else {
+            alert('내보낼 채팅방을 선택해주세요.');
+            return null;
+        }
     }
     if (inc.length) params.set('include', inc.join(','));
     if (start) params.set('start', start.replace('T','T')); // 그대로 전달
@@ -530,6 +541,7 @@ document.getElementById('bkCloseBtn')?.addEventListener('click', closeBackupModa
 document.querySelector('#backupModal .settings-modal-overlay')?.addEventListener('click', closeBackupModal);
 document.getElementById('bkDownloadBtn')?.addEventListener('click', () => {
     const url = buildExportUrl();
+    if (!url) return; // 검증 실패 시 리턴
     try { window.open(url, '_blank'); } catch (_) { location.href = url; }
 });
 
@@ -559,10 +571,23 @@ function buildExportUrlFrom(prefix) {
     const base = ndjson ? '/api/export/stream' : '/api/export';
     const params = new URLSearchParams();
     params.set('scope', scope);
-    if (scope === 'single') params.set('room_id', currentRoom || 'default');
+    if (scope === 'single') {
+        if (!currentRoom) {
+            alert('내보낼 채팅방을 선택해주세요.');
+            return null;
+        }
+        params.set('room_id', currentRoom);
+    }
     if (scope === 'selected') {
         const sel = Array.from(document.querySelectorAll('#sbkRoomsWrap input[type="checkbox"]:checked')).map(x => x.value);
-        if (sel.length) params.set('room_ids', sel.join(',')); else params.set('room_ids', currentRoom || 'default');
+        if (sel.length) {
+            params.set('room_ids', sel.join(','));
+        } else if (currentRoom) {
+            params.set('room_ids', currentRoom);
+        } else {
+            alert('내보낼 채팅방을 선택해주세요.');
+            return null;
+        }
     }
     if (inc.length) params.set('include', inc.join(','));
     if (start) params.set('start', start);
@@ -626,7 +651,7 @@ function renderBackupScreenView() {
         </div>
       </div>
       <div class="context-section" style="display:flex; gap:0.5rem;">
-        <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(currentRoom||'default')}')">← 돌아가기</button>
+        <button class="btn" onclick="navigate(currentRoom ? '/rooms/${encodeURIComponent(currentRoom)}' : '/')">← 돌아가기</button>
         <button id="sbkDownloadBtn" class="btn btn-primary">⬇️ 다운로드</button>
       </div>
     </section>`;
@@ -638,6 +663,7 @@ function renderBackupScreenView() {
         };
         // helper expects prefix mapping; we alias by setting IDs; simpler: temporarily map
         const url = buildExportUrlFrom('sbk');
+        if (!url) return; // 검증 실패 시 리턴
         try { window.open(url, '_blank'); } catch (_) { location.href = url; }
     });
     // scope radio
@@ -689,7 +715,7 @@ function renderRoomsScreen() {
         <h1 id="roomsScreenTitle">채팅방</h1>
         <div style="max-width:720px; margin-top:0.5rem;">${cards || '<div class="empty">채팅방이 없습니다.</div>'}</div>
         <div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
-          <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(currentRoom||'default')}')">← 돌아가기</button>
+          <button class="btn" onclick="navigate(currentRoom ? '/rooms/${encodeURIComponent(currentRoom)}' : '/')">← 돌아가기</button>
           <button class="btn btn-primary" onclick="(function(){ const name=prompt('새 채팅방 이름','room_'+Math.random().toString(36).slice(2,6)); if(!name) return; const r=sanitizeRoomName(name); if(!rooms.find(x => (typeof x==='string'?x:x.room_id)===r)) rooms.push(r); currentRoom=r; persistRooms(); renderRoomsUI(); const cfg=collectRoomConfig(r); sendMessage({action:'room_save', room_id:r, config:cfg}); setTimeout(()=>sendMessage({action:'room_list'}),300); navigate('/rooms/'+encodeURIComponent(r)); })()">+ 새 채팅방</button>
         </div>
       </section>`;
@@ -1024,7 +1050,10 @@ function sendMessage(payload, options = {}) {
         'chat', 'get_history_snapshot', 'clear_history', 'get_history_settings', 'set_history_limit', 'get_narrative'
     ]);
     if (ACTIONS_WITH_ROOM.has(String(payload.action))) {
-        message.room_id = currentRoom || 'default';
+        if (currentRoom) {
+            message.room_id = currentRoom;
+        }
+        // currentRoom이 없으면 room_id를 설정하지 않음 (서버가 처리)
     }
     if (!options.skipRetry && RETRY_ACTIONS.has(payload.action)) {
         lastRequest = message;
@@ -1050,7 +1079,8 @@ function initializeAppData() {
 
 // ===== 채팅방 관리 =====
 function sanitizeRoomName(name) {
-    return (name || '').trim().replace(/[^A-Za-z0-9_\-]/g, '_') || 'default';
+    const sanitized = (name || '').trim().replace(/[^A-Za-z0-9_\-]/g, '_');
+    return sanitized || 'room_untitled';
 }
 
 function persistRooms() {
@@ -1064,6 +1094,14 @@ function renderRoomsUI() {
     if (!roomSelect) return;
     // 방 목록 반영
     roomSelect.innerHTML = '';
+
+    // 빈 옵션 추가 (채팅방 선택 안내)
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.textContent = '← 채팅방 선택 또는 추가';
+    emptyOpt.disabled = true;
+    roomSelect.appendChild(emptyOpt);
+
     (rooms || []).forEach(r => {
         const roomId = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
         const title = (typeof r === 'object' && r.title) ? r.title : roomId;
@@ -1072,10 +1110,68 @@ function renderRoomsUI() {
         opt.textContent = title;
         roomSelect.appendChild(opt);
     });
-    const hasCurrent = (rooms || []).some(x => (typeof x === 'string' ? x : x.room_id) === currentRoom);
-    if (!hasCurrent) currentRoom = 'default';
-    roomSelect.value = currentRoom;
-    announce(`채팅방 전환: ${currentRoom}`);
+
+    const hasCurrent = currentRoom && (rooms || []).some(x => (typeof x === 'string' ? x : x.room_id) === currentRoom);
+    if (!hasCurrent && rooms && rooms.length > 0) {
+        // 방이 있지만 currentRoom이 없거나 유효하지 않으면 첫 번째 방 선택
+        const firstRoom = rooms[0];
+        const extractedId = typeof firstRoom === 'string' ? firstRoom : (firstRoom.room_id || null);
+        if (extractedId) {
+            currentRoom = extractedId;
+        }
+        // room_id가 없으면 currentRoom을 null로 유지
+    }
+
+    roomSelect.value = currentRoom || '';
+    if (currentRoom) {
+        announce(`채팅방 전환: ${currentRoom}`);
+    }
+
+    // 채팅 입력 상태 업데이트
+    updateChatInputState();
+}
+
+function updateChatInputState() {
+    refreshChatRefs(); // DOM 참조 갱신
+
+    if (!currentRoom) {
+        // 채팅방 미선택 - 입력 비활성화
+        if (chatInput) {
+            chatInput.disabled = true;
+            chatInput.placeholder = '← 먼저 채팅방을 선택하거나 생성하세요';
+        }
+        if (sendChatBtn) {
+            sendChatBtn.disabled = true;
+        }
+
+        // 환영 메시지 표시
+        if (chatMessages) {
+            chatMessages.innerHTML = `
+                <div class="welcome-message" style="text-align: center; padding: 4rem 2rem; color: var(--text-muted, #888);">
+                    <h2 style="margin-bottom: 1rem; color: var(--text-primary, #000);">Persona Chat에 오신 것을 환영합니다</h2>
+                    <p style="margin-bottom: 2rem;">왼쪽 상단의 <strong>채팅</strong> 탭에서 새 채팅방을 만들어보세요.</p>
+                    <div style="max-width: 500px; margin: 0 auto; text-align: left; line-height: 1.8;">
+                        <p><strong>📌 시작 방법:</strong></p>
+                        <ol style="padding-left: 1.5rem;">
+                            <li>왼쪽 패널의 <strong>채팅</strong> 탭 클릭</li>
+                            <li><strong>[+]</strong> 버튼으로 새 채팅방 생성</li>
+                            <li><strong>캐릭터</strong> 탭에서 대화 상대 추가</li>
+                            <li>대화 시작!</li>
+                        </ol>
+                    </div>
+                </div>
+            `;
+        }
+    } else {
+        // 채팅방 선택됨 - 입력 활성화
+        if (chatInput) {
+            chatInput.disabled = false;
+            chatInput.placeholder = '메시지를 입력하세요...';
+        }
+        if (sendChatBtn) {
+            sendChatBtn.disabled = false;
+        }
+    }
 }
 
 function refreshRoomViews() {
@@ -1086,7 +1182,12 @@ function refreshRoomViews() {
 
 if (roomSelect) {
     roomSelect.addEventListener('change', () => {
-        currentRoom = roomSelect.value || 'default';
+        const selectedValue = roomSelect.value;
+        if (!selectedValue) {
+            // 빈 옵션 선택됨 - 무시
+            return;
+        }
+        currentRoom = selectedValue;
         persistRooms();
         // 방 설정 로드 시도
         sendMessage({ action: 'room_load', room_id: currentRoom });
@@ -1094,6 +1195,7 @@ if (roomSelect) {
         sendMessage({ action: 'reset_sessions', room_id: currentRoom });
         // 서사/히스토리 뷰 갱신
         refreshRoomViews();
+        updateChatInputState(); // 입력 상태 업데이트
         log(`채팅방 전환: ${currentRoom}`, 'info');
         announce(`채팅방 전환: ${currentRoom}`);
     });
@@ -1118,14 +1220,22 @@ if (roomAddBtn) {
 }
 if (roomDelBtn) {
     roomDelBtn.addEventListener('click', () => {
-        if (currentRoom === 'default') {
-            alert('기본 채팅방은 삭제할 수 없습니다.');
+        if (!currentRoom) {
+            alert('삭제할 채팅방을 선택해주세요.');
             return;
         }
         if (!confirm(`채팅방 '${currentRoom}' 설정을 삭제하시겠습니까?`)) return;
         sendMessage({ action: 'room_delete', room_id: currentRoom });
         rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== currentRoom);
-        currentRoom = 'default';
+
+        // 삭제 후 다른 방이 있으면 첫 번째 방 선택, 없으면 null
+        if (rooms.length > 0) {
+            const firstRoom = rooms[0];
+            currentRoom = typeof firstRoom === 'string' ? firstRoom : (firstRoom.room_id || null);
+        } else {
+            currentRoom = null;
+        }
+
         persistRooms();
         renderRoomsUI(); renderRoomsRightPanelList();
         refreshRoomViews();
@@ -1135,9 +1245,12 @@ if (roomDelBtn) {
 }
 if (roomSaveBtn) {
     roomSaveBtn.addEventListener('click', () => {
-        const r = currentRoom || 'default';
-        const config = collectRoomConfig(r);
-        sendMessage({ action: 'room_save', room_id: r, config });
+        if (!currentRoom) {
+            alert('저장할 채팅방을 선택해주세요.');
+            return;
+        }
+        const config = collectRoomConfig(currentRoom);
+        sendMessage({ action: 'room_save', room_id: currentRoom, config });
         setTimeout(() => { sendMessage({ action: 'room_list' }); renderRoomsRightPanelList(); }, 300);
         log('채팅방 설정 저장 완료', 'success');
     });
@@ -2377,6 +2490,11 @@ function collectCharacterFromItem(item) {
 
 // 컨텍스트 저장
 saveContextBtn.addEventListener('click', () => {
+    if (!currentRoom) {
+        alert('설정을 저장할 채팅방을 선택해주세요.');
+        return;
+    }
+
     if (saveContextBtn) saveContextBtn.disabled = true;
     const characters = Array.isArray(participants) ? participants : [];
 
@@ -2399,7 +2517,7 @@ saveContextBtn.addEventListener('click', () => {
 
     sendMessage({
         action: 'set_context',
-        room_id: currentRoom || 'default',  // 채팅방별 독립 설정
+        room_id: currentRoom,  // 채팅방별 독립 설정
         world: worldInput.value.trim(),
         situation: situationInput.value.trim(),
         user_character: userCharacterData,
@@ -2419,9 +2537,8 @@ saveContextBtn.addEventListener('click', () => {
     });
     // 방 설정도 함께 저장(room.json)
     try {
-        const r = currentRoom || 'default';
-        const config = collectRoomConfig(r);
-        sendMessage({ action: 'room_save', room_id: r, config });
+        const config = collectRoomConfig(currentRoom);
+        sendMessage({ action: 'room_save', room_id: currentRoom, config });
     } catch (_) {}
     // 설정 적용 시 설정 모달 닫기
     try {
