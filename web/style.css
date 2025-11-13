@@ -53,6 +53,17 @@ button, .btn, .more-menu-btn, .narrative-menu-btn, .hamburger-btn {
     height: 100vh;
 }
 
+.hidden { display: none !important; }
+
+.screen-root {
+    display: none;
+    padding: 1rem;
+}
+
+.screen-root.active {
+    display: block;
+}
+
 /* Header */
 header {
     display: flex;

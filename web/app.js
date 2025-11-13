@@ -232,7 +232,7 @@ function renderCurrentScreenFrom(pathname) {
     const { view, params } = parsePathname(pathname);
     // 최소 라우팅 동작 구현
     if (view === 'room-list') {
-        openRoomsModal();
+        renderRoomsScreen();
         focusMainAfterRoute();
         return;
     }
@@ -268,11 +268,8 @@ function renderCurrentScreenFrom(pathname) {
             currentRoom = rid;
             persistRooms();
             renderRoomsUI();
-            refreshRoomViews();
         }
-        // 모바일에서는 우측 패널 열기
-        try { openMobilePanel('right'); } catch (_) {}
-        focusMainAfterRoute();
+        renderHistoryScreenView(rid);
         return;
     }
     if (view === 'backup') {
@@ -506,6 +503,90 @@ document.getElementById('bkDownloadBtn')?.addEventListener('click', () => {
         if (show) populateBackupRooms();
     });
 });
+
+// ===== 전용 화면 컨테이너 토글 =====
+function showScreen(html) {
+    const root = document.getElementById('screenRoot');
+    const main = document.querySelector('.main-content');
+    if (root && main) {
+        root.innerHTML = html || '';
+        root.classList.add('active');
+        root.classList.remove('hidden');
+        main.classList.add('hidden');
+    }
+}
+
+function hideScreen() {
+    const root = document.getElementById('screenRoot');
+    const main = document.querySelector('.main-content');
+    if (root && main) {
+        root.classList.remove('active');
+        root.classList.add('hidden');
+        root.innerHTML = '';
+        main.classList.remove('hidden');
+    }
+}
+
+// Rooms 화면
+function renderRoomsScreen() {
+    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        return { rid, title };
+    });
+    const cards = items.map(it => `
+      <button class="btn" style="width:100%; text-align:left; margin-bottom:8px;" onclick="navigate('/rooms/${encodeURIComponent(it.rid)}')">${it.title}</button>
+    `).join('');
+    const html = `
+      <section aria-labelledby="roomsScreenTitle">
+        <h1 id="roomsScreenTitle">채팅방</h1>
+        <div style="max-width:720px; margin-top:0.5rem;">${cards || '<div class="empty">채팅방이 없습니다.</div>'}</div>
+        <div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
+          <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(currentRoom||'default')}')">← 돌아가기</button>
+          <button class="btn btn-primary" onclick="(function(){ const name=prompt('새 채팅방 이름','room_'+Math.random().toString(36).slice(2,6)); if(!name) return; const r=sanitizeRoomName(name); if(!rooms.find(x => (typeof x==='string'?x:x.room_id)===r)) rooms.push(r); currentRoom=r; persistRooms(); renderRoomsUI(); const cfg=collectRoomConfig(r); sendMessage({action:'room_save', room_id:r, config:cfg}); setTimeout(()=>sendMessage({action:'room_list'}),300); navigate('/rooms/'+encodeURIComponent(r)); })()">+ 새 채팅방</button>
+        </div>
+      </section>`;
+    showScreen(html);
+}
+
+// History 화면
+function renderHistoryScreenView(id) {
+    const html = `
+      <section aria-labelledby="historyScreenTitle">
+        <h1 id="historyScreenTitle">히스토리</h1>
+        <div id="historyScreenBody">로딩...</div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.5rem; flex-wrap:wrap;">
+          <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(id)}')">← 돌아가기</button>
+          <button class="btn" onclick="downloadRoomMd('${id}')">MD 다운로드</button>
+          <a class="btn" href="/api/export?scope=single&room_id=${encodeURIComponent(id)}" target="_blank">JSON</a>
+          <a class="btn" href="/api/export/stream?scope=single&room_id=${encodeURIComponent(id)}" target="_blank">NDJSON</a>
+        </div>
+      </section>`;
+    showScreen(html);
+    // 데이터 로드
+    sendMessage({ action: 'get_history_snapshot', room_id: id });
+}
+
+// 히스토리 스냅샷 수신 시 전용 화면도 갱신
+function renderHistorySnapshotScreen(history) {
+    const el = document.getElementById('historyScreenBody');
+    if (!el) return;
+    if (!Array.isArray(history) || history.length === 0) {
+        el.innerHTML = '<div class="empty">대화가 없습니다.</div>';
+        return;
+    }
+    el.innerHTML = history.map(m => {
+        const role = m.role === 'user' ? '사용자' : 'AI 응답';
+        return `<h3>${role}</h3><pre style="white-space:pre-wrap">${(m.content||'').replace(/</g,'&lt;')}</pre>`;
+    }).join('');
+}
+
+function downloadRoomMd(rid) {
+    const params = new URLSearchParams({ room_id: rid });
+    if (appConfig.login_required && authToken) params.set('token', authToken);
+    const url = `/api/export/md?${params.toString()}`;
+    try { window.open(url, '_blank'); } catch (_) { location.href = url; }
+}
 
 // ===== 방 목록(Home) 모달 =====
 function populateRoomsModal() {

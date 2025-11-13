@@ -452,6 +452,143 @@ def run_http_server(ctx: AppContext):
                     self.wfile.write(body)
                 return
 
+            # Export MD (단일 MD 또는 ZIP of MD)
+            if self.path.startswith("/api/export/md"):
+                try:
+                    url = urlparse(self.path)
+                    qs = parse_qs(url.query)
+                    scope = (qs.get("scope", ["single"]))[0]
+                    room_id = (qs.get("room_id", ["default"]))[0]
+                    start = self._parse_date((qs.get("start", [None]))[0], end=False)
+                    end = self._parse_date((qs.get("end", [None]))[0], end=True)
+
+                    # 인증
+                    if ctx.login_required:
+                        token = None
+                        authz = self.headers.get("Authorization")
+                        if authz and authz.lower().startswith("bearer "):
+                            token = authz.split(" ", 1)[1].strip()
+                        if not token:
+                            token = (qs.get("token", [None]))[0]
+                        _, err = auth_verify_token(ctx, token, expected_type="access")
+                        if err:
+                            body = json.dumps(
+                                {"success": False, "error": f"unauthorized: {err}"}
+                            ).encode("utf-8")
+                            self.send_response(401)
+                            self.send_header("Content-Type", "application/json")
+                            self.send_header("Content-Length", str(len(body)))
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
+
+                    def render_md(rid: str) -> tuple[str, bytes]:
+                        title = rid
+                        msgs = []
+                        # DB 우선
+                        try:
+                            if ctx.db_handler and getattr(ctx, "loop", None):
+                                row = asyncio.run_coroutine_threadsafe(
+                                    ctx.db_handler.get_room(rid), ctx.loop
+                                ).result(timeout=5)
+                                if row and row.get("title"):
+                                    title = row.get("title")
+                                msgs = asyncio.run_coroutine_threadsafe(
+                                    ctx.db_handler.list_messages_range(rid, start=start, end=end),
+                                    ctx.loop,
+                                ).result(timeout=10)
+                        except Exception:
+                            pass
+
+                        # 폴백: 메모리 세션
+                        if not msgs:
+                            for sess in ctx.sessions.values():
+                                room = sess.get("rooms", {}).get(rid)
+                                if room:
+                                    try:
+                                        msgs = room["history"].get_history()
+                                        break
+                                    except Exception:
+                                        pass
+
+                        lines = [f"# {title}", ""]
+                        for m in msgs or []:
+                            role = (m.get("role") or "assistant").lower()
+                            lines.append("## 사용자" if role == "user" else "## AI 응답")
+                            lines.append(m.get("content", ""))
+                            lines.append("")
+                        return title, "\n".join(lines).encode("utf-8")
+
+                    tsname = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+                    if scope == "single":
+                        title, md_bytes = render_md(room_id)
+                        fname = f"{title or room_id}_{tsname}.md".replace("/", "_")
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/markdown; charset=utf-8")
+                        self.send_header("Cache-Control", "no-store")
+                        self.send_header("Content-Disposition", f"attachment; filename={fname}")
+                        self.send_header("Content-Length", str(len(md_bytes)))
+                        self.end_headers()
+                        self.wfile.write(md_bytes)
+                        return
+
+                    # selected/full → ZIP 묶음
+                    room_ids = []
+                    if scope == "selected":
+                        room_ids = (
+                            (qs.get("room_ids", [""]))[0].split(",")
+                            if qs.get("room_ids")
+                            else [room_id]
+                        )
+                    else:  # full
+                        seen = set()
+                        try:
+                            if ctx.db_handler and getattr(ctx, "loop", None):
+                                db_rooms = asyncio.run_coroutine_threadsafe(
+                                    ctx.db_handler.list_all_rooms(), ctx.loop
+                                ).result(timeout=10)
+                                for r in db_rooms or []:
+                                    rid = r.get("room_id")
+                                    if rid and rid not in seen:
+                                        seen.add(rid)
+                                        room_ids.append(rid)
+                        except Exception:
+                            pass
+                        for sess in ctx.sessions.values():
+                            for rid in sess.get("rooms", {}).keys():
+                                if rid not in seen:
+                                    seen.add(rid)
+                                    room_ids.append(rid)
+
+                    buf = io.BytesIO()
+                    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+                        for rid in room_ids:
+                            try:
+                                title, md_bytes = render_md((rid or "default").strip())
+                                zf.writestr(
+                                    f"{title or rid}_{tsname}.md".replace("/", "_"), md_bytes
+                                )
+                            except Exception:
+                                continue
+                    content = buf.getvalue()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/zip")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header(
+                        "Content-Disposition", f"attachment; filename=md_export_{tsname}.zip"
+                    )
+                    self.send_header("Content-Length", str(len(content)))
+                    self.end_headers()
+                    self.wfile.write(content)
+                except Exception as e:
+                    body = json.dumps({"success": False, "error": str(e)}).encode("utf-8")
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                return
+
             # 정적 파일 시도 → 실패 시 SPA fallback
             try:
                 return super().do_GET()
