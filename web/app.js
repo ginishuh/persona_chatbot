@@ -235,12 +235,15 @@ function parsePathname(pathname) {
 
 function renderCurrentScreenFrom(pathname) {
     const { view, params } = parsePathname(pathname);
-    // 최소 라우팅 동작 구현
+    // 3열 메인 레이아웃 유지: 전용 화면 숨기고(main-content 표시), 라우트에 맞게 모달/패널만 제어
+    hideScreen();
+
     if (view === 'room-list') {
-        renderRoomsScreen();
+        openRoomsModal();
         focusMainAfterRoute();
         return;
     }
+
     if (view === 'room-detail' && params[0]) {
         const rid = decodeURIComponent(params[0]);
         if (currentRoom !== rid) {
@@ -249,10 +252,12 @@ function renderCurrentScreenFrom(pathname) {
             renderRoomsUI();
             sendMessage({ action: 'room_load', room_id: currentRoom });
             sendMessage({ action: 'reset_sessions', room_id: currentRoom });
+            refreshRoomViews();
         }
-        renderRoomScreenView(rid);
+        focusMainAfterRoute();
         return;
     }
+
     if (view === 'room-settings' && params[0]) {
         const rid = decodeURIComponent(params[0]);
         if (currentRoom !== rid) {
@@ -261,25 +266,32 @@ function renderCurrentScreenFrom(pathname) {
             renderRoomsUI();
             sendMessage({ action: 'room_load', room_id: currentRoom });
         }
-        renderSettingsScreenView(rid);
+        const modal = document.getElementById('settingsModal');
+        if (modal) { modal.classList.remove('hidden'); enableFocusTrap(modal); }
         // 최신 컨텍스트 불러와 반영
         sendMessage({ action: 'get_context' });
         return;
     }
+
     if (view === 'room-history' && params[0]) {
         const rid = decodeURIComponent(params[0]);
         if (currentRoom !== rid) {
             currentRoom = rid;
             persistRooms();
             renderRoomsUI();
+            refreshRoomViews();
         }
-        renderHistoryScreenView(rid);
+        // 모바일에선 우측 패널 열기
+        try { openMobilePanel('right'); } catch (_) {}
+        focusMainAfterRoute();
         return;
     }
+
     if (view === 'backup') {
-        renderBackupScreenView();
+        openBackupModal();
         return;
     }
+
     focusMainAfterRoute();
 }
 
