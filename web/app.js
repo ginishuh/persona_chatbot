@@ -12,10 +12,15 @@ const statusIndicator = document.getElementById('statusIndicator');
 const statusText = document.getElementById('statusText');
 const logArea = document.getElementById('logArea');
 
-// 채팅 관련 요소
-const chatMessages = document.getElementById('chatMessages');
-const chatInput = document.getElementById('chatInput');
-const sendChatBtn = document.getElementById('sendChatBtn');
+// 채팅 관련 요소(동적 화면 대응)
+let chatMessages = document.getElementById('chatMessages');
+let chatInput = document.getElementById('chatInput');
+let sendChatBtn = document.getElementById('sendChatBtn');
+function refreshChatRefs() {
+    chatMessages = document.getElementById('chatMessages');
+    chatInput = document.getElementById('chatInput');
+    sendChatBtn = document.getElementById('sendChatBtn');
+}
 
 // 컨텍스트 패널 요소
 const contextContent = document.getElementById('contextContent');
@@ -244,9 +249,8 @@ function renderCurrentScreenFrom(pathname) {
             renderRoomsUI();
             sendMessage({ action: 'room_load', room_id: currentRoom });
             sendMessage({ action: 'reset_sessions', room_id: currentRoom });
-            refreshRoomViews();
         }
-        focusMainAfterRoute();
+        renderRoomScreenView(rid);
         return;
     }
     if (view === 'room-settings' && params[0]) {
@@ -654,6 +658,28 @@ function renderRoomsScreen() {
         </div>
       </section>`;
     showScreen(html);
+}
+
+// Chat 전용 화면
+function renderRoomScreenView(roomId) {
+    const html = `
+      <section aria-labelledby="roomScreenTitle" style="max-width:900px;">
+        <h1 id="roomScreenTitle">대화 — ${roomId}</h1>
+        <div id="chatMessages" class="chat-messages" style="height:60vh; overflow:auto; border:1px solid #e8ecef; border-radius:6px; padding:0.75rem; background:#fff; margin-top:0.5rem;">
+          <div class="chat-message system"><p>대화를 시작하세요</p></div>
+        </div>
+        <div class="chat-input-container" style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+          <textarea id="chatInput" rows="3" class="input" placeholder="메시지를 입력하세요..." style="flex:1;"></textarea>
+          <button id="sendChatBtn" class="btn btn-primary">전송</button>
+        </div>
+        <div style="margin-top:0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <button class="btn" onclick="navigate('/')">← 방 목록</button>
+          <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(roomId)}/settings')">⚙️ 설정</button>
+          <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(roomId)}/history')">📜 히스토리</button>
+        </div>
+      </section>`;
+    showScreen(html);
+    bindChatEvents();
 }
 
 // History 화면
@@ -2685,16 +2711,27 @@ function updateTokenDisplay(tokenUsage) {
     }
 }
 
-// ===== 이벤트 리스너 =====
+// ===== 이벤트 리스너 바인딩(동적) =====
+function bindChatEvents() {
+    refreshChatRefs();
+    try {
+        if (sendChatBtn && !sendChatBtn.dataset.bound) {
+            sendChatBtn.addEventListener('click', sendChatMessage);
+            sendChatBtn.dataset.bound = '1';
+        }
+        if (chatInput && !chatInput.dataset.bound) {
+            chatInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendChatMessage();
+                }
+            });
+            chatInput.dataset.bound = '1';
+        }
+    } catch (_) {}
+}
 
-sendChatBtn.addEventListener('click', sendChatMessage);
-
-chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendChatMessage();
-    }
-});
+bindChatEvents();
 
 // ===== 탭 전환 =====
 
