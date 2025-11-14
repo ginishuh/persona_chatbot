@@ -223,6 +223,7 @@
                 ⋮
             </button>
             <div class="header-actions">
+                <button id="adminBtn" class="btn btn-sm" title="관리자 페이지" style="display: none; background: #dc3545; color: white;">👤 관리</button>
                 <button id="participantsBtn" class="btn btn-sm" title="참여자 관리">👥 참여자</button>
                 <button id="settingsBtn" class="btn btn-sm" title="설정">⚙️ 설정</button>
                 <button id="clearHistoryBtn" class="btn btn-sm btn-warning">🗑️ 대화 초기화</button>
@@ -522,6 +523,22 @@
                     <button id="bkDownloadBtn" class="btn btn-primary" style="width:100%;">⬇️ 다운로드</button>
                     <p class="hint" style="margin-top:0.5rem;">로그인 환경에서는 토큰이 자동으로 쿼리에 포함됩니다.</p>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 관리자 모달 -->
+    <div id="adminModal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+        <div class="settings-modal-overlay"></div>
+        <div class="settings-modal-content">
+            <div class="settings-modal-header">
+                <h2 id="adminTitle">👤 관리자 페이지</h2>
+                <button id="adminCloseBtn" class="btn-icon" title="닫기">✕</button>
+            </div>
+            <div class="settings-modal-body">
+                <h3 style="margin-top: 0; margin-bottom: 1rem; color: #333;">승인 대기 중인 사용자</h3>
+                <div id="pendingUsersList" style="max-height: 400px; overflow: auto;"></div>
+                <p id="noPendingUsers" style="display: none; text-align: center; color: #999; padding: 2rem;">승인 대기 중인 사용자가 없습니다.</p>
             </div>
         </div>
     </div>

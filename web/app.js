@@ -111,6 +111,13 @@ const registerPasswordConfirmInput = document.getElementById('registerPasswordCo
 const registerButton = document.getElementById('registerButton');
 const registerError = document.getElementById('registerError');
 
+// 관리자 요소
+const adminBtn = document.getElementById('adminBtn');
+const adminModal = document.getElementById('adminModal');
+const adminCloseBtn = document.getElementById('adminCloseBtn');
+const pendingUsersList = document.getElementById('pendingUsersList');
+const noPendingUsers = document.getElementById('noPendingUsers');
+
 let currentAssistantMessage = null;
 let characterColors = {}; // 캐릭터별 색상 매핑
 let authRequired = false;
@@ -136,6 +143,7 @@ let refreshRetryCount = 0;
 let refreshInProgress = false;
 let lastRequest = null; // 재전송용 마지막 사용자 액션
 let sessionKey = '';
+let userRole = 'user'; // 사용자 역할 ('user' | 'admin')
 let rooms = []; // 초기에는 빈 배열 (사용자가 명시적으로 생성해야 함)
 let currentRoom = null; // 초기에는 채팅방 없음 (ChatGPT/Claude.ai 스타일)
 let pendingRoutePath = null; // 로그인 이후 복원할 경로
@@ -1687,6 +1695,14 @@ async function submitLogin() {
             localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
             localStorage.setItem(REFRESH_EXP_KEY, refreshTokenExpiresAt);
 
+            // 사용자 역할 저장
+            userRole = data.role || 'user';
+
+            // 관리자 버튼 표시/숨김
+            if (adminBtn) {
+                adminBtn.style.display = (userRole === 'admin') ? 'block' : 'none';
+            }
+
             // 아이디 저장
             if (rememberIdCheckbox?.checked) {
                 localStorage.setItem(LOGIN_USER_KEY, username);
@@ -3173,6 +3189,154 @@ if (settingsModalOverlay) {
         disableFocusTrap(settingsModal);
         try { window.__lastSettingsTrigger?.focus?.(); } catch (_) {}
     });
+}
+
+// ===== 관리자 모달 =====
+
+// 관리자 모달 열기
+if (adminBtn) {
+    adminBtn.addEventListener('click', async () => {
+        adminModal.classList.remove('hidden');
+        await fetchPendingUsers();
+    });
+}
+
+// 관리자 모달 닫기
+if (adminCloseBtn) {
+    adminCloseBtn.addEventListener('click', () => {
+        adminModal.classList.add('hidden');
+    });
+}
+
+// 승인 대기 사용자 목록 조회
+async function fetchPendingUsers() {
+    if (!authToken) {
+        log('관리자 권한이 필요합니다.', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/pending-users', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            renderPendingUsers(data.users || []);
+        } else {
+            log(data.error || '사용자 목록 조회 실패', 'error');
+            renderPendingUsers([]);
+        }
+    } catch (error) {
+        console.error('Fetch pending users error:', error);
+        log('서버 오류가 발생했습니다.', 'error');
+        renderPendingUsers([]);
+    }
+}
+
+// 승인 대기 사용자 목록 렌더링
+function renderPendingUsers(users) {
+    if (!users || users.length === 0) {
+        pendingUsersList.style.display = 'none';
+        noPendingUsers.style.display = 'block';
+        return;
+    }
+
+    pendingUsersList.style.display = 'block';
+    noPendingUsers.style.display = 'none';
+
+    pendingUsersList.innerHTML = users.map(user => `
+        <div class="pending-user-card" style="
+            background: #f8f9fa;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        ">
+            <div style="flex: 1;">
+                <div style="font-weight: 600; color: #333; margin-bottom: 0.25rem;">
+                    ${escapeHtml(user.username)}
+                </div>
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">
+                    📧 ${escapeHtml(user.email)}
+                </div>
+                <div style="font-size: 0.75rem; color: #999;">
+                    가입일: ${new Date(user.created_at).toLocaleString('ko-KR')}
+                </div>
+            </div>
+            <button
+                class="approve-user-btn btn btn-sm"
+                data-user-id="${user.user_id}"
+                style="
+                    background: #28a745;
+                    color: white;
+                    border: none;
+                    padding: 0.5rem 1rem;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 0.875rem;
+                    white-space: nowrap;
+                "
+            >
+                ✓ 승인
+            </button>
+        </div>
+    `).join('');
+
+    // 승인 버튼 이벤트 리스너 등록
+    document.querySelectorAll('.approve-user-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const userId = parseInt(e.target.dataset.userId);
+            await approveUser(userId);
+        });
+    });
+}
+
+// 사용자 승인
+async function approveUser(userId) {
+    if (!authToken) {
+        log('관리자 권한이 필요합니다.', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/approve-user', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ user_id: userId })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            log('사용자 승인이 완료되었습니다.', 'success');
+            // 목록 새로고침
+            await fetchPendingUsers();
+        } else {
+            log(data.error || '승인 실패', 'error');
+        }
+    } catch (error) {
+        console.error('Approve user error:', error);
+        log('서버 오류가 발생했습니다.', 'error');
+    }
+}
+
+// HTML 이스케이프 함수
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // ===== 파일 관리 =====
