@@ -113,6 +113,7 @@ def run_http_server(ctx: AppContext):
                     end = self._parse_date((qs.get("end", [None]))[0], end=True)
 
                     # 인증: 로그인 환경에서는 JWT 필요
+                    session_key = None  # JWT에서 추출한 session_key (세션별 데이터 격리)
                     if ctx.login_required:
                         token = None
                         authz = self.headers.get("Authorization")
@@ -120,7 +121,7 @@ def run_http_server(ctx: AppContext):
                             token = authz.split(" ", 1)[1].strip()
                         if not token:
                             token = (qs.get("token", [None]))[0]
-                        _, err = auth_verify_token(ctx, token, expected_type="access")
+                        payload, err = auth_verify_token(ctx, token, expected_type="access")
                         if err:
                             body = json.dumps(
                                 {"success": False, "error": f"unauthorized: {err}"}
@@ -131,6 +132,9 @@ def run_http_server(ctx: AppContext):
                             self.end_headers()
                             self.wfile.write(body)
                             return
+                        # JWT payload에서 session_key 추출
+                        if payload:
+                            session_key = payload.get("session_key")
 
                     export_obj = {
                         "version": "1.0",
@@ -330,7 +334,7 @@ def run_http_server(ctx: AppContext):
                                 base = {"room_id": rid}
                                 if "context" in includes:
                                     room_row = asyncio.run_coroutine_threadsafe(
-                                        ctx.db_handler.get_room(rid), ctx.loop
+                                        ctx.db_handler.get_room(rid, session_key), ctx.loop
                                     ).result(timeout=5)
                                     if room_row and room_row.get("context"):
                                         try:
@@ -463,6 +467,7 @@ def run_http_server(ctx: AppContext):
                     end = self._parse_date((qs.get("end", [None]))[0], end=True)
 
                     # 인증
+                    session_key = None  # JWT에서 추출한 session_key (세션별 데이터 격리)
                     if ctx.login_required:
                         token = None
                         authz = self.headers.get("Authorization")
@@ -470,7 +475,7 @@ def run_http_server(ctx: AppContext):
                             token = authz.split(" ", 1)[1].strip()
                         if not token:
                             token = (qs.get("token", [None]))[0]
-                        _, err = auth_verify_token(ctx, token, expected_type="access")
+                        payload, err = auth_verify_token(ctx, token, expected_type="access")
                         if err:
                             body = json.dumps(
                                 {"success": False, "error": f"unauthorized: {err}"}
@@ -481,6 +486,9 @@ def run_http_server(ctx: AppContext):
                             self.end_headers()
                             self.wfile.write(body)
                             return
+                        # JWT payload에서 session_key 추출
+                        if payload:
+                            session_key = payload.get("session_key")
 
                     def render_md(rid: str) -> tuple[str, bytes]:
                         title = rid
@@ -489,7 +497,7 @@ def run_http_server(ctx: AppContext):
                         try:
                             if ctx.db_handler and getattr(ctx, "loop", None):
                                 row = asyncio.run_coroutine_threadsafe(
-                                    ctx.db_handler.get_room(rid), ctx.loop
+                                    ctx.db_handler.get_room(rid, session_key), ctx.loop
                                 ).result(timeout=5)
                                 if row and row.get("title"):
                                     title = row.get("title")
@@ -623,6 +631,7 @@ def run_http_server(ctx: AppContext):
             if self.path.startswith("/api/import"):
                 try:
                     # JWT 인증 (Export와 동일)
+                    session_key = None  # JWT에서 추출한 session_key (세션별 데이터 격리)
                     if ctx.login_required:
                         parsed = urlparse(self.path)
                         qs = parse_qs(parsed.query)
@@ -632,7 +641,7 @@ def run_http_server(ctx: AppContext):
                             token = authz.split(" ", 1)[1].strip()
                         if not token:
                             token = (qs.get("token", [None]))[0]
-                        _, err = auth_verify_token(ctx, token, expected_type="access")
+                        payload, err = auth_verify_token(ctx, token, expected_type="access")
                         if err:
                             body = json.dumps(
                                 {"success": False, "error": f"unauthorized: {err}"}
@@ -642,6 +651,9 @@ def run_http_server(ctx: AppContext):
                             self.end_headers()
                             self.wfile.write(body)
                             return
+                        # JWT payload에서 session_key 추출
+                        if payload:
+                            session_key = payload.get("session_key")
 
                     # Content-Length 파싱
                     content_length = int(self.headers.get("Content-Length", 0))
@@ -675,8 +687,17 @@ def run_http_server(ctx: AppContext):
 
                         from server.ws.actions.importer import _import_single_room
 
-                        # 세션 키 생성 또는 추출
-                        session_key = request_data.get("session_key", "http_import")
+                        # 세션 키: JWT에서 추출한 것 사용 (없으면 에러)
+                        if not session_key:
+                            self.send_response(401)
+                            self.send_header("Content-Type", "application/json")
+                            response_data = json.dumps(
+                                {"success": False, "error": "Session key required for import"}
+                            ).encode("utf-8")
+                            self.send_header("Content-Length", str(len(response_data)))
+                            self.end_headers()
+                            self.wfile.write(response_data)
+                            return
 
                         # 비동기 import 실행
                         async def run_import():
