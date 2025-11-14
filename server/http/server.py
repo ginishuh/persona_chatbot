@@ -135,6 +135,9 @@ def run_http_server(ctx: AppContext):
                         # JWT payload에서 session_key 추출
                         if payload:
                             session_key = payload.get("session_key")
+                    else:
+                        # 비로그인 모드: 쿼리 파라미터에서 session_key 추출
+                        session_key = (qs.get("session_key", [None]))[0]
 
                     export_obj = {
                         "version": "1.0",
@@ -164,7 +167,7 @@ def run_http_server(ctx: AppContext):
                                 if "messages" in includes:
                                     msgs = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_messages_range(
-                                            rid, start=start, end=end
+                                            rid, session_key=session_key, start=start, end=end
                                         ),
                                         ctx.loop,
                                     ).result(timeout=5)
@@ -182,7 +185,7 @@ def run_http_server(ctx: AppContext):
                                 if "token_usage" in includes:
                                     usage = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_token_usage_range(
-                                            rid, start=start, end=end
+                                            rid, session_key=session_key, start=start, end=end
                                         ),
                                         ctx.loop,
                                     ).result(timeout=5)
@@ -382,7 +385,7 @@ def run_http_server(ctx: AppContext):
                                 if "messages" in includes:
                                     msgs = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_messages_range(
-                                            rid, start=start, end=end
+                                            rid, session_key=session_key, start=start, end=end
                                         ),
                                         ctx.loop,
                                     ).result(timeout=10)
@@ -401,7 +404,7 @@ def run_http_server(ctx: AppContext):
                                 if "token_usage" in includes:
                                     usages = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_token_usage_range(
-                                            rid, start=start, end=end
+                                            rid, session_key=session_key, start=start, end=end
                                         ),
                                         ctx.loop,
                                     ).result(timeout=10)
@@ -565,7 +568,7 @@ def run_http_server(ctx: AppContext):
                                         title = row.get("title")
                                     msgs = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_messages_range(
-                                            rid, start=start, end=end
+                                            rid, session_key=session_key, start=start, end=end
                                         ),
                                         ctx.loop,
                                     ).result(timeout=10)

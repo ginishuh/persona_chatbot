@@ -534,7 +534,7 @@ async def handle_message(websocket, message):
                 if APP_CTX and APP_CTX.db_handler:
                     # 세션/방이 DB에 없을 수 있으므로 방 upsert 보장(컨텍스트는 room_save에서 관리)
                     await APP_CTX.db_handler.upsert_room(rid, key, rid, None)
-                    await APP_CTX.db_handler.save_message(rid, "user", prompt)
+                    await APP_CTX.db_handler.save_message(rid, "user", prompt, key)
             except Exception:
                 logger.exception("DB save (user message) failed; continuing without DB persistence")
 
@@ -599,7 +599,9 @@ async def handle_message(websocket, message):
                 room["history"].add_assistant_message(result["message"])
                 try:
                     if APP_CTX and APP_CTX.db_handler:
-                        await APP_CTX.db_handler.save_message(rid, "assistant", result["message"])
+                        await APP_CTX.db_handler.save_message(
+                            rid, "assistant", result["message"], key
+                        )
                 except Exception:
                     logger.exception("DB save (assistant message) failed; continuing")
 

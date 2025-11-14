@@ -64,7 +64,7 @@ async def _import_single_room(
         # DB 저장
         try:
             if ctx.db_handler:
-                await ctx.db_handler.save_message(rid, role, content)
+                await ctx.db_handler.save_message(rid, role, content, session_key)
         except Exception:
             pass
         imported += 1

@@ -61,7 +61,7 @@ async def chat(ctx: AppContext, websocket, data: dict):
         if ctx.db_handler:
             await ctx.db_handler.upsert_session(session_key)
             await ctx.db_handler.upsert_room(rid, session_key, rid, None)
-            await ctx.db_handler.save_message(rid, "user", prompt)
+            await ctx.db_handler.save_message(rid, "user", prompt, session_key)
     except Exception:
         pass
 
@@ -118,7 +118,7 @@ async def chat(ctx: AppContext, websocket, data: dict):
         room["history"].add_assistant_message(msg)
         try:
             if ctx.db_handler:
-                await ctx.db_handler.save_message(rid, "assistant", msg)
+                await ctx.db_handler.save_message(rid, "assistant", msg, session_key)
         except Exception:
             pass
 
