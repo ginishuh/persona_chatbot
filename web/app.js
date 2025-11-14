@@ -506,7 +506,12 @@ function buildExportUrl() {
     if (start) params.set('start', start.replace('T','T')); // 그대로 전달
     if (end) params.set('end', end.replace('T','T'));
     if (!ndjson && zip) params.set('format','zip');
-    if (appConfig.login_required && authToken) params.set('token', authToken);
+    if (appConfig.login_required && authToken) {
+        params.set('token', authToken);
+    } else if (sessionKey) {
+        // 비로그인 모드: session_key를 쿼리 파라미터로 전달
+        params.set('session_key', sessionKey);
+    }
     return `${base}?${params.toString()}`;
 }
 
@@ -601,7 +606,12 @@ function buildExportUrlFrom(prefix) {
     if (start) params.set('start', start);
     if (end) params.set('end', end);
     if (!ndjson && zip) params.set('format','zip');
-    if (appConfig.login_required && authToken) params.set('token', authToken);
+    if (appConfig.login_required && authToken) {
+        params.set('token', authToken);
+    } else if (sessionKey) {
+        // 비로그인 모드: session_key를 쿼리 파라미터로 전달
+        params.set('session_key', sessionKey);
+    }
     return `${base}?${params.toString()}`;
 }
 
@@ -754,6 +764,16 @@ function renderRoomScreenView(roomId) {
 
 // History 화면
 function renderHistoryScreenView(id) {
+    // Export URL에 token 또는 session_key 추가
+    const params = new URLSearchParams({ scope: 'single', room_id: id });
+    if (appConfig.login_required && authToken) {
+        params.set('token', authToken);
+    } else if (sessionKey) {
+        params.set('session_key', sessionKey);
+    }
+    const jsonUrl = `/api/export?${params.toString()}`;
+    const ndjsonUrl = `/api/export/stream?${params.toString()}`;
+
     const html = `
       <section aria-labelledby="historyScreenTitle">
         <h1 id="historyScreenTitle">히스토리</h1>
@@ -761,8 +781,8 @@ function renderHistoryScreenView(id) {
         <div style="display:flex; gap:0.5rem; margin-top:0.5rem; flex-wrap:wrap;">
           <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(id)}')">← 돌아가기</button>
           <button class="btn" onclick="downloadRoomMd('${id}')">MD 다운로드</button>
-          <a class="btn" href="/api/export?scope=single&room_id=${encodeURIComponent(id)}" target="_blank">JSON</a>
-          <a class="btn" href="/api/export/stream?scope=single&room_id=${encodeURIComponent(id)}" target="_blank">NDJSON</a>
+          <a class="btn" href="${jsonUrl}" target="_blank">JSON</a>
+          <a class="btn" href="${ndjsonUrl}" target="_blank">NDJSON</a>
         </div>
       </section>`;
     showScreen(html);
@@ -786,7 +806,12 @@ function renderHistorySnapshotScreen(history) {
 
 function downloadRoomMd(rid) {
     const params = new URLSearchParams({ room_id: rid });
-    if (appConfig.login_required && authToken) params.set('token', authToken);
+    if (appConfig.login_required && authToken) {
+        params.set('token', authToken);
+    } else if (sessionKey) {
+        // 비로그인 모드: session_key를 쿼리 파라미터로 전달
+        params.set('session_key', sessionKey);
+    }
     const url = `/api/export/md?${params.toString()}`;
     try { window.open(url, '_blank'); } catch (_) { location.href = url; }
 }
