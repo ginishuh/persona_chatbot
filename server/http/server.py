@@ -906,6 +906,7 @@ def run_http_server(ctx: AppContext):
                             "success": True,
                             "user_id": user_id,
                             "username": username,
+                            "role": user.get("role", "user"),
                             "access_token": access_token,
                             "access_exp": access_exp,
                             "refresh_token": refresh_token,
@@ -929,6 +930,208 @@ def run_http_server(ctx: AppContext):
                     return
                 except Exception as e:
                     logger.exception("Login API error")
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"success": False, "error": str(e)}).encode("utf-8")
+                    )
+                    return
+
+            # Admin API: 승인 대기 목록 조회
+            if self.path == "/api/admin/pending-users":
+                try:
+                    # JWT 인증
+                    token = None
+                    authz = self.headers.get("Authorization")
+                    if authz and authz.lower().startswith("bearer "):
+                        token = authz.split(" ", 1)[1].strip()
+
+                    payload, err = auth_verify_token(ctx, token, expected_type="access")
+                    if err:
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": f"인증 실패: {err}"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    # 관리자 권한 확인
+                    user_id = payload.get("user_id") if payload else None
+                    if not user_id:
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": "유효하지 않은 토큰"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    import asyncio
+
+                    if not ctx.db_handler or not ctx.loop:
+                        raise RuntimeError("DB handler or event loop not available")
+
+                    # 사용자 조회
+                    future = asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.get_user_by_id(user_id), ctx.loop
+                    )
+                    admin_user = future.result(timeout=5)
+
+                    if not admin_user or admin_user.get("role") != "admin":
+                        self.send_response(403)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {"success": False, "error": "관리자 권한이 필요합니다"}
+                            ).encode("utf-8")
+                        )
+                        return
+
+                    # 승인 대기 사용자 목록 조회
+                    future = asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.list_pending_users(), ctx.loop
+                    )
+                    pending_users = future.result(timeout=5)
+
+                    # 성공 응답
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    response_data = json.dumps(
+                        {"success": True, "users": pending_users}, ensure_ascii=False
+                    ).encode("utf-8")
+                    self.send_header("Content-Length", str(len(response_data)))
+                    self.end_headers()
+                    self.wfile.write(response_data)
+                    return
+
+                except Exception as e:
+                    logger.exception("Admin pending-users API error")
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"success": False, "error": str(e)}).encode("utf-8")
+                    )
+                    return
+
+            # Admin API: 사용자 승인
+            if self.path == "/api/admin/approve-user":
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length)
+                    data = json.loads(body.decode("utf-8"))
+
+                    # JWT 인증
+                    token = None
+                    authz = self.headers.get("Authorization")
+                    if authz and authz.lower().startswith("bearer "):
+                        token = authz.split(" ", 1)[1].strip()
+
+                    payload, err = auth_verify_token(ctx, token, expected_type="access")
+                    if err:
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": f"인증 실패: {err}"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    # 관리자 권한 확인
+                    admin_user_id = payload.get("user_id") if payload else None
+                    if not admin_user_id:
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": "유효하지 않은 토큰"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    import asyncio
+
+                    if not ctx.db_handler or not ctx.loop:
+                        raise RuntimeError("DB handler or event loop not available")
+
+                    # 관리자 확인
+                    future = asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.get_user_by_id(admin_user_id), ctx.loop
+                    )
+                    admin_user = future.result(timeout=5)
+
+                    if not admin_user or admin_user.get("role") != "admin":
+                        self.send_response(403)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {"success": False, "error": "관리자 권한이 필요합니다"}
+                            ).encode("utf-8")
+                        )
+                        return
+
+                    # 승인할 사용자 ID 확인
+                    target_user_id = data.get("user_id")
+                    if not target_user_id:
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": "user_id는 필수입니다"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    # 사용자 승인
+                    future = asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.approve_user(target_user_id, admin_user_id), ctx.loop
+                    )
+                    success = future.result(timeout=5)
+
+                    if not success:
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": "사용자 승인 실패"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    # 성공 응답
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    response_data = json.dumps({"success": True}).encode("utf-8")
+                    self.send_header("Content-Length", str(len(response_data)))
+                    self.end_headers()
+                    self.wfile.write(response_data)
+                    return
+
+                except json.JSONDecodeError as e:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"success": False, "error": f"JSON 파싱 실패: {str(e)}"}).encode(
+                            "utf-8"
+                        )
+                    )
+                    return
+                except Exception as e:
+                    logger.exception("Admin approve-user API error")
                     self.send_response(500)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     self.end_headers()
