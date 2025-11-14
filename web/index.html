@@ -345,20 +345,35 @@
     <div id="loginModal" class="login-modal hidden" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
         <div class="login-modal-content">
             <img src="src/logo3.png" alt="Chorus AI 로고" class="login-logo" />
-            <h2 id="loginModalTitle">🔒 로그인 필요</h2>
-            <p class="login-description">.env에 설정한 아이디/비밀번호를 입력하세요.</p>
-            <input type="text" id="loginUsername" placeholder="아이디" autocomplete="username" />
-            <input type="password" id="loginPassword" placeholder="비밀번호" autocomplete="current-password" />
-            <div style="display:flex; justify-content: space-between; align-items:center; margin-top: 0.5rem; gap: 0.5rem; flex-wrap: wrap;">
-                <label class="checkbox-label"><input type="checkbox" id="rememberId"> <span>아이디 저장</span></label>
-                <label class="checkbox-label"><input type="checkbox" id="autoLogin"> <span>자동 로그인</span></label>
-                <label class="checkbox-label" title="성인 전용 기능(강화/극단 수위)을 사용할 수 있도록 동의합니다."><input type="checkbox" id="loginAdultConsent"> <span>성인 기능 동의</span></label>
+            <h2 id="loginModalTitle">🔒 Persona Chat</h2>
+
+            <!-- 탭 선택 -->
+            <div class="auth-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid #e8ecef;">
+                <button id="loginTab" class="auth-tab active" style="flex: 1; padding: 0.75rem; border: none; background: none; cursor: pointer; font-weight: 600; border-bottom: 3px solid #007bff; color: #007bff;">로그인</button>
+                <button id="registerTab" class="auth-tab" style="flex: 1; padding: 0.75rem; border: none; background: none; cursor: pointer; font-weight: 600; border-bottom: 3px solid transparent; color: #666;">회원가입</button>
             </div>
-            <div style="display:flex; gap:0.5rem; margin-top: 0.5rem;">
-                <button id="loginButton" class="btn btn-primary" style="flex:1;">로그인</button>
-                <button id="autoLoginButton" class="btn" style="flex:1;">자동 로그인</button>
+
+            <!-- 로그인 폼 -->
+            <div id="loginForm" class="auth-form">
+                <input type="text" id="loginUsername" placeholder="아이디" autocomplete="username" />
+                <input type="password" id="loginPassword" placeholder="비밀번호" autocomplete="current-password" />
+                <div style="display:flex; justify-content: space-between; align-items:center; margin-top: 0.5rem; gap: 0.5rem; flex-wrap: wrap;">
+                    <label class="checkbox-label"><input type="checkbox" id="rememberId"> <span>아이디 저장</span></label>
+                    <label class="checkbox-label"><input type="checkbox" id="autoLogin"> <span>자동 로그인</span></label>
+                </div>
+                <button id="loginButton" class="btn btn-primary" style="width: 100%; margin-top: 0.75rem;">로그인</button>
+                <p id="loginError" class="login-error"></p>
             </div>
-            <p id="loginError" class="login-error"></p>
+
+            <!-- 회원가입 폼 -->
+            <div id="registerForm" class="auth-form" style="display: none;">
+                <input type="text" id="registerUsername" placeholder="아이디 (영문/숫자)" autocomplete="username" />
+                <input type="email" id="registerEmail" placeholder="이메일" autocomplete="email" />
+                <input type="password" id="registerPassword" placeholder="비밀번호 (8자 이상)" autocomplete="new-password" />
+                <input type="password" id="registerPasswordConfirm" placeholder="비밀번호 확인" autocomplete="new-password" />
+                <button id="registerButton" class="btn btn-primary" style="width: 100%; margin-top: 0.75rem;">회원가입</button>
+                <p id="registerError" class="login-error"></p>
+            </div>
         </div>
     </div>
 

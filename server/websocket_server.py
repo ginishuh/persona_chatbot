@@ -119,13 +119,16 @@ def is_session_retention_enabled(websocket, session: dict | None = None):
 ## stories 파서는 제거되었습니다(스토리 기능 비활성화).
 
 
-def _issue_token(ttl_seconds: int, typ: str, session_key: str | None = None):
+def _issue_token(
+    ttl_seconds: int, typ: str, session_key: str | None = None, user_id: int | None = None
+):
     """JWT 생성 공통 함수
 
     Args:
         ttl_seconds: 토큰 유효 시간 (초)
         typ: 토큰 타입 ("access" 또는 "refresh")
         session_key: 세션 키 (세션별 데이터 격리용)
+        user_id: 사용자 ID (회원제 시스템용)
     """
     if not JWT_SECRET:
         return None, None
@@ -139,26 +142,30 @@ def _issue_token(ttl_seconds: int, typ: str, session_key: str | None = None):
     }
     if session_key:
         payload["session_key"] = session_key
+    if user_id is not None:
+        payload["user_id"] = user_id
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return token, exp.isoformat() + "Z"
 
 
-def issue_access_token(session_key: str | None = None):
+def issue_access_token(session_key: str | None = None, user_id: int | None = None):
     """Access 토큰 발급
 
     Args:
         session_key: 세션 키 (세션별 데이터 격리용)
+        user_id: 사용자 ID (회원제 시스템용)
     """
-    return _issue_token(ACCESS_TTL_SECONDS, "access", session_key)
+    return _issue_token(ACCESS_TTL_SECONDS, "access", session_key, user_id)
 
 
-def issue_refresh_token(session_key: str | None = None):
+def issue_refresh_token(session_key: str | None = None, user_id: int | None = None):
     """Refresh 토큰 발급
 
     Args:
         session_key: 세션 키 (세션별 데이터 격리용)
+        user_id: 사용자 ID (회원제 시스템용)
     """
-    return _issue_token(REFRESH_TTL_SECONDS, "refresh", session_key)
+    return _issue_token(REFRESH_TTL_SECONDS, "refresh", session_key, user_id)
 
 
 def verify_token(token, expected_type: str = "access"):
@@ -403,13 +410,14 @@ async def handle_token_refresh_action(websocket, data):
         )
         return
 
-    # 기존 refresh 토큰의 session_key 유지
+    # 기존 refresh 토큰의 session_key와 user_id 유지
     token_session_key = payload.get("session_key") if payload else None
-    new_access, access_exp = issue_access_token(token_session_key)
+    token_user_id = payload.get("user_id") if payload else None
+    new_access, access_exp = issue_access_token(token_session_key, token_user_id)
     # 선택: refresh 토큰도 회전(보안 강화)
     rotate = bool(int(os.getenv("APP_REFRESH_ROTATE", "1")))
     if rotate:
-        new_refresh, refresh_exp = issue_refresh_token(token_session_key)
+        new_refresh, refresh_exp = issue_refresh_token(token_session_key, token_user_id)
     else:
         new_refresh, refresh_exp = refresh_token, None
 

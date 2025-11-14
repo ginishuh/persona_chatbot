@@ -94,14 +94,22 @@ const roomSaveBtn = document.getElementById('roomSaveBtn');
 
 // 로그인 요소
 const loginModal = document.getElementById('loginModal');
+const loginTab = document.getElementById('loginTab');
+const registerTab = document.getElementById('registerTab');
+const loginForm = document.getElementById('loginForm');
+const registerForm = document.getElementById('registerForm');
 const loginUsernameInput = document.getElementById('loginUsername');
 const loginPasswordInput = document.getElementById('loginPassword');
 const rememberIdCheckbox = document.getElementById('rememberId');
 const autoLoginCheckbox = document.getElementById('autoLogin');
 const loginButton = document.getElementById('loginButton');
-const autoLoginButton = document.getElementById('autoLoginButton');
 const loginError = document.getElementById('loginError');
-const loginAdultConsent = document.getElementById('loginAdultConsent');
+const registerUsernameInput = document.getElementById('registerUsername');
+const registerEmailInput = document.getElementById('registerEmail');
+const registerPasswordInput = document.getElementById('registerPassword');
+const registerPasswordConfirmInput = document.getElementById('registerPasswordConfirm');
+const registerButton = document.getElementById('registerButton');
+const registerError = document.getElementById('registerError');
 
 let currentAssistantMessage = null;
 let characterColors = {}; // 캐릭터별 색상 매핑
@@ -150,10 +158,10 @@ const LOGIN_AUTOLOGIN_KEY = 'persona_login_auto';
 const LOGIN_SAVED_PW_KEY = 'persona_login_pw';
 const LOGIN_ADULT_KEY = 'persona_login_adult';
 try {
-    authToken = sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
-    authTokenExpiresAt = sessionStorage.getItem(AUTH_EXP_KEY) || '';
-    refreshToken = sessionStorage.getItem(REFRESH_TOKEN_KEY) || '';
-    refreshTokenExpiresAt = sessionStorage.getItem(REFRESH_EXP_KEY) || '';
+    authToken = localStorage.getItem(AUTH_TOKEN_KEY) || '';
+    authTokenExpiresAt = localStorage.getItem(AUTH_EXP_KEY) || '';
+    refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY) || '';
+    refreshTokenExpiresAt = localStorage.getItem(REFRESH_EXP_KEY) || '';
 } catch (error) {
     authToken = '';
     authTokenExpiresAt = '';
@@ -176,15 +184,15 @@ function setAuthToken(token, expiresAt) {
     authTokenExpiresAt = expiresAt || '';
     try {
         if (authToken) {
-            sessionStorage.setItem(AUTH_TOKEN_KEY, authToken);
+            localStorage.setItem(AUTH_TOKEN_KEY, authToken);
             if (authTokenExpiresAt) {
-                sessionStorage.setItem(AUTH_EXP_KEY, authTokenExpiresAt);
+                localStorage.setItem(AUTH_EXP_KEY, authTokenExpiresAt);
             } else {
-                sessionStorage.removeItem(AUTH_EXP_KEY);
+                localStorage.removeItem(AUTH_EXP_KEY);
             }
         } else {
-            sessionStorage.removeItem(AUTH_TOKEN_KEY);
-            sessionStorage.removeItem(AUTH_EXP_KEY);
+            localStorage.removeItem(AUTH_TOKEN_KEY);
+            localStorage.removeItem(AUTH_EXP_KEY);
         }
     } catch (error) {
         // ignore storage errors
@@ -202,15 +210,15 @@ function setRefreshToken(token, expiresAt) {
     refreshTokenExpiresAt = expiresAt || '';
     try {
         if (refreshToken) {
-            sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+            localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
             if (refreshTokenExpiresAt) {
-                sessionStorage.setItem(REFRESH_EXP_KEY, refreshTokenExpiresAt);
+                localStorage.setItem(REFRESH_EXP_KEY, refreshTokenExpiresAt);
             } else {
-                sessionStorage.removeItem(REFRESH_EXP_KEY);
+                localStorage.removeItem(REFRESH_EXP_KEY);
             }
         } else {
-            sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-            sessionStorage.removeItem(REFRESH_EXP_KEY);
+            localStorage.removeItem(REFRESH_TOKEN_KEY);
+            localStorage.removeItem(REFRESH_EXP_KEY);
         }
     } catch (_) { /* ignore */ }
 }
@@ -1535,24 +1543,172 @@ function hideLoginModal() {
     disableFocusTrap(loginModal);
 }
 
-function submitLogin() {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    const username = (loginUsernameInput?.value || '').trim();
-    const password = loginPasswordInput.value.trim();
-    if (!password) {
-        loginError.textContent = '비밀번호를 입력하세요.';
-        return;
-    }
-    const consent = loginAdultConsent ? !!loginAdultConsent.checked : false;
-    sendMessage({
-        action: 'login',
-        username,
-        password,
-        adult_consent: consent ? true : undefined
-    }, { skipToken: true });
-    loginError.textContent = '';
+// 탭 전환
+if (loginTab && registerTab && loginForm && registerForm) {
+    loginTab.addEventListener('click', () => {
+        loginTab.classList.add('active');
+        registerTab.classList.remove('active');
+        loginTab.style.borderBottom = '3px solid #007bff';
+        loginTab.style.color = '#007bff';
+        registerTab.style.borderBottom = '3px solid transparent';
+        registerTab.style.color = '#666';
+        loginForm.style.display = 'block';
+        registerForm.style.display = 'none';
+        loginError.textContent = '';
+        registerError.textContent = '';
+    });
+
+    registerTab.addEventListener('click', () => {
+        registerTab.classList.add('active');
+        loginTab.classList.remove('active');
+        registerTab.style.borderBottom = '3px solid #007bff';
+        registerTab.style.color = '#007bff';
+        loginTab.style.borderBottom = '3px solid transparent';
+        loginTab.style.color = '#666';
+        registerForm.style.display = 'block';
+        loginForm.style.display = 'none';
+        loginError.textContent = '';
+        registerError.textContent = '';
+    });
 }
 
+// 회원가입
+async function submitRegister() {
+    const username = (registerUsernameInput?.value || '').trim();
+    const email = (registerEmailInput?.value || '').trim();
+    const password = registerPasswordInput?.value || '';
+    const passwordConfirm = registerPasswordConfirmInput?.value || '';
+
+    if (!username || !email || !password) {
+        registerError.textContent = '모든 필드를 입력하세요.';
+        return;
+    }
+
+    if (password.length < 8) {
+        registerError.textContent = '비밀번호는 8자 이상이어야 합니다.';
+        return;
+    }
+
+    if (password !== passwordConfirm) {
+        registerError.textContent = '비밀번호가 일치하지 않습니다.';
+        return;
+    }
+
+    try {
+        registerButton.disabled = true;
+        registerButton.textContent = '처리 중...';
+
+        const response = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, email, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            alert(`회원가입 성공! ${username}님, 환영합니다.`);
+            // 로그인 탭으로 전환
+            loginTab.click();
+            loginUsernameInput.value = username;
+            loginPasswordInput.value = password;
+            registerUsernameInput.value = '';
+            registerEmailInput.value = '';
+            registerPasswordInput.value = '';
+            registerPasswordConfirmInput.value = '';
+        } else {
+            registerError.textContent = data.error || '회원가입 실패';
+        }
+    } catch (error) {
+        console.error('Register error:', error);
+        registerError.textContent = '서버 오류가 발생했습니다.';
+    } finally {
+        registerButton.disabled = false;
+        registerButton.textContent = '회원가입';
+    }
+}
+
+// 로그인
+async function submitLogin() {
+    const username = (loginUsernameInput?.value || '').trim();
+    const password = loginPasswordInput?.value || '';
+
+    if (!username || !password) {
+        loginError.textContent = '아이디와 비밀번호를 입력하세요.';
+        return;
+    }
+
+    try {
+        loginButton.disabled = true;
+        loginButton.textContent = '로그인 중...';
+
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            // JWT 토큰 저장
+            authToken = data.access_token;
+            authTokenExpiresAt = data.access_exp;
+            refreshToken = data.refresh_token;
+            refreshTokenExpiresAt = data.refresh_exp;
+
+            localStorage.setItem(AUTH_TOKEN_KEY, authToken);
+            localStorage.setItem(AUTH_EXP_KEY, authTokenExpiresAt);
+            localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+            localStorage.setItem(REFRESH_EXP_KEY, refreshTokenExpiresAt);
+
+            // 아이디 저장
+            if (rememberIdCheckbox?.checked) {
+                localStorage.setItem(LOGIN_USER_KEY, username);
+            } else {
+                localStorage.removeItem(LOGIN_USER_KEY);
+            }
+
+            // 자동 로그인 설정
+            if (autoLoginCheckbox?.checked) {
+                localStorage.setItem(LOGIN_AUTOLOGIN_KEY, '1');
+                localStorage.setItem(LOGIN_SAVED_PW_KEY, password);
+            } else {
+                localStorage.removeItem(LOGIN_AUTOLOGIN_KEY);
+                localStorage.removeItem(LOGIN_SAVED_PW_KEY);
+            }
+
+            isAuthenticated = true;
+            hideLoginModal();
+            log(`${username}님 로그인 성공`, 'success');
+
+            // WebSocket 재연결 (토큰 포함)
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+            connect();
+        } else {
+            loginError.textContent = data.error || '로그인 실패';
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        loginError.textContent = '서버 오류가 발생했습니다.';
+    } finally {
+        loginButton.disabled = false;
+        loginButton.textContent = '로그인';
+    }
+}
+
+if (registerButton) {
+    registerButton.addEventListener('click', submitRegister);
+}
+if (registerPasswordConfirmInput) {
+    registerPasswordConfirmInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            submitRegister();
+        }
+    });
+}
 if (loginButton) {
     loginButton.addEventListener('click', submitLogin);
 }
@@ -1560,22 +1716,6 @@ if (loginPasswordInput) {
     loginPasswordInput.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
             submitLogin();
-        }
-    });
-}
-if (autoLoginButton) {
-    autoLoginButton.addEventListener('click', () => {
-        try {
-            const user = loginUsernameInput?.value || localStorage.getItem(LOGIN_USER_KEY) || '';
-            const pw = localStorage.getItem(LOGIN_SAVED_PW_KEY) || '';
-            if (!user || !pw) {
-                alert('저장된 아이디/비밀번호가 없습니다. 먼저 로그인 후 자동 로그인을 설정하세요.');
-                return;
-            }
-            const consent = localStorage.getItem(LOGIN_ADULT_KEY) === '1';
-            sendMessage({ action: 'login', username: user, password: pw, adult_consent: consent || undefined }, { skipToken: true });
-        } catch (e) {
-            console.error(e);
         }
     });
 }
