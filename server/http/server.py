@@ -863,6 +863,23 @@ def run_http_server(ctx: AppContext):
                         )
                         return
 
+                    # 승인 여부 확인
+                    is_approved = user.get("is_approved", 0)
+                    if not is_approved:
+                        # 승인 대기 중
+                        self.send_response(403)  # Forbidden
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {
+                                    "success": False,
+                                    "error": "관리자 승인이 필요합니다. 승인 후 다시 로그인해주세요.",
+                                }
+                            ).encode("utf-8")
+                        )
+                        return
+
                     # 로그인 성공 → JWT 발급
                     user_id = user.get("user_id")
                     session_key = f"user:{username}"

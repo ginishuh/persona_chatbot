@@ -41,7 +41,7 @@ class DBHandler:
         current_version = row[0] if row else 0
 
         # 최신 버전
-        TARGET_VERSION = 2
+        TARGET_VERSION = 3
 
         if current_version == 0:
             # 테이블 존재 여부 확인 (새 DB vs 구버전 DB 구분)
@@ -108,6 +108,11 @@ class DBHandler:
         if current_version < 2:
             await self._migrate_to_v2()
             current_version = 2
+
+        # v2 → v3: users 테이블에 승인 및 역할 관리 추가
+        if current_version < 3:
+            await self._migrate_to_v3()
+            current_version = 3
 
         # 버전 업데이트
         if current_version == TARGET_VERSION:
@@ -298,6 +303,33 @@ class DBHandler:
         # 인덱스 생성
         await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
         await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+
+        await self._conn.commit()
+
+    async def _migrate_to_v3(self) -> None:
+        """v2 → v3: users 테이블에 승인 및 역할 관리 추가"""
+        assert self._conn is not None
+
+        # 기존 테이블 구조 확인
+        cur = await self._conn.execute("PRAGMA table_info(users)")
+        columns = await cur.fetchall()
+        column_names = [col[1] for col in columns]
+
+        # is_approved 컬럼이 없으면 추가
+        if "is_approved" not in column_names:
+            await self._conn.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 0")
+
+        # role 컬럼이 없으면 추가
+        if "role" not in column_names:
+            await self._conn.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'")
+
+        # approved_by 컬럼이 없으면 추가 (어떤 관리자가 승인했는지 기록)
+        if "approved_by" not in column_names:
+            await self._conn.execute("ALTER TABLE users ADD COLUMN approved_by INTEGER")
+
+        # approved_at 컬럼이 없으면 추가
+        if "approved_at" not in column_names:
+            await self._conn.execute("ALTER TABLE users ADD COLUMN approved_at TIMESTAMP")
 
         await self._conn.commit()
 
@@ -660,7 +692,11 @@ class DBHandler:
         """사용자명으로 조회"""
         assert self._conn is not None
         cur = await self._conn.execute(
-            "SELECT user_id, username, password_hash, email, created_at, last_login FROM users WHERE username = ?",
+            """
+            SELECT user_id, username, password_hash, email, created_at, last_login,
+                   is_approved, role, approved_by, approved_at
+            FROM users WHERE username = ?
+            """,
             (username,),
         )
         row = await cur.fetchone()
@@ -670,7 +706,11 @@ class DBHandler:
         """사용자 ID로 조회"""
         assert self._conn is not None
         cur = await self._conn.execute(
-            "SELECT user_id, username, password_hash, email, created_at, last_login FROM users WHERE user_id = ?",
+            """
+            SELECT user_id, username, password_hash, email, created_at, last_login,
+                   is_approved, role, approved_by, approved_at
+            FROM users WHERE user_id = ?
+            """,
             (user_id,),
         )
         row = await cur.fetchone()
@@ -688,10 +728,78 @@ class DBHandler:
         """모든 사용자 조회"""
         assert self._conn is not None
         cur = await self._conn.execute(
-            "SELECT user_id, username, email, created_at, last_login FROM users ORDER BY created_at DESC"
+            """
+            SELECT user_id, username, email, created_at, last_login,
+                   is_approved, role, approved_by, approved_at
+            FROM users ORDER BY created_at DESC
+            """
         )
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
+
+    async def list_pending_users(self) -> list[dict[str, Any]]:
+        """승인 대기 중인 사용자 조회"""
+        assert self._conn is not None
+        cur = await self._conn.execute(
+            """
+            SELECT user_id, username, email, created_at
+            FROM users
+            WHERE is_approved = 0
+            ORDER BY created_at ASC
+            """
+        )
+        rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def approve_user(self, user_id: int, admin_user_id: int) -> bool:
+        """사용자 승인
+
+        Args:
+            user_id: 승인할 사용자 ID
+            admin_user_id: 승인하는 관리자 ID
+
+        Returns:
+            성공 여부
+        """
+        assert self._conn is not None
+        try:
+            await self._conn.execute(
+                """
+                UPDATE users
+                SET is_approved = 1,
+                    approved_by = ?,
+                    approved_at = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+                """,
+                (admin_user_id, user_id),
+            )
+            await self._conn.commit()
+            return True
+        except Exception:
+            return False
+
+    async def create_admin_user(self, username: str, email: str, password_hash: str) -> int | None:
+        """관리자 사용자 생성 (즉시 승인 + role='admin')
+
+        Returns:
+            user_id: 생성된 관리자 ID
+            None: 중복 사용자명/이메일로 실패
+        """
+        assert self._conn is not None
+        async with self._lock:
+            try:
+                cursor = await self._conn.execute(
+                    """
+                    INSERT INTO users(username, email, password_hash, is_approved, role)
+                    VALUES(?, ?, ?, 1, 'admin')
+                    """,
+                    (username, email, password_hash),
+                )
+                await self._conn.commit()
+                return cursor.lastrowid
+            except Exception:
+                # UNIQUE constraint 위반
+                return None
 
     async def close(self) -> None:
         if self._conn is not None:
