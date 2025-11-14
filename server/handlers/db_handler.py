@@ -44,12 +44,13 @@ class DBHandler:
             );
 
             CREATE TABLE IF NOT EXISTS rooms (
-                room_id TEXT PRIMARY KEY,
                 session_key TEXT NOT NULL,
+                room_id TEXT NOT NULL,
                 title TEXT NOT NULL,
                 context TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (session_key, room_id),
                 FOREIGN KEY (session_key) REFERENCES sessions(session_key) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_rooms_session ON rooms(session_key);
@@ -59,8 +60,7 @@ class DBHandler:
                 room_id TEXT NOT NULL,
                 role TEXT NOT NULL CHECK(role in ('user','assistant')),
                 content TEXT NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (room_id) REFERENCES rooms(room_id) ON DELETE CASCADE
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id);
             CREATE INDEX IF NOT EXISTS idx_messages_ts ON messages(timestamp);
@@ -68,12 +68,10 @@ class DBHandler:
             CREATE TABLE IF NOT EXISTS token_usage (
                 usage_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_key TEXT NOT NULL,
-                room_id TEXT NOT NULL,
+                room_id TEXT,
                 provider TEXT NOT NULL,
                 token_info TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (session_key) REFERENCES sessions(session_key) ON DELETE CASCADE,
-                FOREIGN KEY (room_id) REFERENCES rooms(room_id) ON DELETE CASCADE
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS idx_tok_sess ON token_usage(session_key);
             CREATE INDEX IF NOT EXISTS idx_tok_room ON token_usage(room_id);
@@ -107,15 +105,14 @@ class DBHandler:
             await self._upsert_session_unlocked(session_key)
             await self._conn.execute(
                 """
-                INSERT INTO rooms(room_id, session_key, title, context)
+                INSERT INTO rooms(session_key, room_id, title, context)
                 VALUES(?, ?, ?, ?)
-                ON CONFLICT(room_id) DO UPDATE SET
-                  session_key=excluded.session_key,
+                ON CONFLICT(session_key, room_id) DO UPDATE SET
                   title=excluded.title,
                   context=excluded.context,
                   updated_at=CURRENT_TIMESTAMP
                 """,
-                (room_id, session_key, title, context_json),
+                (session_key, room_id, title, context_json),
             )
             await self._conn.commit()
 
@@ -128,19 +125,57 @@ class DBHandler:
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
 
-    async def get_room(self, room_id: str) -> dict[str, Any] | None:
+    async def get_room(self, room_id: str, session_key: str | None = None) -> dict[str, Any] | None:
+        """방 조회 (세션 키로 격리)
+
+        Args:
+            room_id: 방 ID
+            session_key: 세션 키 (None이면 세션 체크 안 함 - 하위 호환용, 보안상 권장하지 않음)
+        """
         assert self._conn is not None
-        cur = await self._conn.execute(
-            "SELECT room_id, session_key, title, context, created_at, updated_at FROM rooms WHERE room_id = ?",
-            (room_id,),
-        )
+        if session_key is not None:
+            # 세션 키로 격리 (권장)
+            cur = await self._conn.execute(
+                "SELECT room_id, session_key, title, context, created_at, updated_at FROM rooms WHERE room_id = ? AND session_key = ?",
+                (room_id, session_key),
+            )
+        else:
+            # 하위 호환용 (보안 취약)
+            cur = await self._conn.execute(
+                "SELECT room_id, session_key, title, context, created_at, updated_at FROM rooms WHERE room_id = ?",
+                (room_id,),
+            )
         row = await cur.fetchone()
         return dict(row) if row else None
 
-    async def delete_room(self, room_id: str) -> None:
+    async def delete_room(self, room_id: str, session_key: str | None = None) -> None:
+        """방 삭제 (세션 키로 격리)
+
+        Args:
+            room_id: 방 ID
+            session_key: 세션 키 (None이면 세션 체크 안 함 - 하위 호환용, 보안상 권장하지 않음)
+
+        Note:
+            메시지와 토큰 사용량도 함께 삭제됩니다 (CASCADE 대체)
+        """
         assert self._conn is not None
         async with self._lock:
-            await self._conn.execute("DELETE FROM rooms WHERE room_id = ?", (room_id,))
+            # 관련 메시지 먼저 삭제
+            await self._conn.execute("DELETE FROM messages WHERE room_id = ?", (room_id,))
+
+            # 관련 토큰 사용량 삭제
+            await self._conn.execute("DELETE FROM token_usage WHERE room_id = ?", (room_id,))
+
+            # 방 삭제
+            if session_key is not None:
+                # 세션 키로 격리 (권장)
+                await self._conn.execute(
+                    "DELETE FROM rooms WHERE room_id = ? AND session_key = ?",
+                    (room_id, session_key),
+                )
+            else:
+                # 하위 호환용 (보안 취약)
+                await self._conn.execute("DELETE FROM rooms WHERE room_id = ?", (room_id,))
             await self._conn.commit()
 
     # ===== Messages =====

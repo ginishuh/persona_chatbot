@@ -71,9 +71,21 @@ async def room_load(ctx: AppContext, websocket, data: dict):
 
     - 채팅방 정보를 DB에서 로드
     - context가 있으면 ContextHandler에 자동 적용
+    - 세션 키로 격리하여 다른 사용자의 방에 접근 불가
     """
+    if not ctx.db_handler:
+        await websocket.send(
+            json.dumps({"action": "room_load", "data": {"success": False, "error": "DB 없음"}})
+        )
+        return
+
     room_id = data.get("room_id") or "default"
-    db_row = await ctx.db_handler.get_room(room_id) if ctx.db_handler else None
+
+    # 현재 세션 키 가져오기
+    session_key, _ = sm.get_or_create_session(ctx, websocket, data)
+
+    # 세션 키로 격리된 방 조회
+    db_row = await ctx.db_handler.get_room(room_id, session_key)
     if not db_row:
         await websocket.send(
             json.dumps(
@@ -108,6 +120,7 @@ async def room_load(ctx: AppContext, websocket, data: dict):
 
 
 async def room_delete(ctx: AppContext, websocket, data: dict):
+    """채팅방 삭제 (세션 키로 격리)"""
     if not ctx.db_handler:
         await websocket.send(
             json.dumps(
@@ -120,7 +133,12 @@ async def room_delete(ctx: AppContext, websocket, data: dict):
         return
 
     room_id = data.get("room_id") or "default"
-    await ctx.db_handler.delete_room(room_id)
+
+    # 현재 세션 키 가져오기
+    session_key, _ = sm.get_or_create_session(ctx, websocket, data)
+
+    # 세션 키로 격리된 방 삭제 (다른 사용자의 방은 삭제 안 됨)
+    await ctx.db_handler.delete_room(room_id, session_key)
     await websocket.send(
         json.dumps({"action": "room_delete", "data": {"success": True, "room_id": room_id}})
     )

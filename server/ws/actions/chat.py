@@ -131,6 +131,17 @@ async def chat(ctx: AppContext, websocket, data: dict):
             provider=provider,
             token_info=token_info,
         )
+        # DB에도 저장 (export용)
+        if ctx.db_handler:
+            try:
+                await ctx.db_handler.save_token_usage(
+                    session_key=session_key,
+                    room_id=rid,
+                    provider=provider,
+                    token_info=token_info,
+                )
+            except Exception as e:
+                logger.error(f"Failed to save token usage to DB: {e}")
 
     token_summary = ctx.token_usage_handler.get_formatted_summary(
         session_key=session_key, room_id=rid
