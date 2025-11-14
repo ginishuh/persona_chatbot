@@ -302,29 +302,67 @@ class DBHandler:
         await self._conn.commit()
 
     # ===== Rooms =====
-    async def _upsert_session_unlocked(self, session_key: str) -> None:
-        """Lock 없이 세션 upsert (내부용)"""
-        assert self._conn is not None
-        await self._conn.execute(
-            """
-            INSERT INTO sessions(session_key) VALUES(?)
-            ON CONFLICT(session_key) DO UPDATE SET last_accessed=CURRENT_TIMESTAMP
-            """,
-            (session_key,),
-        )
+    async def _upsert_session_unlocked(self, session_key: str, user_id: int | None = None) -> None:
+        """Lock 없이 세션 upsert (내부용)
 
-    async def upsert_session(self, session_key: str) -> None:
+        Args:
+            session_key: 세션 키
+            user_id: 사용자 ID (회원제 시스템용, None이면 비회원 세션)
+        """
+        assert self._conn is not None
+        if user_id is not None:
+            # user_id가 있으면 함께 저장/업데이트
+            await self._conn.execute(
+                """
+                INSERT INTO sessions(session_key, user_id) VALUES(?, ?)
+                ON CONFLICT(session_key) DO UPDATE SET
+                    last_accessed=CURRENT_TIMESTAMP,
+                    user_id=excluded.user_id
+                """,
+                (session_key, user_id),
+            )
+        else:
+            # user_id 없으면 session_key만 저장
+            await self._conn.execute(
+                """
+                INSERT INTO sessions(session_key) VALUES(?)
+                ON CONFLICT(session_key) DO UPDATE SET last_accessed=CURRENT_TIMESTAMP
+                """,
+                (session_key,),
+            )
+
+    async def upsert_session(self, session_key: str, user_id: int | None = None) -> None:
+        """세션 생성 또는 업데이트
+
+        Args:
+            session_key: 세션 키
+            user_id: 사용자 ID (회원제 시스템용, None이면 비회원 세션)
+        """
         assert self._conn is not None
         async with self._lock:
-            await self._upsert_session_unlocked(session_key)
+            await self._upsert_session_unlocked(session_key, user_id)
             await self._conn.commit()
 
     async def upsert_room(
-        self, room_id: str, session_key: str, title: str, context_json: str | None
+        self,
+        room_id: str,
+        session_key: str,
+        title: str,
+        context_json: str | None,
+        user_id: int | None = None,
     ) -> None:
+        """방 생성 또는 업데이트
+
+        Args:
+            room_id: 방 ID
+            session_key: 세션 키
+            title: 방 제목
+            context_json: 컨텍스트 JSON
+            user_id: 사용자 ID (회원제 시스템용, None이면 비회원)
+        """
         assert self._conn is not None
         async with self._lock:
-            await self._upsert_session_unlocked(session_key)
+            await self._upsert_session_unlocked(session_key, user_id)
             await self._conn.execute(
                 """
                 INSERT INTO rooms(session_key, room_id, title, context)
@@ -410,14 +448,16 @@ class DBHandler:
             await self._conn.commit()
 
     # ===== Messages =====
-    async def save_message(self, room_id: str, role: str, content: str, session_key: str) -> None:
+    async def save_message(
+        self, room_id: str, role: str, content: str, session_key: str = "default"
+    ) -> None:
         """메시지 저장 (세션 키로 격리)
 
         Args:
             room_id: 방 ID
             role: 'user' 또는 'assistant'
             content: 메시지 내용
-            session_key: 세션 키
+            session_key: 세션 키 (기본값: "default")
         """
         assert self._conn is not None
         async with self._lock:
@@ -584,7 +624,7 @@ class DBHandler:
         """사용자명으로 조회"""
         assert self._conn is not None
         cur = await self._conn.execute(
-            "SELECT user_id, username, password_hash, email, is_active, created_at FROM users WHERE username = ?",
+            "SELECT user_id, username, password_hash, email, created_at, last_login FROM users WHERE username = ?",
             (username,),
         )
         row = await cur.fetchone()
@@ -594,17 +634,17 @@ class DBHandler:
         """사용자 ID로 조회"""
         assert self._conn is not None
         cur = await self._conn.execute(
-            "SELECT user_id, username, password_hash, email, is_active, created_at FROM users WHERE user_id = ?",
+            "SELECT user_id, username, password_hash, email, created_at, last_login FROM users WHERE user_id = ?",
             (user_id,),
         )
         row = await cur.fetchone()
         return dict(row) if row else None
 
-    async def update_user_active(self, user_id: int, is_active: bool) -> None:
-        """사용자 활성화/비활성화"""
+    async def update_user_last_login(self, user_id: int) -> None:
+        """사용자 마지막 로그인 시간 갱신"""
         assert self._conn is not None
         await self._conn.execute(
-            "UPDATE users SET is_active = ? WHERE user_id = ?", (is_active, user_id)
+            "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?", (user_id,)
         )
         await self._conn.commit()
 
@@ -612,7 +652,7 @@ class DBHandler:
         """모든 사용자 조회"""
         assert self._conn is not None
         cur = await self._conn.execute(
-            "SELECT user_id, username, email, is_active, created_at FROM users ORDER BY created_at DESC"
+            "SELECT user_id, username, email, created_at, last_login FROM users ORDER BY created_at DESC"
         )
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
