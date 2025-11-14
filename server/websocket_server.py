@@ -119,8 +119,14 @@ def is_session_retention_enabled(websocket, session: dict | None = None):
 ## stories 파서는 제거되었습니다(스토리 기능 비활성화).
 
 
-def _issue_token(ttl_seconds: int, typ: str):
-    """JWT 생성 공통 함수"""
+def _issue_token(ttl_seconds: int, typ: str, session_key: str | None = None):
+    """JWT 생성 공통 함수
+
+    Args:
+        ttl_seconds: 토큰 유효 시간 (초)
+        typ: 토큰 타입 ("access" 또는 "refresh")
+        session_key: 세션 키 (세션별 데이터 격리용)
+    """
     if not JWT_SECRET:
         return None, None
     now = datetime.utcnow()
@@ -131,18 +137,28 @@ def _issue_token(ttl_seconds: int, typ: str):
         "exp": exp,
         "typ": typ,
     }
+    if session_key:
+        payload["session_key"] = session_key
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return token, exp.isoformat() + "Z"
 
 
-def issue_access_token():
-    """Access 토큰 발급"""
-    return _issue_token(ACCESS_TTL_SECONDS, "access")
+def issue_access_token(session_key: str | None = None):
+    """Access 토큰 발급
+
+    Args:
+        session_key: 세션 키 (세션별 데이터 격리용)
+    """
+    return _issue_token(ACCESS_TTL_SECONDS, "access", session_key)
 
 
-def issue_refresh_token():
-    """Refresh 토큰 발급"""
-    return _issue_token(REFRESH_TTL_SECONDS, "refresh")
+def issue_refresh_token(session_key: str | None = None):
+    """Refresh 토큰 발급
+
+    Args:
+        session_key: 세션 키 (세션별 데이터 격리용)
+    """
+    return _issue_token(REFRESH_TTL_SECONDS, "refresh", session_key)
 
 
 def verify_token(token, expected_type: str = "access"):
@@ -224,7 +240,9 @@ async def handle_login_action(websocket, data):
                     )
                     exp = datetime.fromtimestamp(unverified.get("exp"))
                     if datetime.utcnow() - exp < TOKEN_EXPIRED_GRACE:
-                        new_token, expires_at = issue_access_token()
+                        # 기존 토큰의 session_key 유지
+                        old_session_key = unverified.get("session_key")
+                        new_token, expires_at = issue_access_token(old_session_key)
                         # refresh 토큰은 회전하지 않음(명시적 refresh에서 회전)
                         await websocket.send(
                             json.dumps(
@@ -259,7 +277,9 @@ async def handle_login_action(websocket, data):
             record_attempt(False)
             return
 
-        new_token, expires_at = issue_access_token()
+        # 토큰 검증 성공: 기존 session_key 유지
+        token_session_key = payload.get("session_key") if payload else None
+        new_token, expires_at = issue_access_token(token_session_key)
         await websocket.send(
             json.dumps(
                 {
@@ -336,8 +356,9 @@ async def handle_login_action(websocket, data):
             websocket_to_session[websocket] = user_session_key
             session_key = user_session_key
 
-        issued, expires_at = issue_access_token()
-        refresh, refresh_exp = issue_refresh_token()
+        # 로그인 성공: session_key를 JWT에 포함
+        issued, expires_at = issue_access_token(session_key)
+        refresh, refresh_exp = issue_refresh_token(session_key)
         await websocket.send(
             json.dumps(
                 {
@@ -382,11 +403,13 @@ async def handle_token_refresh_action(websocket, data):
         )
         return
 
-    new_access, access_exp = issue_access_token()
+    # 기존 refresh 토큰의 session_key 유지
+    token_session_key = payload.get("session_key") if payload else None
+    new_access, access_exp = issue_access_token(token_session_key)
     # 선택: refresh 토큰도 회전(보안 강화)
     rotate = bool(int(os.getenv("APP_REFRESH_ROTATE", "1")))
     if rotate:
-        new_refresh, refresh_exp = issue_refresh_token()
+        new_refresh, refresh_exp = issue_refresh_token(token_session_key)
     else:
         new_refresh, refresh_exp = refresh_token, None
 
