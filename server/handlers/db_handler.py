@@ -109,30 +109,97 @@ class DBHandler:
             )
             await self._conn.commit()
 
-    # ===== Rooms =====
-    async def _upsert_session_unlocked(self, session_key: str) -> None:
-        """Lock 없이 세션 upsert (내부용)"""
-        assert self._conn is not None
-        await self._conn.execute(
-            """
-            INSERT INTO sessions(session_key) VALUES(?)
-            ON CONFLICT(session_key) DO UPDATE SET last_accessed=CURRENT_TIMESTAMP
-            """,
-            (session_key,),
-        )
+        # 버전 2→3: sessions 테이블에 user_id 외래키 추가
+        if current_version < 3:
+            await self._conn.executescript(
+                """
+                -- 임시 테이블 생성
+                CREATE TABLE sessions_new (
+                    session_key TEXT PRIMARY KEY,
+                    user_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+                );
 
-    async def upsert_session(self, session_key: str) -> None:
+                -- 기존 데이터 복사 (user_id는 NULL)
+                INSERT INTO sessions_new (session_key, created_at, last_accessed)
+                SELECT session_key, created_at, last_accessed FROM sessions;
+
+                -- 기존 테이블 삭제 및 교체
+                DROP TABLE sessions;
+                ALTER TABLE sessions_new RENAME TO sessions;
+
+                -- 인덱스 재생성
+                CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
+                PRAGMA user_version = 3;
+                """
+            )
+            await self._conn.commit()
+
+    # ===== Rooms =====
+    async def _upsert_session_unlocked(self, session_key: str, user_id: int | None = None) -> None:
+        """Lock 없이 세션 upsert (내부용)
+
+        Args:
+            session_key: 세션 키
+            user_id: 사용자 ID (회원제 시스템용, None이면 비회원 세션)
+        """
+        assert self._conn is not None
+        if user_id is not None:
+            # user_id가 있으면 함께 저장/업데이트
+            await self._conn.execute(
+                """
+                INSERT INTO sessions(session_key, user_id) VALUES(?, ?)
+                ON CONFLICT(session_key) DO UPDATE SET
+                    last_accessed=CURRENT_TIMESTAMP,
+                    user_id=excluded.user_id
+                """,
+                (session_key, user_id),
+            )
+        else:
+            # user_id 없으면 기존 방식 (last_accessed만 업데이트)
+            await self._conn.execute(
+                """
+                INSERT INTO sessions(session_key) VALUES(?)
+                ON CONFLICT(session_key) DO UPDATE SET last_accessed=CURRENT_TIMESTAMP
+                """,
+                (session_key,),
+            )
+
+    async def upsert_session(self, session_key: str, user_id: int | None = None) -> None:
+        """세션 생성 또는 업데이트
+
+        Args:
+            session_key: 세션 키
+            user_id: 사용자 ID (회원제 시스템용, None이면 비회원 세션)
+        """
         assert self._conn is not None
         async with self._lock:
-            await self._upsert_session_unlocked(session_key)
+            await self._upsert_session_unlocked(session_key, user_id)
             await self._conn.commit()
 
     async def upsert_room(
-        self, room_id: str, session_key: str, title: str, context_json: str | None
+        self,
+        room_id: str,
+        session_key: str,
+        title: str,
+        context_json: str | None,
+        user_id: int | None = None,
     ) -> None:
+        """방 생성 또는 업데이트
+
+        Args:
+            room_id: 방 ID
+            session_key: 세션 키
+            title: 방 제목
+            context_json: 컨텍스트 JSON
+            user_id: 사용자 ID (회원제 시스템용, None이면 비회원)
+        """
         assert self._conn is not None
         async with self._lock:
-            await self._upsert_session_unlocked(session_key)
+            await self._upsert_session_unlocked(session_key, user_id)
             await self._conn.execute(
                 """
                 INSERT INTO rooms(session_key, room_id, title, context)
@@ -147,10 +214,34 @@ class DBHandler:
             await self._conn.commit()
 
     async def list_rooms(self, session_key: str) -> list[dict[str, Any]]:
+        """세션 키로 방 목록 조회"""
         assert self._conn is not None
         cur = await self._conn.execute(
             "SELECT room_id, title, context, created_at, updated_at FROM rooms WHERE session_key = ? ORDER BY updated_at DESC",
             (session_key,),
+        )
+        rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def list_rooms_by_user_id(self, user_id: int) -> list[dict[str, Any]]:
+        """user_id로 방 목록 조회 (세션 JOIN)
+
+        Args:
+            user_id: 사용자 ID
+
+        Returns:
+            방 목록 (room_id, title, context, created_at, updated_at, session_key)
+        """
+        assert self._conn is not None
+        cur = await self._conn.execute(
+            """
+            SELECT r.room_id, r.title, r.context, r.created_at, r.updated_at, r.session_key
+            FROM rooms r
+            JOIN sessions s ON r.session_key = s.session_key
+            WHERE s.user_id = ?
+            ORDER BY r.updated_at DESC
+            """,
+            (user_id,),
         )
         rows = await cur.fetchall()
         return [dict(r) for r in rows]

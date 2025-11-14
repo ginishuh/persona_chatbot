@@ -262,3 +262,146 @@ class TestJWTWithUserID:
         assert new_access_payload["session_key"] == session_key
         assert new_refresh_payload["user_id"] == user_id
         assert new_refresh_payload["session_key"] == session_key
+
+
+class TestUserDataIsolation:
+    """user_id 기반 데이터 격리 테스트"""
+
+    @pytest.mark.asyncio
+    async def test_user_session_storage(self, db_empty):
+        """로그인 시 user_id가 세션에 저장되는지 테스트"""
+        import bcrypt
+
+        # 사용자 생성
+        password_hash = bcrypt.hashpw(b"password123", bcrypt.gensalt()).decode("utf-8")
+        user_id = await db_empty.create_user("testuser", "test@example.com", password_hash)
+
+        # 세션 생성 (로그인 시뮬레이션)
+        session_key = "user:testuser"
+        await db_empty.upsert_session(session_key, user_id)
+
+        # 세션 조회로 user_id 확인
+        cursor = await db_empty._conn.execute(
+            "SELECT user_id FROM sessions WHERE session_key = ?", (session_key,)
+        )
+        row = await cursor.fetchone()
+        assert row is not None
+        assert row["user_id"] == user_id
+
+    @pytest.mark.asyncio
+    async def test_list_rooms_by_user_id(self):
+        """user_id로 방 목록 조회 격리 테스트"""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        import bcrypt
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "test.db"
+            db = DBHandler(str(db_path))
+            await db.initialize()
+
+            # 사용자 2명 생성
+            pw_hash = bcrypt.hashpw(b"password", bcrypt.gensalt()).decode("utf-8")
+            user1_id = await db.create_user("alice", "alice@example.com", pw_hash)
+            user2_id = await db.create_user("bob", "bob@example.com", pw_hash)
+
+            assert user1_id is not None
+            assert user2_id is not None
+
+            # Alice 세션 및 방 생성
+            session1 = "user:alice"
+            await db.upsert_session(session1, user1_id)
+            await db.upsert_room(
+                "room-a1",
+                session1,
+                "Alice's Room 1",
+                json.dumps({"world": "Alice World"}),
+                user1_id,
+            )
+            await db.upsert_room(
+                "room-a2",
+                session1,
+                "Alice's Room 2",
+                json.dumps({"world": "Alice World"}),
+                user1_id,
+            )
+
+            # Bob 세션 및 방 생성
+            session2 = "user:bob"
+            await db.upsert_session(session2, user2_id)
+            await db.upsert_room(
+                "room-b1",
+                session2,
+                "Bob's Room 1",
+                json.dumps({"world": "Bob World"}),
+                user2_id,
+            )
+
+            # Alice의 방 목록 조회 (user_id로)
+            alice_rooms = await db.list_rooms_by_user_id(user1_id)
+            assert len(alice_rooms) == 2
+            assert {r["room_id"] for r in alice_rooms} == {"room-a1", "room-a2"}
+            assert all(r["title"].startswith("Alice") for r in alice_rooms)
+
+            # Bob의 방 목록 조회 (user_id로)
+            bob_rooms = await db.list_rooms_by_user_id(user2_id)
+            assert len(bob_rooms) == 1
+            assert bob_rooms[0]["room_id"] == "room-b1"
+            assert bob_rooms[0]["title"] == "Bob's Room 1"
+
+            # 존재하지 않는 user_id로 조회 → 빈 목록
+            nonexistent_rooms = await db.list_rooms_by_user_id(9999)
+            assert len(nonexistent_rooms) == 0
+
+            await db.close()
+
+    @pytest.mark.asyncio
+    async def test_user_data_isolation_cross_check(self):
+        """사용자 간 데이터 격리 확인 (교차 검증)"""
+        import tempfile
+        from pathlib import Path
+
+        import bcrypt
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "test.db"
+            db = DBHandler(str(db_path))
+            await db.initialize()
+
+            # 사용자 2명 생성
+            pw_hash = bcrypt.hashpw(b"password", bcrypt.gensalt()).decode("utf-8")
+            user1_id = await db.create_user("user1", "user1@example.com", pw_hash)
+            user2_id = await db.create_user("user2", "user2@example.com", pw_hash)
+
+            # User1: 세션 및 방 생성
+            session1 = "user:user1"
+            await db.upsert_session(session1, user1_id)
+            await db.upsert_room("room-001", session1, "User1 Room", None, user1_id)
+            await db.save_message("room-001", "user", "User1's message")
+
+            # User2: 같은 room_id로 방 생성 (session_key가 다르므로 가능)
+            session2 = "user:user2"
+            await db.upsert_session(session2, user2_id)
+            await db.upsert_room("room-001", session2, "User2 Room", None, user2_id)
+            await db.save_message("room-001", "user", "User2's message")
+
+            # User1의 방 조회 (user_id로)
+            user1_rooms = await db.list_rooms_by_user_id(user1_id)
+            assert len(user1_rooms) == 1
+            assert user1_rooms[0]["title"] == "User1 Room"
+            assert user1_rooms[0]["session_key"] == session1
+
+            # User2의 방 조회 (user_id로)
+            user2_rooms = await db.list_rooms_by_user_id(user2_id)
+            assert len(user2_rooms) == 1
+            assert user2_rooms[0]["title"] == "User2 Room"
+            assert user2_rooms[0]["session_key"] == session2
+
+            # 메시지는 room_id로 구분되므로 둘 다 조회됨 (room 격리와 무관)
+            # 실제로는 room_id가 충돌하지 않도록 UUID 등을 사용해야 함
+            messages = await db.list_messages("room-001")
+            assert len(messages) == 2  # 두 사용자의 메시지 모두 조회됨
+
+            await db.close()

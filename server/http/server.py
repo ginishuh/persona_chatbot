@@ -870,9 +870,12 @@ def run_http_server(ctx: AppContext):
                     access_token, access_exp = issue_access_token(session_key, user_id)
                     refresh_token, refresh_exp = issue_refresh_token(session_key, user_id)
 
-                    # last_login 업데이트 (비동기)
+                    # last_login 업데이트 및 세션 저장 (비동기)
                     asyncio.run_coroutine_threadsafe(
                         ctx.db_handler.update_last_login(user_id), ctx.loop
+                    )
+                    asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.upsert_session(session_key, user_id), ctx.loop
                     )
 
                     # 성공 응답
