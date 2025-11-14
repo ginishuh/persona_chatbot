@@ -12,10 +12,56 @@ body {
     overflow: hidden;
 }
 
+/* 화면리더 전용 텍스트 */
+.sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+/* 접근성: 포커스 표시 */
+:focus-visible {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+}
+
+/* 접근성: 터치 타겟 최소 크기 */
+button, .btn, .more-menu-btn, .narrative-menu-btn, .hamburger-btn {
+    min-width: 44px;
+    min-height: 44px;
+}
+
+/* 비활성/포커스 시각 상태 */
+.btn:disabled, button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.btn:focus-visible, button:focus-visible {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+}
+
 .container {
     display: flex;
     flex-direction: column;
     height: 100vh;
+}
+
+.hidden { display: none !important; }
+
+.screen-root {
+    display: none;
+    padding: 1rem;
+}
+
+.screen-root.active {
+    display: block;
 }
 
 /* Header */
@@ -515,6 +561,14 @@ header h1 {
     margin-bottom: 0.75rem;
     transition: all 0.2s;
 }
+
+/* stories UI 제거(비활성화) */
+#storySelect,
+#loadStoryBtn,
+#resumeStoryBtn,
+#injectStoryBtn,
+#deleteStoryBtn,
+#saveNarrativeBtn { display: none !important; }
 
 .character-item:hover {
     border-color: #cbd5e0;
@@ -1040,7 +1094,7 @@ footer {
         height: calc(100vh - 60px);
         z-index: 999;
         transform: translateX(-100%);
-        transition: transform 0.3s ease;
+        transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
         width: 85%;
         max-width: 320px;
         box-shadow: 2px 0 12px rgba(0, 0, 0, 0.1);
@@ -1074,7 +1128,6 @@ footer {
 
     /* 모바일 오버레이 배경 */
     .mobile-overlay {
-        display: none;
         position: fixed;
         top: 0;
         left: 0;
@@ -1083,10 +1136,14 @@ footer {
         background: rgba(0, 0, 0, 0.4);
         z-index: 998;
         backdrop-filter: blur(2px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), backdrop-filter 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .mobile-overlay.active {
-        display: block;
+        opacity: 1;
+        pointer-events: auto;
     }
 
     /* 탭 버튼 크기 조정 */
@@ -1098,7 +1155,9 @@ footer {
     /* 작은 버튼들 크기 통일 */
     .btn-sm {
         font-size: 0.7rem;
-        padding: 0.25rem 0.4rem;
+        padding: 0.4rem 0.6rem;
+        min-height: 44px;
+        min-width: 44px;
     }
 }
 

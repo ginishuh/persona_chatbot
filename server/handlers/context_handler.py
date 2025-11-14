@@ -370,3 +370,47 @@ Response Example:
     def get_context(self):
         """현재 컨텍스트 반환"""
         return self.current_context.copy()
+
+    def load_from_dict(self, context_dict: dict):
+        """dict에서 컨텍스트 로드 (채팅방별 설정 복원용)
+
+        Args:
+            context_dict: DB에서 로드한 context JSON 또는 dict
+        """
+        if not isinstance(context_dict, dict):
+            return
+
+        # 각 필드를 setter를 통해 설정 (유효성 검사 포함)
+        if "world" in context_dict:
+            self.set_world(context_dict["world"])
+        if "situation" in context_dict:
+            self.set_situation(context_dict["situation"])
+        if "user_character" in context_dict:
+            self.set_user_character(context_dict["user_character"])
+        if "characters" in context_dict:
+            self.set_characters(context_dict["characters"])
+
+        # Narrator 설정
+        if "narrator_enabled" in context_dict:
+            self.set_narrator(
+                context_dict.get("narrator_enabled", False),
+                context_dict.get("narrator_mode", "moderate"),
+                context_dict.get("narrator_description", ""),
+                context_dict.get("user_is_narrator", False),
+            )
+
+        # Adult & 출력 설정
+        if "adult_level" in context_dict:
+            self.set_adult_level(context_dict["adult_level"])
+        if "narrative_separation" in context_dict:
+            self.set_narrative_separation(context_dict["narrative_separation"])
+        if "ai_provider" in context_dict:
+            self.set_ai_provider(context_dict["ai_provider"])
+        if "output_level" in context_dict:
+            self.set_output_level(context_dict["output_level"])
+        if "narrator_drive" in context_dict:
+            self.set_narrator_drive(context_dict["narrator_drive"])
+        if "choice_policy" in context_dict:
+            self.set_choice_policy(context_dict["choice_policy"])
+        if "choice_count" in context_dict:
+            self.set_choice_count(context_dict["choice_count"])

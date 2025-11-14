@@ -12,10 +12,15 @@ const statusIndicator = document.getElementById('statusIndicator');
 const statusText = document.getElementById('statusText');
 const logArea = document.getElementById('logArea');
 
-// 채팅 관련 요소
-const chatMessages = document.getElementById('chatMessages');
-const chatInput = document.getElementById('chatInput');
-const sendChatBtn = document.getElementById('sendChatBtn');
+// 채팅 관련 요소(동적 화면 대응)
+let chatMessages = document.getElementById('chatMessages');
+let chatInput = document.getElementById('chatInput');
+let sendChatBtn = document.getElementById('sendChatBtn');
+function refreshChatRefs() {
+    chatMessages = document.getElementById('chatMessages');
+    chatInput = document.getElementById('chatInput');
+    sendChatBtn = document.getElementById('sendChatBtn');
+}
 
 // 컨텍스트 패널 요소
 const contextContent = document.getElementById('contextContent');
@@ -80,10 +85,11 @@ const storySelect = document.getElementById('storySelect');
 const loadStoryBtn = document.getElementById('loadStoryBtn');
 const deleteStoryBtn = document.getElementById('deleteStoryBtn');
 const resumeStoryBtn = document.getElementById('resumeStoryBtn');
+const STORIES_ENABLED = false;
 // 채팅방 UI
 const roomSelect = document.getElementById('roomSelect');
 const roomAddBtn = document.getElementById('roomAddBtn');
-const roomDelBtn = document.getElementById('roomDelBtn');
+// const roomDelBtn = document.getElementById('roomDelBtn'); // 제거됨 - 개별 삭제 버튼으로 대체
 const roomSaveBtn = document.getElementById('roomSaveBtn');
 
 // 로그인 요소
@@ -122,8 +128,10 @@ let refreshRetryCount = 0;
 let refreshInProgress = false;
 let lastRequest = null; // 재전송용 마지막 사용자 액션
 let sessionKey = '';
-let rooms = ['default'];
-let currentRoom = 'default';
+let rooms = []; // 초기에는 빈 배열 (사용자가 명시적으로 생성해야 함)
+let currentRoom = null; // 초기에는 채팅방 없음 (ChatGPT/Claude.ai 스타일)
+let pendingRoutePath = null; // 로그인 이후 복원할 경로
+let autoLoginRequested = false; // 비로그인 환경 자동 로그인 시도 여부
 const RETRY_ACTIONS = new Set([
     'set_context', 'chat',
     'save_workspace_file', 'delete_workspace_file',
@@ -207,6 +215,726 @@ function setRefreshToken(token, expiresAt) {
     } catch (_) { /* ignore */ }
 }
 
+// ===== History API Router (스켈레톤) =====
+// 간단한 경로 → 화면 매핑. 현재 단계에서는 기존 화면 구조를 유지하면서 URL만 관리합니다.
+const routeTable = [
+    // 루트 경로는 매핑하지 않음 - ChatGPT 스타일 환영 화면만 표시
+    { pattern: /^\/rooms\/([^\/]+)$/, view: 'room-detail' },
+    { pattern: /^\/rooms\/([^\/]+)\/settings$/, view: 'room-settings' },
+    { pattern: /^\/rooms\/([^\/]+)\/history$/, view: 'room-history' },
+    { pattern: /^\/backup$/, view: 'backup' },
+];
+
+function parsePathname(pathname) {
+    for (const r of routeTable) {
+        const m = pathname.match(r.pattern);
+        if (m) {
+            return { view: r.view, params: m.slice(1) };
+        }
+    }
+    return { view: null, params: [] }; // 매치되지 않으면 아무 모달도 열지 않음
+}
+
+function rememberPendingRoute(pathname) {
+    pendingRoutePath = pathname || '/';
+}
+
+function resumePendingRoute() {
+    if (!pendingRoutePath) return;
+    if (appConfig.login_required && !isAuthenticated) {
+        return;
+    }
+    const target = pendingRoutePath;
+    pendingRoutePath = null;
+    try {
+        renderCurrentScreenFrom(target);
+    } catch (_) {}
+}
+
+function renderCurrentScreenFrom(pathname) {
+    if (appConfig.login_required && !isAuthenticated) {
+        rememberPendingRoute(pathname);
+        showLoginModal();
+        hideScreen();
+        return;
+    }
+    const { view, params } = parsePathname(pathname);
+    // 3열 메인 레이아웃 유지: 전용 화면 숨기고(main-content 표시), 라우트에 맞게 모달/패널만 제어
+    hideScreen();
+
+    if (view === 'room-list') {
+        openRoomsModal();
+        focusMainAfterRoute();
+        return;
+    }
+
+    if (view === 'room-detail' && params[0]) {
+        const rid = decodeURIComponent(params[0]);
+        if (currentRoom !== rid) {
+            currentRoom = rid;
+            persistRooms();
+            renderRoomsUI();
+            sendMessage({ action: 'room_load', room_id: currentRoom });
+            sendMessage({ action: 'reset_sessions', room_id: currentRoom });
+            refreshRoomViews();
+        }
+        focusMainAfterRoute();
+        return;
+    }
+
+    if (view === 'room-settings' && params[0]) {
+        const rid = decodeURIComponent(params[0]);
+        if (currentRoom !== rid) {
+            currentRoom = rid;
+            persistRooms();
+            renderRoomsUI();
+            sendMessage({ action: 'room_load', room_id: currentRoom });
+        }
+        const modal = document.getElementById('settingsModal');
+        if (modal) { modal.classList.remove('hidden'); enableFocusTrap(modal); }
+        // 최신 컨텍스트 불러와 반영
+        sendMessage({ action: 'get_context' });
+        return;
+    }
+
+    if (view === 'room-history' && params[0]) {
+        const rid = decodeURIComponent(params[0]);
+        if (currentRoom !== rid) {
+            currentRoom = rid;
+            persistRooms();
+            renderRoomsUI();
+            refreshRoomViews();
+        }
+        // 모바일에선 우측 패널 열기
+        try { openMobilePanel('right'); } catch (_) {}
+        focusMainAfterRoute();
+        return;
+    }
+
+    if (view === 'backup') {
+        openBackupModal();
+        return;
+    }
+
+    focusMainAfterRoute();
+}
+
+function navigate(path) {
+    window.history.pushState({ path }, '', path);
+    renderCurrentScreenFrom(location.pathname);
+}
+
+window.addEventListener('popstate', () => renderCurrentScreenFrom(location.pathname));
+
+// ===== 접근성(A11y) 보완 =====
+function focusMainAfterRoute() {
+    // 채팅 입력으로 포커스 이동, 없으면 첫 번째 헤더로
+    try {
+        if (chatInput && !chatInput.disabled) {
+            chatInput.focus();
+            return;
+        }
+        const h1 = document.querySelector('main h1, header h1');
+        if (h1) h1.tabIndex = -1, h1.focus();
+    } catch (_) {}
+}
+
+function applyARIA() {
+    const pairs = [
+        [sendChatBtn, '메시지 전송'],
+        [clearHistoryBtn, '대화 히스토리 초기화'],
+        [resetSessionsBtn, '세션 초기화'],
+        [roomAddBtn, '채팅방 추가'],
+        // [roomDelBtn, '채팅방 삭제'], // 제거됨 - 개별 삭제 버튼으로 대체
+        [roomSaveBtn, '채팅방 설정 저장'],
+        [saveContextBtn, '컨텍스트 저장'],
+        [document.getElementById('narrativeMenuBtn'), '히스토리 패널 열기'],
+        [document.getElementById('moreMenuBtn'), '더보기 메뉴 열기'],
+        [document.getElementById('participantsBtn'), '참여자 관리'],
+        [document.getElementById('settingsBtn'), '설정 열기'],
+        [document.getElementById('hamburgerBtn'), '좌측 패널 토글'],
+        [document.getElementById('narrativeMenuBtn'), '우측 패널 토글'],
+        [document.getElementById('loginButton'), '로그인 제출'],
+        [document.getElementById('autoLoginButton'), '자동 로그인']
+    ];
+    pairs.forEach(([el, label]) => { try { el?.setAttribute('aria-label', label); } catch (_) {} });
+    try { narrativeContent?.setAttribute('aria-live', 'polite'); } catch (_) {}
+}
+
+function injectSkipLink() {
+    try {
+        const a = document.createElement('a');
+        a.href = '#';
+        a.className = 'skip-link';
+        a.textContent = '본문으로 건너뛰기';
+        a.style.position = 'absolute';
+        a.style.left = '-9999px';
+        a.style.top = '0';
+        a.style.zIndex = '10000';
+        a.addEventListener('focus', () => { a.style.left = '8px'; a.style.top = '8px'; });
+        a.addEventListener('blur', () => { a.style.left = '-9999px'; });
+        a.addEventListener('click', (e) => { e.preventDefault(); focusMainAfterRoute(); });
+        document.body.prepend(a);
+    } catch (_) {}
+}
+
+// 초기 접근성 적용
+applyARIA();
+injectSkipLink();
+
+// ===== A11y: 포커스 트랩 =====
+const __focusTrap = new Map();
+
+function getFocusable(el) {
+    return el.querySelectorAll('a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])');
+}
+
+function enableFocusTrap(modalEl) {
+    try {
+        if (!modalEl) return;
+        const handler = (e) => {
+            if (e.key !== 'Tab') return;
+            const nodes = Array.from(getFocusable(modalEl)).filter(n => !n.disabled && n.tabIndex !== -1);
+            if (!nodes.length) return;
+            const first = nodes[0];
+            const last = nodes[nodes.length - 1];
+            if (e.shiftKey) {
+                if (document.activeElement === first || !modalEl.contains(document.activeElement)) {
+                    e.preventDefault();
+                    last.focus();
+                }
+            } else {
+                if (document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        };
+        modalEl.addEventListener('keydown', handler);
+        __focusTrap.set(modalEl, handler);
+        // 초점 진입
+        setTimeout(() => {
+            const nodes = Array.from(getFocusable(modalEl)).filter(n => !n.disabled && n.tabIndex !== -1);
+            (nodes[0] || modalEl).focus();
+        }, 0);
+    } catch (_) {}
+}
+
+function disableFocusTrap(modalEl) {
+    try {
+        const handler = __focusTrap.get(modalEl);
+        if (handler) modalEl.removeEventListener('keydown', handler);
+        __focusTrap.delete(modalEl);
+    } catch (_) {}
+}
+
+// ===== A11y: 상태 안내 =====
+function announce(message) {
+    try {
+        const live = document.getElementById('ariaLive');
+        if (!live) return;
+        live.textContent = '';
+        // SR이 같은 문장을 무시하지 않도록 미세 지연
+        setTimeout(() => { live.textContent = message; }, 10);
+    } catch (_) {}
+}
+
+// ESC로 닫기(로그인 모달 제외)
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const login = document.getElementById('loginModal');
+    const settings = document.getElementById('settingsModal');
+    const participants = document.getElementById('participantsModal');
+    const editor = document.getElementById('characterEditorModal');
+    const tryClose = (el) => {
+        if (el && !el.classList.contains('hidden')) {
+            el.classList.add('hidden');
+            disableFocusTrap(el);
+            return true;
+        }
+        return false;
+    };
+    // 로그인 모달은 ESC로 닫지 않음(정책상 로그인 필요 환경 고려)
+    if (tryClose(editor)) return;
+    if (tryClose(participants)) return;
+    if (tryClose(settings)) return;
+});
+
+// ===== 백업(Export) 모달 =====
+function buildExportUrl() {
+    const scope = document.getElementById('bkScopeFull').checked ? 'full'
+        : (document.getElementById('bkScopeSelected').checked ? 'selected' : 'single');
+    const inc = [];
+    if (document.getElementById('bkIncMessages').checked) inc.push('messages');
+    if (document.getElementById('bkIncContext').checked) inc.push('context');
+    if (document.getElementById('bkIncToken').checked) inc.push('token_usage');
+    const start = document.getElementById('bkStart').value;
+    const end = document.getElementById('bkEnd').value;
+    const ndjson = document.getElementById('bkFmtNdjson').checked;
+    const zip = document.getElementById('bkFmtZip').checked;
+
+    const base = ndjson ? '/api/export/stream' : '/api/export';
+    const params = new URLSearchParams();
+    params.set('scope', scope);
+    if (scope === 'single') {
+        if (!currentRoom) {
+            alert('내보낼 채팅방을 선택해주세요.');
+            return null;
+        }
+        params.set('room_id', currentRoom);
+    }
+    if (scope === 'selected') {
+        const sel = Array.from(document.querySelectorAll('#bkRoomsWrap input[type="checkbox"]:checked')).map(x => x.value);
+        if (sel.length) {
+            params.set('room_ids', sel.join(','));
+        } else if (currentRoom) {
+            params.set('room_ids', currentRoom);
+        } else {
+            alert('내보낼 채팅방을 선택해주세요.');
+            return null;
+        }
+    }
+    if (inc.length) params.set('include', inc.join(','));
+    if (start) params.set('start', start.replace('T','T')); // 그대로 전달
+    if (end) params.set('end', end.replace('T','T'));
+    if (!ndjson && zip) params.set('format','zip');
+    if (appConfig.login_required && authToken) params.set('token', authToken);
+    return `${base}?${params.toString()}`;
+}
+
+function populateBackupRooms() {
+    const wrap = document.getElementById('bkRoomsWrap');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const items = Array.isArray(rooms) ? rooms : [];
+    if (!items.length) { wrap.innerHTML = '<p class="hint">저장된 방이 없습니다.</p>'; return; }
+    items.forEach(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        const id = `bk-room-${rid}`;
+        const row = document.createElement('label');
+        row.className = 'checkbox-label';
+        row.innerHTML = `<input type="checkbox" value="${rid}" id="${id}"> <span>${title}</span>`;
+        wrap.appendChild(row);
+        if (rid === currentRoom) {
+            row.querySelector('input').checked = true;
+        }
+    });
+}
+
+function openBackupModal() {
+    const modal = document.getElementById('backupModal');
+    if (!modal) return;
+    populateBackupRooms();
+    modal.classList.remove('hidden');
+    enableFocusTrap(modal);
+}
+
+function closeBackupModal() {
+    const modal = document.getElementById('backupModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    disableFocusTrap(modal);
+}
+
+document.getElementById('bkCloseBtn')?.addEventListener('click', closeBackupModal);
+document.querySelector('#backupModal .settings-modal-overlay')?.addEventListener('click', closeBackupModal);
+document.getElementById('bkDownloadBtn')?.addEventListener('click', () => {
+    const url = buildExportUrl();
+    if (!url) return; // 검증 실패 시 리턴
+    try { window.open(url, '_blank'); } catch (_) { location.href = url; }
+});
+
+// scope 라디오 변경 시 방 목록 표시/숨김
+['bkScopeSingle','bkScopeSelected','bkScopeFull'].forEach(id => {
+    const el = document.getElementById(id);
+    el?.addEventListener('change', () => {
+        const show = document.getElementById('bkScopeSelected').checked;
+        const wrap = document.getElementById('bkRoomsWrap');
+        if (wrap) wrap.style.display = show ? 'block' : 'none';
+        if (show) populateBackupRooms();
+    });
+});
+
+// Backup 전용 화면
+function buildExportUrlFrom(prefix) {
+    const byId = (id) => document.getElementById(prefix + id);
+    const scope = byId('ScopeFull')?.checked ? 'full' : (byId('ScopeSelected')?.checked ? 'selected' : 'single');
+    const inc = [];
+    if (byId('IncMessages')?.checked) inc.push('messages');
+    if (byId('IncContext')?.checked) inc.push('context');
+    if (byId('IncToken')?.checked) inc.push('token_usage');
+    const start = byId('Start')?.value;
+    const end = byId('End')?.value;
+    const ndjson = byId('FmtNdjson')?.checked;
+    const zip = byId('FmtZip')?.checked;
+    const base = ndjson ? '/api/export/stream' : '/api/export';
+    const params = new URLSearchParams();
+    params.set('scope', scope);
+    if (scope === 'single') {
+        if (!currentRoom) {
+            alert('내보낼 채팅방을 선택해주세요.');
+            return null;
+        }
+        params.set('room_id', currentRoom);
+    }
+    if (scope === 'selected') {
+        const sel = Array.from(document.querySelectorAll('#sbkRoomsWrap input[type="checkbox"]:checked')).map(x => x.value);
+        if (sel.length) {
+            params.set('room_ids', sel.join(','));
+        } else if (currentRoom) {
+            params.set('room_ids', currentRoom);
+        } else {
+            alert('내보낼 채팅방을 선택해주세요.');
+            return null;
+        }
+    }
+    if (inc.length) params.set('include', inc.join(','));
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
+    if (!ndjson && zip) params.set('format','zip');
+    if (appConfig.login_required && authToken) params.set('token', authToken);
+    return `${base}?${params.toString()}`;
+}
+
+function populateBackupRoomsScreen() {
+    const wrap = document.getElementById('sbkRoomsWrap');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const items = Array.isArray(rooms) ? rooms : [];
+    items.forEach(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        const id = `sbk-room-${rid}`;
+        const row = document.createElement('label');
+        row.className = 'checkbox-label';
+        row.innerHTML = `<input type="checkbox" value="${rid}" id="${id}"> <span>${title}</span>`;
+        wrap.appendChild(row);
+        if (rid === currentRoom) row.querySelector('input').checked = true;
+    });
+}
+
+function renderBackupScreenView() {
+    const html = `
+    <section aria-labelledby="backupScreenTitle">
+      <h1 id="backupScreenTitle">백업 내보내기</h1>
+      <div class="context-section">
+        <label>범위(scope)</label>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+          <label class="checkbox-label"><input type="radio" name="sbkScope" id="sbkScopeSingle" checked> <span>현재 방</span></label>
+          <label class="checkbox-label"><input type="radio" name="sbkScope" id="sbkScopeSelected"> <span>선택한 방</span></label>
+          <label class="checkbox-label"><input type="radio" name="sbkScope" id="sbkScopeFull"> <span>전체</span></label>
+        </div>
+        <div id="sbkRoomsWrap" style="margin-top:0.5rem; display:none; border:1px solid #e8ecef; border-radius:6px; padding:0.5rem; max-height:160px; overflow:auto;"></div>
+      </div>
+      <div class="context-section">
+        <label>포함 항목(include)</label>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+          <label class="checkbox-label"><input type="checkbox" id="sbkIncMessages" checked> <span>messages</span></label>
+          <label class="checkbox-label"><input type="checkbox" id="sbkIncContext" checked> <span>context</span></label>
+          <label class="checkbox-label"><input type="checkbox" id="sbkIncToken"> <span>token_usage</span></label>
+        </div>
+      </div>
+      <div class="context-section">
+        <label>기간(start/end)</label>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+          <input type="datetime-local" id="sbkStart" class="input" style="min-width:220px;">
+          <input type="datetime-local" id="sbkEnd" class="input" style="min-width:220px;">
+        </div>
+      </div>
+      <div class="context-section">
+        <label>형식(format)</label>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+          <label class="checkbox-label"><input type="radio" name="sbkFormat" id="sbkFmtJson" checked> <span>JSON</span></label>
+          <label class="checkbox-label"><input type="radio" name="sbkFormat" id="sbkFmtZip"> <span>ZIP(JSON)</span></label>
+          <label class="checkbox-label"><input type="radio" name="sbkFormat" id="sbkFmtNdjson"> <span>Stream(NDJSON)</span></label>
+        </div>
+      </div>
+      <div class="context-section" style="display:flex; gap:0.5rem;">
+        <button class="btn" onclick="navigate(currentRoom ? '/rooms/${encodeURIComponent(currentRoom)}' : '/')">← 돌아가기</button>
+        <button id="sbkDownloadBtn" class="btn btn-primary">⬇️ 다운로드</button>
+      </div>
+    </section>`;
+    showScreen(html);
+    // events
+    document.getElementById('sbkDownloadBtn')?.addEventListener('click', () => {
+        const idmap = {
+          ScopeFull: 'sbkScopeFull', ScopeSelected: 'sbkScopeSelected', IncMessages:'sbkIncMessages', IncContext:'sbkIncContext', IncToken:'sbkIncToken', Start:'sbkStart', End:'sbkEnd', FmtNdjson:'sbkFmtNdjson', FmtZip:'sbkFmtZip'
+        };
+        // helper expects prefix mapping; we alias by setting IDs; simpler: temporarily map
+        const url = buildExportUrlFrom('sbk');
+        if (!url) return; // 검증 실패 시 리턴
+        try { window.open(url, '_blank'); } catch (_) { location.href = url; }
+    });
+    // scope radio
+    ['sbkScopeSingle','sbkScopeSelected','sbkScopeFull'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', () => {
+            const show = document.getElementById('sbkScopeSelected').checked;
+            const wrap = document.getElementById('sbkRoomsWrap');
+            if (wrap) wrap.style.display = show ? 'block' : 'none';
+            if (show) populateBackupRoomsScreen();
+        });
+    });
+}
+
+// ===== 전용 화면 컨테이너 토글 =====
+function showScreen(html) {
+    const root = document.getElementById('screenRoot');
+    const main = document.querySelector('.main-content');
+    if (root && main) {
+        root.innerHTML = html || '';
+        root.classList.add('active');
+        root.classList.remove('hidden');
+        main.classList.add('hidden');
+    }
+}
+
+function hideScreen() {
+    const root = document.getElementById('screenRoot');
+    const main = document.querySelector('.main-content');
+    if (root && main) {
+        root.classList.remove('active');
+        root.classList.add('hidden');
+        root.innerHTML = '';
+        main.classList.remove('hidden');
+    }
+}
+
+// Rooms 화면
+function renderRoomsScreen() {
+    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        return { rid, title };
+    });
+    const cards = items.map(it => `
+      <button class="btn" style="width:100%; text-align:left; margin-bottom:8px;" onclick="navigate('/rooms/${encodeURIComponent(it.rid)}')">${it.title}</button>
+    `).join('');
+    const html = `
+      <section aria-labelledby="roomsScreenTitle">
+        <h1 id="roomsScreenTitle">채팅방</h1>
+        <div style="max-width:720px; margin-top:0.5rem;">${cards || '<div class="empty">채팅방이 없습니다.</div>'}</div>
+        <div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
+          <button class="btn" onclick="navigate(currentRoom ? '/rooms/${encodeURIComponent(currentRoom)}' : '/')">← 돌아가기</button>
+          <button class="btn btn-primary" onclick="(function(){ const name=prompt('새 채팅방 이름','room_'+Math.random().toString(36).slice(2,6)); if(!name) return; const r=sanitizeRoomName(name); if(!rooms.find(x => (typeof x==='string'?x:x.room_id)===r)) rooms.push(r); currentRoom=r; persistRooms(); renderRoomsUI(); const cfg=collectRoomConfig(r); sendMessage({action:'room_save', room_id:r, config:cfg}); setTimeout(()=>sendMessage({action:'room_list'}),300); navigate('/rooms/'+encodeURIComponent(r)); })()">+ 새 채팅방</button>
+        </div>
+      </section>`;
+    showScreen(html);
+}
+
+// Chat 전용 화면
+function renderRoomScreenView(roomId) {
+    const html = `
+      <section aria-labelledby="roomScreenTitle" style="max-width:900px;">
+        <h1 id="roomScreenTitle">대화 — ${roomId}</h1>
+        <div id="chatMessages" class="chat-messages" style="height:60vh; overflow:auto; border:1px solid #e8ecef; border-radius:6px; padding:0.75rem; background:#fff; margin-top:0.5rem;">
+          <div class="chat-message system"><p>대화를 시작하세요</p></div>
+        </div>
+        <div class="chat-input-container" style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+          <textarea id="chatInput" rows="3" class="input" placeholder="메시지를 입력하세요..." style="flex:1;"></textarea>
+          <button id="sendChatBtn" class="btn btn-primary">전송</button>
+        </div>
+        <div style="margin-top:0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <button class="btn" onclick="navigate('/')">← 방 목록</button>
+          <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(roomId)}/settings')">⚙️ 설정</button>
+          <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(roomId)}/history')">📜 히스토리</button>
+        </div>
+      </section>`;
+    showScreen(html);
+    bindChatEvents();
+}
+
+// History 화면
+function renderHistoryScreenView(id) {
+    const html = `
+      <section aria-labelledby="historyScreenTitle">
+        <h1 id="historyScreenTitle">히스토리</h1>
+        <div id="historyScreenBody">로딩...</div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.5rem; flex-wrap:wrap;">
+          <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(id)}')">← 돌아가기</button>
+          <button class="btn" onclick="downloadRoomMd('${id}')">MD 다운로드</button>
+          <a class="btn" href="/api/export?scope=single&room_id=${encodeURIComponent(id)}" target="_blank">JSON</a>
+          <a class="btn" href="/api/export/stream?scope=single&room_id=${encodeURIComponent(id)}" target="_blank">NDJSON</a>
+        </div>
+      </section>`;
+    showScreen(html);
+    // 데이터 로드
+    sendMessage({ action: 'get_history_snapshot', room_id: id });
+}
+
+// 히스토리 스냅샷 수신 시 전용 화면도 갱신
+function renderHistorySnapshotScreen(history) {
+    const el = document.getElementById('historyScreenBody');
+    if (!el) return;
+    if (!Array.isArray(history) || history.length === 0) {
+        el.innerHTML = '<div class="empty">대화가 없습니다.</div>';
+        return;
+    }
+    el.innerHTML = history.map(m => {
+        const role = m.role === 'user' ? '사용자' : 'AI 응답';
+        return `<h3>${role}</h3><pre style="white-space:pre-wrap">${(m.content||'').replace(/</g,'&lt;')}</pre>`;
+    }).join('');
+}
+
+function downloadRoomMd(rid) {
+    const params = new URLSearchParams({ room_id: rid });
+    if (appConfig.login_required && authToken) params.set('token', authToken);
+    const url = `/api/export/md?${params.toString()}`;
+    try { window.open(url, '_blank'); } catch (_) { location.href = url; }
+}
+
+// ===== 방 목록(Home) 모달 =====
+function populateRoomsModal() {
+    const wrap = document.getElementById('rmList');
+    const q = (document.getElementById('rmSearch')?.value || '').trim().toLowerCase();
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        return { rid, title };
+    }).filter(x => !q || x.title.toLowerCase().includes(q) || x.rid.toLowerCase().includes(q));
+    if (!items.length) {
+        wrap.innerHTML = '<div class="empty">채팅방이 없습니다.</div>';
+        return;
+    }
+    items.forEach(it => {
+        const container = document.createElement('div');
+        container.style = 'display:flex; gap:0.25rem; margin-bottom:6px; align-items:stretch;';
+
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm';
+        btn.style = 'flex:1; text-align:left;';
+        btn.textContent = it.title;
+        btn.addEventListener('click', () => {
+            closeRoomsModal();
+            navigate(`/rooms/${encodeURIComponent(it.rid)}`);
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-sm btn-remove';
+        delBtn.textContent = '🗑️';
+        delBtn.title = '삭제';
+        delBtn.style = 'padding: 0.25rem 0.5rem;';
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!confirm(`채팅방 '${it.title}' 을(를) 삭제하시겠습니까?`)) return;
+            sendMessage({ action: 'room_delete', room_id: it.rid });
+            // DB 삭제 후 목록 재동기화
+            setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+            // 로컬 상태는 즉시 업데이트 (UX)
+            rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
+            if (currentRoom === it.rid) {
+                currentRoom = rooms.length > 0 ? (typeof rooms[0] === 'string' ? rooms[0] : rooms[0].room_id) : null;
+            }
+            persistRooms();
+            populateRoomsModal();
+            renderRoomsUI();
+            renderRoomsRightPanelList();
+            log('채팅방 삭제 완료', 'success');
+        });
+
+        container.appendChild(btn);
+        container.appendChild(delBtn);
+        wrap.appendChild(container);
+    });
+}
+
+function openRoomsModal() {
+    if (appConfig.login_required && !isAuthenticated) {
+        showLoginModal();
+        return;
+    }
+    const modal = document.getElementById('roomsModal');
+    if (!modal) return;
+    populateRoomsModal();
+    modal.classList.remove('hidden');
+    enableFocusTrap(modal);
+}
+
+function closeRoomsModal() {
+    const modal = document.getElementById('roomsModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    disableFocusTrap(modal);
+}
+
+document.getElementById('rmCloseBtn')?.addEventListener('click', closeRoomsModal);
+document.querySelector('#roomsModal .settings-modal-overlay')?.addEventListener('click', closeRoomsModal);
+document.getElementById('rmSearch')?.addEventListener('input', populateRoomsModal);
+document.getElementById('rmNewBtn')?.addEventListener('click', () => {
+    const name = prompt('새 채팅방 이름', 'room_' + Math.random().toString(36).slice(2, 6));
+    if (!name) return;
+    const r = sanitizeRoomName(name);
+    if (!rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) rooms.push(r);
+    currentRoom = r;
+    persistRooms();
+    renderRoomsUI();
+    const config = collectRoomConfig(r);
+    sendMessage({ action: 'room_save', room_id: r, config });
+    setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+    navigate(`/rooms/${encodeURIComponent(r)}`);
+});
+
+// ===== 3열 우측 패널: 방 목록 렌더 =====
+function renderRoomsRightPanelList() {
+    const list = document.getElementById('roomList');
+    const search = document.getElementById('roomSearch');
+    if (!list) return;
+    const q = (search?.value || '').trim().toLowerCase();
+    list.innerHTML = '';
+    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        return { rid, title };
+    }).filter(x => !q || x.title.toLowerCase().includes(q) || x.rid.toLowerCase().includes(q));
+    if (!items.length) {
+        list.innerHTML = '<div class="empty">저장된 채팅방이 없습니다.</div>';
+        return;
+    }
+    items.forEach(it => {
+        const container = document.createElement('div');
+        container.style = 'display:flex; gap:0.25rem; margin-bottom:4px; align-items:stretch;';
+
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm';
+        btn.style = 'flex:1; text-align:left;';
+        btn.textContent = it.title;
+        btn.addEventListener('click', () => {
+            navigate(`/rooms/${encodeURIComponent(it.rid)}`);
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-sm btn-remove';
+        delBtn.textContent = '🗑️';
+        delBtn.title = '삭제';
+        delBtn.style = 'padding: 0.25rem 0.5rem;';
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!confirm(`채팅방 '${it.title}' 을(를) 삭제하시겠습니까?`)) return;
+            sendMessage({ action: 'room_delete', room_id: it.rid });
+            // DB 삭제 후 목록 재동기화
+            setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+            // 로컬 상태는 즉시 업데이트 (UX)
+            rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
+            if (currentRoom === it.rid) {
+                currentRoom = rooms.length > 0 ? (typeof rooms[0] === 'string' ? rooms[0] : rooms[0].room_id) : null;
+            }
+            persistRooms();
+            renderRoomsUI();
+            renderRoomsRightPanelList();
+            refreshRoomViews();
+            log('채팅방 삭제 완료', 'success');
+        });
+
+        container.appendChild(btn);
+        container.appendChild(delBtn);
+        list.appendChild(container);
+    });
+}
+
+document.getElementById('roomSearch')?.addEventListener('input', renderRoomsRightPanelList);
+
 // ===== WebSocket 연결 =====
 
 async function loadAppConfig() {
@@ -245,6 +973,8 @@ function connect() {
             if (savedCurrent) currentRoom = savedCurrent;
             renderRoomsUI();
         } catch (_) {}
+        // 초기 라우트 반영
+        try { renderCurrentScreenFrom(location.pathname); } catch (_) {}
     };
 
     ws.onmessage = (event) => {
@@ -261,6 +991,7 @@ function connect() {
         log('연결이 끊어졌습니다. 5초 후 재연결...', 'error');
         authRequired = false;
         isAuthenticated = false;
+        autoLoginRequested = false;
         hideLoginModal();
         clearTimeout(tokenRefreshTimeout);
         tokenRefreshTimeout = null;
@@ -377,7 +1108,10 @@ function sendMessage(payload, options = {}) {
         'chat', 'get_history_snapshot', 'clear_history', 'get_history_settings', 'set_history_limit', 'get_narrative'
     ]);
     if (ACTIONS_WITH_ROOM.has(String(payload.action))) {
-        message.room_id = currentRoom || 'default';
+        if (currentRoom) {
+            message.room_id = currentRoom;
+        }
+        // currentRoom이 없으면 room_id를 설정하지 않음 (서버가 처리)
     }
     if (!options.skipRetry && RETRY_ACTIONS.has(payload.action)) {
         lastRequest = message;
@@ -399,12 +1133,12 @@ function initializeAppData() {
     loadFileList('situation', situationSelect);
     loadFileList('my_character', myCharacterSelect);
     loadPresetList();
-    loadStoryList();
 }
 
 // ===== 채팅방 관리 =====
 function sanitizeRoomName(name) {
-    return (name || '').trim().replace(/[^A-Za-z0-9_\-]/g, '_') || 'default';
+    const sanitized = (name || '').trim().replace(/[^A-Za-z0-9_\-]/g, '_');
+    return sanitized || 'room_untitled';
 }
 
 function persistRooms() {
@@ -418,6 +1152,14 @@ function renderRoomsUI() {
     if (!roomSelect) return;
     // 방 목록 반영
     roomSelect.innerHTML = '';
+
+    // 빈 옵션 추가 (채팅방 선택 안내)
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.textContent = '← 채팅방 선택 또는 추가';
+    emptyOpt.disabled = true;
+    roomSelect.appendChild(emptyOpt);
+
     (rooms || []).forEach(r => {
         const roomId = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
         const title = (typeof r === 'object' && r.title) ? r.title : roomId;
@@ -426,21 +1168,84 @@ function renderRoomsUI() {
         opt.textContent = title;
         roomSelect.appendChild(opt);
     });
-    const hasCurrent = (rooms || []).some(x => (typeof x === 'string' ? x : x.room_id) === currentRoom);
-    if (!hasCurrent) currentRoom = 'default';
-    roomSelect.value = currentRoom;
+
+    const hasCurrent = currentRoom && (rooms || []).some(x => (typeof x === 'string' ? x : x.room_id) === currentRoom);
+    if (!hasCurrent && rooms && rooms.length > 0) {
+        // 방이 있지만 currentRoom이 없거나 유효하지 않으면 첫 번째 방 선택
+        const firstRoom = rooms[0];
+        const extractedId = typeof firstRoom === 'string' ? firstRoom : (firstRoom.room_id || null);
+        if (extractedId) {
+            currentRoom = extractedId;
+        }
+        // room_id가 없으면 currentRoom을 null로 유지
+    }
+
+    roomSelect.value = currentRoom || '';
+    if (currentRoom) {
+        announce(`채팅방 전환: ${currentRoom}`);
+    }
+
+    // 채팅 입력 상태 업데이트
+    updateChatInputState();
+}
+
+function updateChatInputState() {
+    refreshChatRefs(); // DOM 참조 갱신
+
+    if (!currentRoom) {
+        // 채팅방 미선택 - 입력 비활성화
+        if (chatInput) {
+            chatInput.disabled = true;
+            chatInput.placeholder = '← 먼저 채팅방을 선택하거나 생성하세요';
+        }
+        if (sendChatBtn) {
+            sendChatBtn.disabled = true;
+        }
+
+        // 환영 메시지 표시
+        if (chatMessages) {
+            chatMessages.innerHTML = `
+                <div class="welcome-message" style="text-align: center; padding: 4rem 2rem; color: var(--text-muted, #888);">
+                    <h2 style="margin-bottom: 1rem; color: var(--text-primary, #000);">Persona Chat에 오신 것을 환영합니다</h2>
+                    <p style="margin-bottom: 2rem;">왼쪽 상단의 <strong>채팅</strong> 탭에서 새 채팅방을 만들어보세요.</p>
+                    <div style="max-width: 500px; margin: 0 auto; text-align: left; line-height: 1.8;">
+                        <p><strong>📌 시작 방법:</strong></p>
+                        <ol style="padding-left: 1.5rem;">
+                            <li>왼쪽 패널의 <strong>채팅</strong> 탭 클릭</li>
+                            <li><strong>[+]</strong> 버튼으로 새 채팅방 생성</li>
+                            <li><strong>캐릭터</strong> 탭에서 대화 상대 추가</li>
+                            <li>대화 시작!</li>
+                        </ol>
+                    </div>
+                </div>
+            `;
+        }
+    } else {
+        // 채팅방 선택됨 - 입력 활성화
+        if (chatInput) {
+            chatInput.disabled = false;
+            chatInput.placeholder = '메시지를 입력하세요...';
+        }
+        if (sendChatBtn) {
+            sendChatBtn.disabled = false;
+        }
+    }
 }
 
 function refreshRoomViews() {
     sendMessage({ action: 'get_narrative' });
     sendMessage({ action: 'get_history_settings' });
     sendMessage({ action: 'get_history_snapshot' });
-    loadStoryList();
 }
 
 if (roomSelect) {
     roomSelect.addEventListener('change', () => {
-        currentRoom = roomSelect.value || 'default';
+        const selectedValue = roomSelect.value;
+        if (!selectedValue) {
+            // 빈 옵션 선택됨 - 무시
+            return;
+        }
+        currentRoom = selectedValue;
         persistRooms();
         // 방 설정 로드 시도
         sendMessage({ action: 'room_load', room_id: currentRoom });
@@ -448,7 +1253,9 @@ if (roomSelect) {
         sendMessage({ action: 'reset_sessions', room_id: currentRoom });
         // 서사/히스토리 뷰 갱신
         refreshRoomViews();
+        updateChatInputState(); // 입력 상태 업데이트
         log(`채팅방 전환: ${currentRoom}`, 'info');
+        announce(`채팅방 전환: ${currentRoom}`);
     });
 }
 if (roomAddBtn) {
@@ -463,33 +1270,22 @@ if (roomAddBtn) {
         // 현재 설정으로 방 저장
         const config = collectRoomConfig(r);
         sendMessage({ action: 'room_save', room_id: r, config });
-        setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+        setTimeout(() => { sendMessage({ action: 'room_list' }); renderRoomsRightPanelList(); }, 300);
         refreshRoomViews();
         log(`채팅방 추가: ${r}`, 'success');
+        announce(`채팅방 추가: ${r}`);
     });
 }
-if (roomDelBtn) {
-    roomDelBtn.addEventListener('click', () => {
-        if (currentRoom === 'default') {
-            alert('기본 채팅방은 삭제할 수 없습니다.');
-            return;
-        }
-        if (!confirm(`채팅방 '${currentRoom}' 설정을 삭제하시겠습니까? (서사 파일은 보존)`)) return;
-        sendMessage({ action: 'room_delete', room_id: currentRoom });
-        rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== currentRoom);
-        currentRoom = 'default';
-        persistRooms();
-        renderRoomsUI();
-        refreshRoomViews();
-        log('채팅방 삭제 완료', 'success');
-    });
-}
+// roomDelBtn 제거됨 - 각 채팅방 옆에 개별 삭제 버튼으로 대체
 if (roomSaveBtn) {
     roomSaveBtn.addEventListener('click', () => {
-        const r = currentRoom || 'default';
-        const config = collectRoomConfig(r);
-        sendMessage({ action: 'room_save', room_id: r, config });
-        setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+        if (!currentRoom) {
+            alert('저장할 채팅방을 선택해주세요.');
+            return;
+        }
+        const config = collectRoomConfig(currentRoom);
+        sendMessage({ action: 'room_save', room_id: currentRoom, config });
+        setTimeout(() => { sendMessage({ action: 'room_list' }); renderRoomsRightPanelList(); }, 300);
         log('채팅방 설정 저장 완료', 'success');
     });
 }
@@ -708,6 +1504,12 @@ function mapAuthError(code) {
 function showLoginModal() {
     if (!loginModal) return;
     loginModal.classList.remove('hidden');
+    try {
+        loginModal.setAttribute('role', 'dialog');
+        loginModal.setAttribute('aria-modal', 'true');
+        loginModal.setAttribute('aria-label', '로그인 대화상자');
+    } catch (_) {}
+    enableFocusTrap(loginModal);
     // 아이디/체크박스 초기화
     try {
         const savedUser = localStorage.getItem(LOGIN_USER_KEY) || '';
@@ -730,6 +1532,7 @@ function hideLoginModal() {
     loginError.textContent = '';
     chatInput.disabled = false;
     sendChatBtn.disabled = false;
+    disableFocusTrap(loginModal);
 }
 
 function submitLogin() {
@@ -787,6 +1590,7 @@ function handleMessage(msg) {
             if (data && data.login_required) {
                 authRequired = true;
                 isAuthenticated = false;
+                autoLoginRequested = false;
                 if (authToken) {
                     const consent = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
                     sendMessage({ action: 'login', adult_consent: consent || undefined });
@@ -810,6 +1614,11 @@ function handleMessage(msg) {
                 authRequired = false;
                 isAuthenticated = true;
                 hideLoginModal();
+                resumePendingRoute();
+                if (!autoLoginRequested) {
+                    autoLoginRequested = true;
+                    sendMessage({ action: 'login' }, { skipToken: true });
+                }
                 initializeAppData();
             }
             break;
@@ -817,6 +1626,9 @@ function handleMessage(msg) {
         case 'auth_required':
             authRequired = true;
             isAuthenticated = false;
+            if (appConfig.login_required) {
+                rememberPendingRoute(location.pathname);
+            }
             // refresh 토큰으로 자동 갱신 시도
             if (!refreshInProgress && refreshToken) {
                 refreshInProgress = true;
@@ -849,7 +1661,8 @@ function handleMessage(msg) {
                     sessionKey = data.session_key;
                     try { localStorage.setItem(SESSION_KEY_KEY, sessionKey); } catch (_) {}
                 }
-                log('로그인 성공', 'success');
+                const handshakeOnly = !appConfig.login_required && !data.token && !data.refresh_token;
+                log(handshakeOnly ? '세션 키 동기화 완료' : '로그인 성공', 'success');
                 // 아이디/자동로그인 저장
                 try {
                     const user = (loginUsernameInput?.value || '').trim();
@@ -877,7 +1690,10 @@ function handleMessage(msg) {
                     sendMessage(payload, { skipRetry: true });
                     lastRequest = null;
                 }
-                initializeAppData();
+                if (appConfig.login_required || data.token || data.refresh_token) {
+                    initializeAppData();
+                }
+                resumePendingRoute();
             } else {
                 const errorMsg = mapAuthError(data.code) || data.error || '로그인에 실패했습니다.';
                 clearAuthToken();
@@ -912,6 +1728,7 @@ function handleMessage(msg) {
         case 'get_context':
             if (data.success) {
                 loadContext(data.context);
+                applyContextToSettingsScreen(data.context);
             }
             break;
 
@@ -1015,6 +1832,7 @@ function handleMessage(msg) {
                 rooms = data.rooms || [];
                 try { localStorage.setItem(ROOMS_KEY, JSON.stringify(rooms)); } catch (_) {}
                 renderRoomsUI();
+                renderRoomsRightPanelList();
             } else {
                 log(`방 목록 로드 실패: ${data.error}`, 'error');
             }
@@ -1048,8 +1866,10 @@ function handleMessage(msg) {
                         userCharacterInput.value = prof.description;
                     }
                 } catch (_) {}
-                // 서버 컨텍스트에도 적용
-                sendMessage({ action: 'set_context', ...ctx });
+                // 서버 컨텍스트에 적용 (서버에서 이미 ContextHandler에 적용했지만, 일관성을 위해 호출)
+                // 주의: room_id 포함하여 해당 채팅방 설정으로 저장되도록 함
+                // sendMessage({ action: 'set_context', room_id: room.room_id, ...ctx });
+                // → 서버에서 이미 적용했으므로 생략 (중복 호출 방지)
                 log('방 설정 로드 완료', 'success');
             } else {
                 log(`방 로드 실패: ${data.error}`, 'error');
@@ -1130,54 +1950,17 @@ function handleMessage(msg) {
         // 모드 전환 관련 메시지 제거됨
 
         case 'list_stories':
-            if (data.success) {
-                updateStoryList(data.files);
-            } else {
-                log(`서사 목록 로드 실패: ${data.error}`, 'error');
-            }
-            break;
-
         case 'save_story':
-            if (data.success) {
-                log(`서사 저장 완료: ${data.filename}`, 'success');
-                loadStoryList(); // 목록 새로고침
-            } else {
-                log(`서사 저장 실패: ${data.error}`, 'error');
-            }
-            break;
-
         case 'load_story':
-            if (data.success) {
-                displayStoryContent(data.content);
-                log(`서사 로드 완료: ${data.filename}`, 'success');
-            } else {
-                log(`서사 로드 실패: ${data.error}`, 'error');
-            }
-            break;
-
         case 'delete_story':
-            if (data.success) {
-                log(`서사 삭제 완료: ${data.filename}`, 'success');
-                loadStoryList(); // 목록 새로고침
-                narrativeContent.innerHTML = '<p class="placeholder">대화가 진행되면 여기에 서사가 기록됩니다.</p>';
-            } else {
-                log(`서사 삭제 실패: ${data.error}`, 'error');
-            }
-            break;
-
         case 'resume_from_story':
-            if (data.success) {
-                log(`이어하기 완료: 최근 ${data.injected_turns}턴 주입${data.summarized ? ' + 요약' : ''} (예상 토큰 ~${data.approx_tokens})`, 'success');
-                // 주입 후 스냅샷 받아 채팅창 복원
-                sendMessage({ action: 'get_history_snapshot' });
-            } else {
-                log(`이어하기 실패: ${data.error}`, 'error');
-            }
+            log('스토리 파일 기능은 비활성화되었습니다(히스토리 화면에서 확인하세요).', 'info');
             break;
 
         case 'get_history_snapshot':
             if (data.success) {
                 renderHistorySnapshot(data.history || []);
+                renderHistorySnapshotScreen(data.history || []);
             } else {
                 log(`스냅샷 로드 실패: ${data.error}`, 'error');
             }
@@ -1741,6 +2524,11 @@ function collectCharacterFromItem(item) {
 
 // 컨텍스트 저장
 saveContextBtn.addEventListener('click', () => {
+    if (!currentRoom) {
+        alert('설정을 저장할 채팅방을 선택해주세요.');
+        return;
+    }
+
     if (saveContextBtn) saveContextBtn.disabled = true;
     const characters = Array.isArray(participants) ? participants : [];
 
@@ -1763,6 +2551,7 @@ saveContextBtn.addEventListener('click', () => {
 
     sendMessage({
         action: 'set_context',
+        room_id: currentRoom,  // 채팅방별 독립 설정
         world: worldInput.value.trim(),
         situation: situationInput.value.trim(),
         user_character: userCharacterData,
@@ -1782,9 +2571,8 @@ saveContextBtn.addEventListener('click', () => {
     });
     // 방 설정도 함께 저장(room.json)
     try {
-        const r = currentRoom || 'default';
-        const config = collectRoomConfig(r);
-        sendMessage({ action: 'room_save', room_id: r, config });
+        const config = collectRoomConfig(currentRoom);
+        sendMessage({ action: 'room_save', room_id: currentRoom, config });
     } catch (_) {}
     // 설정 적용 시 설정 모달 닫기
     try {
@@ -1891,6 +2679,84 @@ function loadContext(context) {
     renderParticipantsLeftPanel();
     renderParticipantsManagerList();
 }
+
+// 설정 전용 화면 채우기
+function applyContextToSettingsScreen(ctx) {
+    const w = document.getElementById('sWorld');
+    const s = document.getElementById('sSituation');
+    const u = document.getElementById('sUserChar');
+    const ne = document.getElementById('sNarratorEnabled');
+    const ap = document.getElementById('sAiProvider');
+    if (!w && !s && !u) return; // 화면 아닐 때
+    try { if (w) w.value = ctx.world || ''; } catch (_) {}
+    try { if (s) s.value = ctx.situation || ''; } catch (_) {}
+    try { if (u) u.value = ctx.user_character || ''; } catch (_) {}
+    try { if (ne) ne.checked = !!ctx.narrator_enabled; } catch (_) {}
+    try { if (ap && ctx.ai_provider) ap.value = ctx.ai_provider; } catch (_) {}
+}
+
+function renderSettingsScreenView(roomId) {
+    const html = `
+      <section aria-labelledby="settingsScreenTitle">
+        <h1 id="settingsScreenTitle">설정 — ${roomId}</h1>
+        <div style="display:grid; gap:0.75rem; max-width:920px;">
+          <div>
+            <label class="field-label">🌍 세계관/배경</label>
+            <textarea id="sWorld" rows="4" class="input" placeholder="세계관..."></textarea>
+          </div>
+          <div>
+            <label class="field-label">📍 현재 상황</label>
+            <textarea id="sSituation" rows="3" class="input" placeholder="상황..."></textarea>
+          </div>
+          <div>
+            <label class="field-label">🙋 나의 캐릭터</label>
+            <textarea id="sUserChar" rows="3" class="input" placeholder="캐릭터 요약..."></textarea>
+          </div>
+          <div>
+            <label class="checkbox-label"><input type="checkbox" id="sNarratorEnabled"> <span>AI 진행자</span></label>
+          </div>
+          <div>
+            <label class="field-label">🤖 AI 제공자</label>
+            <select id="sAiProvider" class="select-input">
+              <option value="claude">Claude</option>
+              <option value="droid">Droid</option>
+              <option value="gemini">Gemini</option>
+            </select>
+          </div>
+          <div style="display:flex; gap:0.5rem;">
+            <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(roomId)}')">← 돌아가기</button>
+            <button id="sSaveBtn" class="btn btn-primary">저장</button>
+          </div>
+        </div>
+      </section>`;
+    showScreen(html);
+    // 기존 UI 값 복사(빠른 프리필)
+    try {
+        applyContextToSettingsScreen({
+            world: worldInput?.value || '',
+            situation: situationInput?.value || '',
+            user_character: userCharacterInput?.value || '',
+            narrator_enabled: !!narratorEnabled?.checked,
+            ai_provider: aiProvider?.value || 'claude'
+        });
+    } catch (_) {}
+
+    const save = document.getElementById('sSaveBtn');
+    save?.addEventListener('click', () => {
+        const ctx = {
+            world: document.getElementById('sWorld')?.value || '',
+            situation: document.getElementById('sSituation')?.value || '',
+            user_character: document.getElementById('sUserChar')?.value || '',
+            narrator_enabled: !!document.getElementById('sNarratorEnabled')?.checked,
+            ai_provider: document.getElementById('sAiProvider')?.value || 'claude',
+        };
+        sendMessage({ action: 'set_context', ...ctx });
+        const config = { room_id: roomId, title: roomId, context: ctx };
+        sendMessage({ action: 'room_save', room_id: roomId, config });
+        navigate(`/rooms/${encodeURIComponent(roomId)}`);
+    });
+}
+
 
 // ===== 히스토리 초기화 =====
 
@@ -2086,16 +2952,27 @@ function updateTokenDisplay(tokenUsage) {
     }
 }
 
-// ===== 이벤트 리스너 =====
+// ===== 이벤트 리스너 바인딩(동적) =====
+function bindChatEvents() {
+    refreshChatRefs();
+    try {
+        if (sendChatBtn && !sendChatBtn.dataset.bound) {
+            sendChatBtn.addEventListener('click', sendChatMessage);
+            sendChatBtn.dataset.bound = '1';
+        }
+        if (chatInput && !chatInput.dataset.bound) {
+            chatInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendChatMessage();
+                }
+            });
+            chatInput.dataset.bound = '1';
+        }
+    } catch (_) {}
+}
 
-sendChatBtn.addEventListener('click', sendChatMessage);
-
-chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendChatMessage();
-    }
-});
+bindChatEvents();
 
 // ===== 탭 전환 =====
 
@@ -2109,7 +2986,9 @@ const settingsModalOverlay = document.querySelector('.settings-modal-overlay');
 // 설정 모달 열기
 if (settingsBtn) {
     settingsBtn.addEventListener('click', () => {
+        try { window.__lastSettingsTrigger = document.activeElement; } catch (_) {}
         settingsModal.classList.remove('hidden');
+        enableFocusTrap(settingsModal);
     });
 }
 
@@ -2117,6 +2996,8 @@ if (settingsBtn) {
 if (closeSettingsBtn) {
     closeSettingsBtn.addEventListener('click', () => {
         settingsModal.classList.add('hidden');
+        disableFocusTrap(settingsModal);
+        try { window.__lastSettingsTrigger?.focus?.(); } catch (_) {}
     });
 }
 
@@ -2124,6 +3005,8 @@ if (closeSettingsBtn) {
 if (settingsModalOverlay) {
     settingsModalOverlay.addEventListener('click', () => {
         settingsModal.classList.add('hidden');
+        disableFocusTrap(settingsModal);
+        try { window.__lastSettingsTrigger?.focus?.(); } catch (_) {}
     });
 }
 
@@ -2472,13 +3355,17 @@ function openCharacterEditor(characterDiv) {
     // 템플릿 목록 갱신
     loadCharTemplateList(document.getElementById('ceTemplateSelect'));
 
+    try { window.__lastEditorTrigger = document.activeElement; } catch (_) {}
     modal.classList.remove('hidden');
+    enableFocusTrap(modal);
 }
 
 function closeCharacterEditor() {
     const modal = document.getElementById('characterEditorModal');
     modal.classList.add('hidden');
+    disableFocusTrap(modal);
     currentEditingCharacterItem = null;
+    try { window.__lastEditorTrigger?.focus?.(); } catch (_) {}
 }
 
 function applyCharacterEditorToItem() {
@@ -2549,11 +3436,15 @@ function openParticipantsModal() {
     loadCharTemplateList(document.getElementById('pmTemplateSelect'));
     renderParticipantsManagerList();
     modal.classList.remove('hidden');
+    enableFocusTrap(modal);
 }
 
 function closeParticipantsModal() {
     const modal = document.getElementById('participantsModal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) {
+        modal.classList.add('hidden');
+        disableFocusTrap(modal);
+    }
 }
 
 function renderParticipantsLeftPanel() {
@@ -2851,116 +3742,16 @@ deletePresetBtn.addEventListener('click', deletePreset);
 
 // (제거됨) 모드 관리 UI/로직은 더 이상 사용하지 않습니다.
 
-// ===== 서사 관리 =====
-
-// 서사 목록 로드
-function loadStoryList() {
-    sendMessage({ action: 'list_stories' });
-}
-
-// 서사 목록 업데이트
-function updateStoryList(files) {
-    const currentValue = storySelect.value;
-    storySelect.innerHTML = '<option value="">채팅방 선택...</option>';
-
-    files.forEach(file => {
-        const option = document.createElement('option');
-        option.value = file.name;
-        option.textContent = file.name;
-        storySelect.appendChild(option);
-    });
-
-    // 현재 선택 복원 또는 첫 항목 선택
-    let desired = currentRoom || currentValue;
-    const names = files.map(f => f.name);
-    if (desired && names.includes(desired)) {
-        storySelect.value = desired;
-    } else if (names.length) {
-        storySelect.value = names[0];
-        desired = names[0];
-    } else {
-        storySelect.value = '';
-        desired = 'default';
-    }
-    currentRoom = desired;
-    try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
-    latestStories = files || [];
-    updateRoomListUI();
-}
-
-function updateRoomListUI() {
-    if (!roomList) return;
-    roomList.innerHTML = '';
-    const q = (roomSearch?.value || '').trim();
-    const items = (latestStories || []).filter(f => !q || f.name.includes(q));
-    if (!items.length) {
-        roomList.innerHTML = '<div class="empty">저장된 채팅방이 없습니다.</div>';
-        return;
-    }
-    items.forEach(f => {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-sm';
-        btn.style = 'width:100%; text-align:left; margin-bottom:4px;';
-        btn.textContent = f.name;
-        btn.title = `${f.name} (${Math.round((f.size || 0)/1024)} KB)`;
-        btn.addEventListener('click', () => {
-            storySelect.value = f.name;
-            storySelect.dispatchEvent(new Event('change'));
-        });
-        roomList.appendChild(btn);
-    });
-}
+// ===== 서사 관리(dead) 제거됨: UI는 비활성화됨(서버 스텁 유지) =====
 
 // 서사 표시
-function displayStoryContent(markdown) {
-    // 간단한 마크다운 렌더링
-    let html = markdown
-        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-        .replace(/^---$/gm, '<hr>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/^(.+)$/gm, '<p>$1</p>');
-
-    narrativeContent.innerHTML = html;
-}
+function displayStoryContent(_) { /* no-op: stories disabled */ }
 
 // 서사 로드 버튼
-loadStoryBtn.addEventListener('click', () => {
-    const filename = storySelect.value;
-    if (!filename) {
-        alert('불러올 서사를 선택하세요');
-        return;
-    }
-
-    sendMessage({
-        action: 'load_story',
-        filename: filename
-    });
-});
+loadStoryBtn?.addEventListener('click', () => alert('스토리 불러오기 기능은 비활성화되었습니다.'));
 
 // 서사 이어하기 버튼
-if (resumeStoryBtn) {
-    resumeStoryBtn.addEventListener('click', () => {
-        const filename = storySelect.value;
-        if (!filename) {
-            alert('이어할 서사를 선택하세요');
-            return;
-        }
-        // 불러올 턴 수: 기본 = 현재 슬라이더 값
-        const defaultTurns = currentHistoryLimit || HISTORY_LIMIT_DEFAULT;
-        const input = prompt('불러올 턴 수(최근 N턴):', String(defaultTurns));
-        if (!input) return;
-        const turns = Math.max(1, parseInt(input, 10) || defaultTurns);
-        const summarize = confirm('이전 구간을 간단히 요약해서 포함할까요?');
-
-        sendMessage({
-            action: 'resume_from_story',
-            filename: filename,
-            turns: turns,
-            summarize: summarize
-        });
-    });
-}
+resumeStoryBtn?.addEventListener('click', () => alert('스토리 이어하기 기능은 비활성화되었습니다.'));
 
 function renderHistorySnapshot(history) {
     try {
@@ -2975,43 +3766,17 @@ function renderHistorySnapshot(history) {
         });
         // 서사 패널도 최신으로 갱신
         sendMessage({ action: 'get_narrative' });
+        announce('히스토리가 갱신되었습니다');
     } catch (e) {
         console.error('renderHistorySnapshot error', e);
     }
 }
 
 // 서사 삭제 버튼
-deleteStoryBtn.addEventListener('click', () => {
-    const filename = storySelect.value;
-    if (!filename) {
-        alert('삭제할 서사를 선택하세요');
-        return;
-    }
-
-    if (!confirm(`"${filename}" 서사를 삭제하시겠습니까?`)) {
-        return;
-    }
-
-    sendMessage({
-        action: 'delete_story',
-        filename: filename
-    });
-});
+deleteStoryBtn?.addEventListener('click', () => alert('스토리 삭제 기능은 비활성화되었습니다.'));
 
 // 서사 → 컨텍스트 주입 버튼
-if (injectStoryBtn) {
-    injectStoryBtn.addEventListener('click', () => {
-        const text = narrativeContent.innerText || '';
-        if (!text.trim()) {
-            alert('주입할 서사가 없습니다. 먼저 서사를 불러오세요.');
-            return;
-        }
-        // 기존 세계관에 서사를 덧붙임
-        const sep = worldInput.value.trim() ? '\n\n---\n\n' : '';
-        worldInput.value = worldInput.value + sep + text.trim();
-        log('서사를 세계관에 주입했습니다. 좌측의 "설정 적용"을 눌러 반영하세요.', 'success');
-    });
-}
+injectStoryBtn?.addEventListener('click', () => alert('스토리 주입 기능은 비활성화되었습니다.'));
 
 // ===== 햄버거 메뉴 (모바일) =====
 
@@ -3116,6 +3881,7 @@ document.getElementById('moreSettingsBtn')?.addEventListener('click', () => {
     closeMoreMenu();
     const settingsModal = document.getElementById('settingsModal');
     settingsModal?.classList.remove('hidden');
+    enableFocusTrap(settingsModal);
 });
 
 document.getElementById('moreParticipantsBtn')?.addEventListener('click', () => {
@@ -3213,6 +3979,66 @@ function closeMobilePanel() {
     currentMobilePanel = null;
 }
 
+// ===== 스와이프 제스처 =====
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartTime = 0;
+const SWIPE_THRESHOLD = 50; // 최소 이동 거리 (px)
+const SWIPE_VELOCITY_THRESHOLD = 0.3; // 최소 속도 (px/ms)
+const SWIPE_MAX_VERTICAL_RATIO = 0.5; // 수직 이동 비율 제한
+
+function handleTouchStart(e) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+}
+
+function handleTouchEnd(e) {
+    if (!currentMobilePanel) return;
+
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const touchEndTime = Date.now();
+
+    const deltaX = touchEndX - touchStartX;
+    const deltaY = touchEndY - touchStartY;
+    const deltaTime = touchEndTime - touchStartTime;
+
+    // 수직 이동이 너무 크면 스와이프로 인식하지 않음
+    if (Math.abs(deltaY) > Math.abs(deltaX) * SWIPE_MAX_VERTICAL_RATIO) {
+        return;
+    }
+
+    const distance = Math.abs(deltaX);
+    const velocity = distance / deltaTime;
+
+    // 최소 거리 또는 최소 속도 조건 만족 시 스와이프로 인식
+    if (distance < SWIPE_THRESHOLD && velocity < SWIPE_VELOCITY_THRESHOLD) {
+        return;
+    }
+
+    // 좌측 패널: 좌측으로 스와이프 → 닫기
+    if (currentMobilePanel === 'left' && deltaX < 0) {
+        closeMobilePanel();
+    }
+
+    // 우측 패널: 우측으로 스와이프 → 닫기
+    if (currentMobilePanel === 'right' && deltaX > 0) {
+        closeMobilePanel();
+    }
+}
+
+// 패널에 스와이프 이벤트 리스너 추가
+if (leftPanel) {
+    leftPanel.addEventListener('touchstart', handleTouchStart, { passive: true });
+    leftPanel.addEventListener('touchend', handleTouchEnd, { passive: true });
+}
+
+if (rightPanel) {
+    rightPanel.addEventListener('touchstart', handleTouchStart, { passive: true });
+    rightPanel.addEventListener('touchend', handleTouchEnd, { passive: true });
+}
+
 // 오버레이 클릭 시 패널 닫기
 if (mobileOverlay) {
     mobileOverlay.addEventListener('click', closeMobilePanel);
@@ -3233,19 +4059,8 @@ window.addEventListener('load', async () => {
     document.getElementById('mobileOverlay')?.classList.remove('active');
     document.getElementById('participantsModal')?.classList.add('hidden');
     connect();
+    // 연결 전이라도 라우트 화면을 먼저 표시(데이터는 연결 후 갱신)
+    try { renderCurrentScreenFrom(location.pathname); } catch (_) {}
 });
 // 서사(=채팅방) 선택 시 방 전환 처리
-if (storySelect) {
-    storySelect.addEventListener('change', () => {
-        currentRoom = storySelect.value || 'default';
-        try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
-        // 방 전환: 세션 초기화 + 뷰 갱신
-        sendMessage({ action: 'reset_sessions', room_id: currentRoom });
-        refreshRoomViews();
-        log(`채팅방 전환: ${currentRoom}`, 'info');
-    });
-}
-
-if (roomSearch) {
-    roomSearch.addEventListener('input', () => updateRoomListUI());
-}
+// stories UI는 비활성화 상태이므로 관련 이벤트 없음

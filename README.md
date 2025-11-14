@@ -2,7 +2,7 @@
 
 웹 기반 멀티 캐릭터 대화/서사 관리 시스템입니다. Claude Code, Droid CLI, Gemini CLI를 이용해 실시간 스트리밍 대화를 제공합니다.
 
-> 2025-11-10 기준: Claude ✅, Droid ✅, Gemini ✅ (로컬/Docker 모두 동작 확인)
+> 2025-11-12 기준: Claude ✅, Droid ✅, Gemini ✅ (로컬/Docker 모두 동작 확인)
 
 목차
 
@@ -22,7 +22,7 @@
 - **멀티 캐릭터 대화**: 여러 캐릭터가 동시에 참여하는 그룹 채팅 형식
 - **TRPG 스타일 GM 시스템**: AI 진행자(적극적/보통/소극적), 사용자 진행자, 진행자 없음 모드
 - **실시간 스트리밍**: WebSocket 기반 즉각 응답
-- **서사 기록**: 대화 내용을 마크다운으로 자동 기록 및 다운로드
+- **히스토리/Export**: 대화 히스토리를 우측 패널에서 확인하고, HTTP `/api/export`로 JSON(선택 Zip) 다운로드. 대용량은 `/api/export/stream`(NDJSON) 권장.
 - **멀티 AI 지원**: Claude, Gemini, Droid CLI 중 선택 가능
 - **세션 & 맥락 관리**: 대화 히스토리 길이 조절, 세션 유지/리셋 기능
 - **토큰 사용량 추적**: 모델별 토큰 사용량 실시간 표시 (Claude 지원)
@@ -72,9 +72,9 @@ python server/websocket_server.py
 - 웹 UI: http://localhost:9000
 - WebSocket: ws://localhost:8765
 
-### 3) persona_data 디렉토리 설정 (권장)
+### 3) 데이터 경로 및 persona_data 설정 (권장)
 
-`persona_data/` 디렉토리는 캐릭터 프리셋, 세계관, 스토리 등 민감한 데이터를 담으므로 **별도 프라이빗 저장소**로 관리하는 것을 권장합니다.
+`persona_data/` 디렉토리는 캐릭터 프리셋/세계관 등 템플릿을 담습니다(스토리 파일 기능은 제거). 민감 데이터는 **별도 프라이빗 저장소**로 관리하는 것을 권장합니다.
 
 #### 프라이빗 레포 생성 및 클론
 
@@ -103,6 +103,10 @@ python server/websocket_server.py
    ```
 
 > **중요**: 서버는 `persona_data` 폴더명을 고정으로 참조합니다. 다른 이름으로 클론한 경우 반드시 폴더명을 `persona_data`로 변경하세요.
+
+WSL 권장 DB 경로
+- 기본 DB 경로는 레포 내부 `data/chatbot.db` 입니다(`.gitignore` 처리). WSL에서는 속도/락 이슈를 피하기 위해 `/mnt/c`가 아닌 리눅스 파일시스템(예: `~/persona_chatbot/data`)을 사용하세요.
+- 환경 변수로 DB 경로를 바꾸려면 `DB_PATH=/home/<user>/.persona_chatbot/chatbot.db`처럼 설정할 수 있습니다.
 
 ### 4) 로컬 훅(린트/보안) 설치
 
@@ -165,15 +169,13 @@ pre-commit run --all-files  # 스모크
 - Gemini는 현재 stateless만 지원(세션 유지 불가)
 - 세션 유지 OFF 전환 시 즉시 모든 세션 초기화
 
-### 서사 기록
+### 히스토리 & Export
 
-우측 패널에서 대화 기록을 관리합니다:
-
-- 자동 기록: 대화가 진행되면 마크다운 형식으로 자동 저장
-- 저장: `.md` 파일 다운로드
-- 전체 보존: 맥락 길이 설정과 무관하게 전체 내용 유지
-
-노트: `STORIES/` 폴더는 레포에 포함되지 않으며(레거시 제거), 서버가 최초 실행 시 자동 생성됩니다. 영속 보관을 원하면 프로젝트 루트에 `STORIES/` 디렉터리를 만들어 두세요.
+- 우측 패널에서 대화 히스토리를 읽기 전용으로 확인합니다(마크다운 렌더링).
+- 백업/공유는 HTTP Export 사용: `GET /api/export?scope=single&room_id=<id>`.
+  - scope: `single` | `selected` | `full`
+  - 선택 파라미터: `room_ids=a,b`(selected), 추후 `format=zip`, 날짜 필터 등 확장 예정
+- WebSocket 기반 stories 파일(저장/불러오기/이어하기) 기능은 제거되었습니다.
 
 ## AI 제공자 설정
 
@@ -200,17 +202,21 @@ pre-commit run --all-files  # 스모크
 ```
 persona_chatbot/
 ├── server/
-│   ├── websocket_server.py          # WebSocket 서버
-│   └── handlers/
+│   ├── websocket_server.py          # WebSocket 서버(핵심 엔트리)
+│   ├── core/                        # AppContext/세션/인증 유틸
+│   ├── http/                        # HTTP 서버(SPA fallback + /api/export)
+│   ├── ws/                          # WebSocket 액션 라우터/액션들
+│   └── handlers/                    # 모델/워크스페이스/히스토리 등
 │       ├── claude_handler.py        # Claude Code CLI 통신
 │       ├── droid_handler.py         # Droid CLI 통신
 │       ├── gemini_handler.py        # Gemini CLI 통신
 │       ├── context_handler.py       # 컨텍스트 관리
-│       ├── history_handler.py       # 대화 히스토리 & 서사 생성
-│       ├── workspace_handler.py     # 파일/스토리/깃 동기화
+│       ├── history_handler.py       # 대화 히스토리(윈도우) 관리
+│       ├── db_handler.py            # SQLite 영속 계층(aiosqlite)
+│       ├── workspace_handler.py     # 프리셋/파일(템플릿) 관리
 │       └── mode_handler.py          # 모드 상태 관리(스크립트용)
 ├── web/
-│   ├── index.html                   # 3단 레이아웃 UI
+│   ├── index.html                   # 레이아웃 UI(좌:설정 / 중:채팅 / 우:히스토리)
 │   ├── app.js                       # 프론트엔드 로직
 │   └── style.css                    # 라이트 테마 스타일
 ├── chatbot_workspace/
@@ -221,7 +227,7 @@ persona_chatbot/
 └── README.md
 ```
 
-## WebSocket API
+## API 요약
 
 모든 메시지는 JSON 형식: `{"action": "액션명", "data": {...}}`
 
@@ -233,11 +239,91 @@ persona_chatbot/
 | `get_context` | 현재 컨텍스트 조회 |
 | `chat` | AI 대화 (스트리밍 응답) |
 | `clear_history` | 대화 히스토리 초기화 |
-| `get_narrative` | 서사 마크다운 가져오기 |
+| `get_narrative` | 히스토리 마크다운 가져오기 |
 | `get_history_settings` | 맥락 길이 설정 조회 |
 | `set_history_limit` | 맥락 길이 변경 (5~1000 또는 null) |
 | `get_session_settings` | 세션 유지 설정 조회 |
 | `set_session_retention` | 세션 유지 토글 (true/false) |
+
+HTTP Export
+
+| 파라미터 | 값 | 기본값 | 설명 |
+|---|---|---|---|
+| `scope` | `single`/`selected`/`full` | `single` | Export 범위 |
+| `room_id` | 문자열 | `default` | `scope=single`일 때 대상 방 |
+| `room_ids` | `a,b,c` | - | `scope=selected`일 때 대상 방 목록 |
+| `include` | `messages,context,token_usage` | `messages,context` | 포함 항목 선택 |
+| `start` | `YYYY-MM-DD` 또는 `YYYY-MM-DDTHH:MM:SS` | - | 시작 시점 필터 |
+| `end` | `YYYY-MM-DD` 또는 `YYYY-MM-DDTHH:MM:SS` | - | 종료 시점 필터 |
+| `format` | `json`/`zip` | `json` | zip은 내부에 JSON 1개 포함 |
+
+예시
+
+```bash
+# 단일 방(JSON)
+curl -OJ "http://localhost:9000/api/export?scope=single&room_id=default"
+
+# 선택 방 + 토큰 포함(Zip)
+curl -OJ "http://localhost:9000/api/export?scope=selected&room_ids=room1,room2&include=messages,context,token_usage&format=zip"
+
+# 기간 필터(전체, JSON)
+curl -OJ "http://localhost:9000/api/export?scope=full&start=2025-11-01&end=2025-11-12"
+```
+
+NDJSON 스트리밍(대용량 권장)
+
+```bash
+# 단일 방(메시지+컨텍스트)
+curl -OJ "http://localhost:9000/api/export/stream?scope=single&room_id=default&include=messages,context"
+
+# 전체(메시지+토큰사용량)
+curl -OJ "http://localhost:9000/api/export/stream?scope=full&include=messages,token_usage"
+
+# 날짜 범위 필터
+curl -OJ "http://localhost:9000/api/export/stream?scope=single&room_id=default&start=2025-11-01&end=2025-11-12"
+```
+
+라인 타입: `meta`, `room`, `message`, `token_usage`, `end`
+
+### Import (초기: WebSocket)
+
+간단한 Import는 WebSocket 액션으로 지원합니다. JSON 스키마는 Export 결과(single_room/full_backup)를 그대로 사용합니다.
+
+요청
+```json
+{
+  "action": "import_data",
+  "import_mode": "new",           // "new" | "merge"
+  "target_room_id": "room1",      // merge일 때 대상 방
+  "duplicate_policy": "skip",     // "skip" | "add"
+  "json_data": { /* export JSON */ }
+}
+```
+
+응답
+```json
+{
+  "action": "import_data",
+  "data": {
+    "success": true,
+    "rooms_imported": 1,
+    "messages_imported": 245,
+    "new_room_ids": ["fantasy_adventure_001"]
+  }
+}
+```
+
+참고
+- 현재는 WS 중심. 대용량 업로드가 필요하면 HTTP `POST /api/import`를 추가 예정입니다.
+
+### /backup UI (클라이언트)
+
+- 주소창에 `/backup`으로 진입하거나, 앱 내에서 백업 모달을 열어 파라미터를 구성하고 다운로드할 수 있습니다.
+- scope/include/date/format(JSON/ZIP/NDJSON)를 선택하면 적합한 HTTP 경로(`/api/export` 또는 `/api/export/stream`)를 호출합니다.
+
+라우팅(History API)
+- 클라이언트는 History API 라우팅을 사용합니다(`/`, `/rooms/:id`, `/rooms/:id/history`, `/backup`).
+- 서버는 SPA fallback을 제공해 새로고침 404가 발생하지 않습니다.
 | `reset_sessions` | 모든 세션 ID 초기화 |
 | `list_files` / `read_file` / `write_file` | 파일 관리 |
 

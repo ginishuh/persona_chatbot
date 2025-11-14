@@ -36,8 +36,11 @@ COPY . .
 # /app 디렉토리 소유자를 node 사용자로 변경 (UID 1000)
 RUN chown -R node:node /app
 
+# Claude CLI를 위한 디렉토리 생성 및 권한 설정
+RUN mkdir -p /home/node/.claude && chown -R node:node /home/node/.claude
+
 # 포트 노출
 EXPOSE 8765 9000
 
 # 서버 실행
-CMD ["python3", "server/websocket_server.py"]
+CMD ["python3", "-m", "server.websocket_server"]

@@ -13,11 +13,11 @@
     <div class="mobile-overlay" id="mobileOverlay"></div>
 
     <!-- 설정 모달 -->
-    <div id="settingsModal" class="settings-modal hidden">
+    <div id="settingsModal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
         <div class="settings-modal-overlay"></div>
         <div class="settings-modal-content">
             <div class="settings-modal-header">
-                <h2>⚙️ 설정</h2>
+                <h2 id="settingsModalTitle">⚙️ 설정</h2>
                 <button id="closeSettingsBtn" class="btn-icon" title="닫기">✕</button>
             </div>
                 <div class="settings-modal-body">
@@ -238,10 +238,13 @@
             </div>
         </header>
 
+        <!-- Screen container (full-screen views) -->
+        <div id="screenRoot" class="screen-root hidden" aria-live="polite"></div>
+
         <!-- Main 3-Column Layout -->
-        <div class="main-content">
+        <div class="main-content" role="presentation">
             <!-- Left Panel: Characters -->
-            <aside class="left-panel">
+            <aside class="left-panel" aria-label="컨텍스트 설정 패널">
                 <div class="panel-header">
                     <h2>👥 캐릭터</h2>
                 </div>
@@ -287,7 +290,7 @@
             </aside>
 
             <!-- Center Panel: Chat -->
-            <main class="center-panel">
+            <main class="center-panel" role="main" aria-label="채팅 영역">
                 <div id="chatMessages" class="chat-messages">
                     <div class="chat-message system">
                         <p>대화를 시작하세요</p>
@@ -300,22 +303,22 @@
             </main>
 
             <!-- Right Panel: Narrative -->
-            <aside class="right-panel">
+            <aside class="right-panel" aria-label="히스토리 패널">
                 <div class="panel-header narrative-header">
                     <h2>💬 채팅방 (서사 기록)</h2>
                 </div>
                 <div class="narrative-controls">
                     <div style="padding: 0.75rem 1rem; border-bottom: 2px solid #e8ecef;">
-                        <select id="storySelect" class="select-input" style="width: 100%; margin-bottom: 0.75rem;" title="채팅방(서사)">
+                        <!-- Stories 기능 비활성화: storySelect 숨김 -->
+                        <select id="storySelect" class="select-input stories-only" style="width: 100%; margin-bottom: 0.75rem; display: none;" title="채팅방(서사)">
                             <option value="">채팅방 선택...</option>
                         </select>
                         <input id="roomSearch" type="text" class="input" placeholder="채팅방 검색" style="width:100%; margin: 0.25rem 0 0.5rem 0;" />
+                        <button id="roomAddBtn" class="btn btn-sm btn-primary" title="새 채팅방 추가" style="width: 100%; margin-bottom: 0.5rem;">➕ 새 채팅방</button>
                         <div id="roomList" style="max-height: 180px; overflow:auto; border:1px solid #e8ecef; border-radius:6px; padding:0.5rem; background:#fff;"></div>
-                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                            <button id="roomAddBtn" class="btn btn-sm" title="새 채팅방 추가" style="flex: 1;">➕ 새 채팅방</button>
-                            <button id="roomDelBtn" class="btn btn-sm btn-remove" title="현재 채팅방 삭제">🗑️</button>
-                        </div>
-                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button id="roomSaveBtn" class="btn btn-sm" title="현재 채팅방 설정 저장" style="width: 100%; margin-top: 0.5rem;">💾 설정 저장</button>
+                        <!-- Stories 기능 비활성화: 관련 버튼들 숨김 -->
+                        <div class="stories-only" style="display: none; gap: 0.5rem; flex-wrap: wrap;">
                             <button id="loadStoryBtn" class="btn btn-sm" title="서사 불러오기">📤</button>
                             <button id="resumeStoryBtn" class="btn btn-sm" title="이 서사에서 이어하기">▶</button>
                             <button id="injectStoryBtn" class="btn btn-sm" title="이 서사를 컨텍스트에 주입">➡</button>
@@ -339,10 +342,10 @@
         </footer>
     </div>
 
-    <div id="loginModal" class="login-modal hidden">
+    <div id="loginModal" class="login-modal hidden" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
         <div class="login-modal-content">
             <img src="src/logo3.png" alt="Chorus AI 로고" class="login-logo" />
-            <h2>🔒 로그인 필요</h2>
+            <h2 id="loginModalTitle">🔒 로그인 필요</h2>
             <p class="login-description">.env에 설정한 아이디/비밀번호를 입력하세요.</p>
             <input type="text" id="loginUsername" placeholder="아이디" autocomplete="username" />
             <input type="password" id="loginPassword" placeholder="비밀번호" autocomplete="current-password" />
@@ -360,11 +363,11 @@
     </div>
 
     <!-- 캐릭터 편집 모달 -->
-    <div id="characterEditorModal" class="settings-modal hidden">
+    <div id="characterEditorModal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="characterEditorTitle">
         <div class="settings-modal-overlay"></div>
         <div class="settings-modal-content">
             <div class="settings-modal-header">
-                <h2>🛠️ 캐릭터 편집</h2>
+                <h2 id="characterEditorTitle">🛠️ 캐릭터 편집</h2>
                 <button id="ceCloseBtn" class="btn-icon" title="닫기">✕</button>
             </div>
             <div class="settings-modal-body">
@@ -431,11 +434,11 @@
     </div>
 
     <!-- 참여자 관리 모달 -->
-    <div id="participantsModal" class="settings-modal hidden">
+    <div id="participantsModal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="participantsTitle">
         <div class="settings-modal-overlay"></div>
         <div class="settings-modal-content">
             <div class="settings-modal-header">
-                <h2>👥 참여자 관리</h2>
+                <h2 id="participantsTitle">👥 참여자 관리</h2>
                 <button id="pmCloseBtn" class="btn-icon" title="닫기">✕</button>
             </div>
             <div class="settings-modal-body">
@@ -454,6 +457,78 @@
             </div>
         </div>
     </div>
+
+    <!-- 백업(Export) 모달 -->
+    <div id="backupModal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="backupTitle">
+        <div class="settings-modal-overlay"></div>
+        <div class="settings-modal-content">
+            <div class="settings-modal-header">
+                <h2 id="backupTitle">📦 백업 내보내기</h2>
+                <button id="bkCloseBtn" class="btn-icon" title="닫기">✕</button>
+            </div>
+            <div class="settings-modal-body">
+                <div class="context-section">
+                    <label>범위(scope)</label>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+                        <label class="checkbox-label"><input type="radio" name="bkScope" id="bkScopeSingle" value="single" checked> <span>현재 방</span></label>
+                        <label class="checkbox-label"><input type="radio" name="bkScope" id="bkScopeSelected" value="selected"> <span>선택한 방</span></label>
+                        <label class="checkbox-label"><input type="radio" name="bkScope" id="bkScopeFull" value="full"> <span>전체</span></label>
+                    </div>
+                    <div id="bkRoomsWrap" style="margin-top:0.5rem; display:none; border:1px solid #e8ecef; border-radius:6px; padding:0.5rem; max-height:160px; overflow:auto;"></div>
+                </div>
+
+                <div class="context-section">
+                    <label>포함 항목(include)</label>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+                        <label class="checkbox-label"><input type="checkbox" id="bkIncMessages" checked> <span>messages</span></label>
+                        <label class="checkbox-label"><input type="checkbox" id="bkIncContext" checked> <span>context</span></label>
+                        <label class="checkbox-label"><input type="checkbox" id="bkIncToken" > <span>token_usage</span></label>
+                    </div>
+                </div>
+
+                <div class="context-section">
+                    <label>기간(start/end)</label>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+                        <input type="datetime-local" id="bkStart" class="input" style="min-width:220px;">
+                        <input type="datetime-local" id="bkEnd" class="input" style="min-width:220px;">
+                    </div>
+                </div>
+
+                <div class="context-section">
+                    <label>형식(format)</label>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+                        <label class="checkbox-label"><input type="radio" name="bkFormat" id="bkFmtJson" value="json" checked> <span>JSON</span></label>
+                        <label class="checkbox-label"><input type="radio" name="bkFormat" id="bkFmtZip" value="zip"> <span>ZIP(JSON)</span></label>
+                        <label class="checkbox-label"><input type="radio" name="bkFormat" id="bkFmtNdjson" value="ndjson"> <span>Stream(NDJSON)</span></label>
+                    </div>
+                </div>
+
+                <div class="context-section">
+                    <button id="bkDownloadBtn" class="btn btn-primary" style="width:100%;">⬇️ 다운로드</button>
+                    <p class="hint" style="margin-top:0.5rem;">로그인 환경에서는 토큰이 자동으로 쿼리에 포함됩니다.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 방 목록(Home) 모달 -->
+    <div id="roomsModal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="roomsTitle">
+        <div class="settings-modal-overlay"></div>
+        <div class="settings-modal-content">
+            <div class="settings-modal-header">
+                <h2 id="roomsTitle">💬 채팅방 목록</h2>
+                <button id="rmCloseBtn" class="btn-icon" title="닫기">✕</button>
+            </div>
+            <div class="settings-modal-body">
+                <input id="rmSearch" type="text" class="input" placeholder="채팅방 검색" style="width:100%; margin-bottom:0.5rem;" />
+                <button id="rmNewBtn" class="btn btn-primary" style="width:100%; margin-bottom:0.5rem;">+ 새 채팅방</button>
+                <div id="rmList" style="max-height: 320px; overflow:auto; border:1px solid #e8ecef; border-radius:6px; padding:0.5rem; background:#fff;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 스크린리더 상태 안내 영역 -->
+    <div id="ariaLive" class="sr-only" aria-live="polite" role="status"></div>
 
     <script src="app.js"></script>
 </body>
