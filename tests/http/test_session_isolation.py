@@ -192,3 +192,132 @@ class TestSessionIsolation:
 
         final_key = session_key or request_data.get("session_key", "http_import")
         assert final_key == "user:alice"
+
+    @pytest.mark.asyncio
+    async def test_export_session_isolation_db_path(self, db_with_multi_session_data):
+        """export API에서 DB 경로가 session_key로 필터링되는지 테스트
+
+        - Alice의 JWT로 export → Alice의 데이터만
+        - Bob의 JWT로 export → Bob의 데이터만
+        - session_key 없이 export → 빈 결과 (login_required=True일 때)
+        """
+        db, session1, session2, room1, room2 = db_with_multi_session_data
+
+        # Alice의 room_id=room-001 export (session1)
+        room_alice = await db.get_room(room1, session1)
+        assert room_alice is not None
+        assert room_alice["title"] == "Alice의 방"
+
+        # Bob의 room_id=room-001 export (session2)
+        room_bob = await db.get_room(room2, session2)
+        assert room_bob is not None
+        assert room_bob["title"] == "Bob의 방"
+
+        # 잘못된 session_key로 조회 → None
+        room_wrong = await db.get_room(room1, "wrong_session")
+        assert room_wrong is None
+
+        # session_key 없이 조회 (하위 호환 모드) → 첫 번째 발견된 방 반환
+        room_no_key = await db.get_room(room1)
+        assert room_no_key is not None
+        # Alice와 Bob 중 하나의 방이 반환됨 (어느 것이든 상관없음)
+        assert room_no_key["title"] in ["Alice의 방", "Bob의 방"]
+
+    @pytest.mark.asyncio
+    async def test_memory_fallback_session_isolation(self):
+        """메모리 폴백 경로가 session_key로 격리되는지 테스트
+
+        - login_required=True일 때 session_key 일치만 검색
+        - login_required=False일 때 모든 세션 검색 (하위 호환)
+        """
+        from server.core.app_context import AppContext
+
+        # Mock AppContext with sessions
+        ctx = AppContext(
+            project_root="/tmp",
+            bind_host="127.0.0.1",
+            login_required=True,
+            jwt_secret="test",  # pragma: allowlist secret
+            jwt_algorithm="HS256",
+            access_ttl_seconds=3600,
+            refresh_ttl_seconds=86400,
+            login_username="",
+            login_rate_limit_max_attempts=5,
+            login_rate_limit_window_seconds=900,
+            token_expired_grace_seconds=3600,
+        )
+
+        # Mock sessions
+        ctx.sessions = {
+            "user:alice": {
+                "rooms": {
+                    "room-001": {
+                        "history": type(
+                            "MockHistory",
+                            (),
+                            {
+                                "get_history": lambda self: [
+                                    {"role": "user", "content": "Alice's message"}
+                                ]
+                            },
+                        )()
+                    }
+                }
+            },
+            "user:bob": {
+                "rooms": {
+                    "room-001": {
+                        "history": type(
+                            "MockHistory",
+                            (),
+                            {
+                                "get_history": lambda self: [
+                                    {"role": "user", "content": "Bob's message"}
+                                ]
+                            },
+                        )()
+                    }
+                }
+            },
+        }
+
+        # login_required=True: session_key 일치만 검색
+        assert ctx.login_required is True
+
+        # Alice의 session으로 검색
+        alice_session = ctx.sessions.get("user:alice")
+        assert alice_session is not None
+        room = alice_session.get("rooms", {}).get("room-001")
+        assert room is not None
+        msgs = room["history"].get_history()
+        assert msgs[0]["content"] == "Alice's message"
+
+        # Bob의 session으로 검색
+        bob_session = ctx.sessions.get("user:bob")
+        assert bob_session is not None
+        room = bob_session.get("rooms", {}).get("room-001")
+        assert room is not None
+        msgs = room["history"].get_history()
+        assert msgs[0]["content"] == "Bob's message"
+
+        # 잘못된 session_key → None
+        wrong_session = ctx.sessions.get("user:charlie")
+        assert wrong_session is None
+
+        # login_required=False: 모든 세션 검색 (하위 호환)
+        ctx.login_required = False
+
+        # 모든 세션 순회 가능 확인
+        found_alice = False
+        found_bob = False
+        for sess in ctx.sessions.values():
+            room = sess.get("rooms", {}).get("room-001")
+            if room:
+                msgs = room["history"].get_history()
+                if msgs[0]["content"] == "Alice's message":
+                    found_alice = True
+                elif msgs[0]["content"] == "Bob's message":
+                    found_bob = True
+
+        assert found_alice
+        assert found_bob

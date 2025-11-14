@@ -146,77 +146,106 @@ def run_http_server(ctx: AppContext):
                         # DB 우선: 다른 스레드의 이벤트 루프에서 실행
                         try:
                             if ctx.db_handler and getattr(ctx, "loop", None):
-                                msgs = None
+                                # 먼저 room 소유권 확인 (session_key로 격리)
+                                room_row = asyncio.run_coroutine_threadsafe(
+                                    ctx.db_handler.get_room(rid, session_key), ctx.loop
+                                ).result(timeout=5)
+
+                                # room이 현재 session_key에 속하지 않으면 빈 결과 반환
+                                if not room_row:
+                                    return {"room_id": rid, "title": rid, "messages": []}
+
+                                base = {
+                                    "room_id": rid,
+                                    "title": room_row.get("title", rid),
+                                }
+
+                                # room 소유권 확인 후 messages 가져오기
                                 if "messages" in includes:
-                                    fut = asyncio.run_coroutine_threadsafe(
+                                    msgs = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_messages_range(
                                             rid, start=start, end=end
                                         ),
                                         ctx.loop,
-                                    )
-                                    msgs = fut.result(timeout=5)
-                                base = {"room_id": rid, "title": rid}
-                                if msgs:
-                                    return {
-                                        **base,
-                                        "messages": [
+                                    ).result(timeout=5)
+                                    if msgs:
+                                        base["messages"] = [
                                             {
                                                 "role": m.get("role"),
                                                 "content": m.get("content"),
                                                 "timestamp": str(m.get("timestamp")),
                                             }
                                             for m in msgs
-                                        ],
-                                        **(
-                                            {
-                                                "token_usage": asyncio.run_coroutine_threadsafe(
-                                                    ctx.db_handler.list_token_usage_range(
-                                                        rid, start=start, end=end
-                                                    ),
-                                                    ctx.loop,
-                                                ).result(timeout=5)
-                                            }
-                                            if "token_usage" in includes
-                                            else {}
+                                        ]
+
+                                # token_usage
+                                if "token_usage" in includes:
+                                    usage = asyncio.run_coroutine_threadsafe(
+                                        ctx.db_handler.list_token_usage_range(
+                                            rid, start=start, end=end
                                         ),
-                                        **(
-                                            {
-                                                "context": json.loads(
-                                                    asyncio.run_coroutine_threadsafe(
-                                                        ctx.db_handler.get_room(rid, session_key),
-                                                        ctx.loop,
-                                                    )
-                                                    .result(timeout=5)
-                                                    .get("context")
-                                                    or "{}"
-                                                )
-                                            }
-                                            if "context" in includes
-                                            else {}
-                                        ),
-                                    }
+                                        ctx.loop,
+                                    ).result(timeout=5)
+                                    if usage:
+                                        base["token_usage"] = usage
+
+                                # context
+                                if "context" in includes and room_row.get("context"):
+                                    try:
+                                        base["context"] = json.loads(room_row["context"])
+                                    except Exception:
+                                        pass
+
+                                return base
                         except Exception:
                             pass
 
-                        # 폴백: 메모리 세션
-                        for sess in ctx.sessions.values():
-                            room = sess.get("rooms", {}).get(rid)
-                            if room:
-                                hist = room.get("history")
-                                messages = []
-                                if hist and "messages" in includes:
-                                    for m in getattr(hist, "full_history", []):
-                                        messages.append(
-                                            {
-                                                "role": m.get("role"),
-                                                "content": m.get("content"),
-                                                "timestamp": datetime.utcnow().isoformat() + "Z",
-                                            }
-                                        )
-                                base = {"room_id": rid, "title": rid}
-                                if messages:
-                                    base["messages"] = messages
-                                return base
+                        # 폴백: 메모리 세션 (session_key로 격리)
+                        # login_required일 때는 session_key가 일치하는 세션만 검색
+                        if session_key and ctx.login_required:
+                            # session_key가 일치하는 세션만 검색
+                            target_sess = ctx.sessions.get(session_key)
+                            if target_sess:
+                                room = target_sess.get("rooms", {}).get(rid)
+                                if room:
+                                    hist = room.get("history")
+                                    messages = []
+                                    if hist and "messages" in includes:
+                                        for m in getattr(hist, "full_history", []):
+                                            messages.append(
+                                                {
+                                                    "role": m.get("role"),
+                                                    "content": m.get("content"),
+                                                    "timestamp": datetime.utcnow().isoformat()
+                                                    + "Z",
+                                                }
+                                            )
+                                    base = {"room_id": rid, "title": rid}
+                                    if messages:
+                                        base["messages"] = messages
+                                    return base
+                        else:
+                            # login_required=False: 모든 세션 검색 (하위 호환)
+                            for sess in ctx.sessions.values():
+                                room = sess.get("rooms", {}).get(rid)
+                                if room:
+                                    hist = room.get("history")
+                                    messages = []
+                                    if hist and "messages" in includes:
+                                        for m in getattr(hist, "full_history", []):
+                                            messages.append(
+                                                {
+                                                    "role": m.get("role"),
+                                                    "content": m.get("content"),
+                                                    "timestamp": datetime.utcnow().isoformat()
+                                                    + "Z",
+                                                }
+                                            )
+                                    base = {"room_id": rid, "title": rid}
+                                    if messages:
+                                        base["messages"] = messages
+                                    return base
+
                         return {"room_id": rid, "title": rid, "messages": []}
 
                     if scope == "single":
@@ -332,19 +361,24 @@ def run_http_server(ctx: AppContext):
                         # DB 우선
                         try:
                             if ctx.db_handler and getattr(ctx, "loop", None):
+                                # 먼저 room 소유권 확인 (session_key로 격리)
+                                room_row = asyncio.run_coroutine_threadsafe(
+                                    ctx.db_handler.get_room(rid, session_key), ctx.loop
+                                ).result(timeout=5)
+
+                                # room이 현재 session_key에 속하지 않으면 스킵
+                                if not room_row:
+                                    return
+
                                 base = {"room_id": rid}
-                                if "context" in includes:
-                                    room_row = asyncio.run_coroutine_threadsafe(
-                                        ctx.db_handler.get_room(rid, session_key), ctx.loop
-                                    ).result(timeout=5)
-                                    if room_row and room_row.get("context"):
-                                        try:
-                                            base["context"] = json.loads(room_row["context"])
-                                        except Exception:
-                                            base["context"] = {}
+                                if "context" in includes and room_row.get("context"):
+                                    try:
+                                        base["context"] = json.loads(room_row["context"])
+                                    except Exception:
+                                        base["context"] = {}
                                 self._write_ndjson_line({"type": "room", **base})
 
-                                # messages
+                                # room 소유권 확인 후 messages 가져오기
                                 if "messages" in includes:
                                     msgs = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_messages_range(
@@ -386,26 +420,49 @@ def run_http_server(ctx: AppContext):
                         except Exception:
                             pass
 
-                        # 폴백: 메모리 세션
+                        # 폴백: 메모리 세션 (session_key로 격리)
                         try:
-                            for sess in ctx.sessions.values():
-                                room = sess.get("rooms", {}).get(rid)
-                                if room:
-                                    self._write_ndjson_line({"type": "room", "room_id": rid})
-                                    if "messages" in includes:
-                                        hist = room.get("history")
-                                        for m in getattr(hist, "full_history", []) or []:
-                                            self._write_ndjson_line(
-                                                {
-                                                    "type": "message",
-                                                    "room_id": rid,
-                                                    "role": m.get("role"),
-                                                    "content": m.get("content"),
-                                                    "timestamp": datetime.utcnow().isoformat()
-                                                    + "Z",
-                                                }
-                                            )
-                                    return
+                            if session_key and ctx.login_required:
+                                # login_required일 때는 session_key가 일치하는 세션만 검색
+                                target_sess = ctx.sessions.get(session_key)
+                                if target_sess:
+                                    room = target_sess.get("rooms", {}).get(rid)
+                                    if room:
+                                        self._write_ndjson_line({"type": "room", "room_id": rid})
+                                        if "messages" in includes:
+                                            hist = room.get("history")
+                                            for m in getattr(hist, "full_history", []) or []:
+                                                self._write_ndjson_line(
+                                                    {
+                                                        "type": "message",
+                                                        "room_id": rid,
+                                                        "role": m.get("role"),
+                                                        "content": m.get("content"),
+                                                        "timestamp": datetime.utcnow().isoformat()
+                                                        + "Z",
+                                                    }
+                                                )
+                                        return
+                            else:
+                                # login_required=False: 모든 세션 검색 (하위 호환)
+                                for sess in ctx.sessions.values():
+                                    room = sess.get("rooms", {}).get(rid)
+                                    if room:
+                                        self._write_ndjson_line({"type": "room", "room_id": rid})
+                                        if "messages" in includes:
+                                            hist = room.get("history")
+                                            for m in getattr(hist, "full_history", []) or []:
+                                                self._write_ndjson_line(
+                                                    {
+                                                        "type": "message",
+                                                        "room_id": rid,
+                                                        "role": m.get("role"),
+                                                        "content": m.get("content"),
+                                                        "timestamp": datetime.utcnow().isoformat()
+                                                        + "Z",
+                                                    }
+                                                )
+                                        return
                         except Exception:
                             pass
 
@@ -497,28 +554,46 @@ def run_http_server(ctx: AppContext):
                         # DB 우선
                         try:
                             if ctx.db_handler and getattr(ctx, "loop", None):
+                                # 먼저 room 소유권 확인 (session_key로 격리)
                                 row = asyncio.run_coroutine_threadsafe(
                                     ctx.db_handler.get_room(rid, session_key), ctx.loop
                                 ).result(timeout=5)
-                                if row and row.get("title"):
-                                    title = row.get("title")
-                                msgs = asyncio.run_coroutine_threadsafe(
-                                    ctx.db_handler.list_messages_range(rid, start=start, end=end),
-                                    ctx.loop,
-                                ).result(timeout=10)
+
+                                # room이 현재 session_key에 속할 때만 메시지 가져오기
+                                if row:
+                                    if row.get("title"):
+                                        title = row.get("title")
+                                    msgs = asyncio.run_coroutine_threadsafe(
+                                        ctx.db_handler.list_messages_range(
+                                            rid, start=start, end=end
+                                        ),
+                                        ctx.loop,
+                                    ).result(timeout=10)
                         except Exception:
                             pass
 
-                        # 폴백: 메모리 세션
+                        # 폴백: 메모리 세션 (session_key로 격리)
                         if not msgs:
-                            for sess in ctx.sessions.values():
-                                room = sess.get("rooms", {}).get(rid)
-                                if room:
-                                    try:
-                                        msgs = room["history"].get_history()
-                                        break
-                                    except Exception:
-                                        pass
+                            if session_key and ctx.login_required:
+                                # login_required일 때는 session_key가 일치하는 세션만 검색
+                                target_sess = ctx.sessions.get(session_key)
+                                if target_sess:
+                                    room = target_sess.get("rooms", {}).get(rid)
+                                    if room:
+                                        try:
+                                            msgs = room["history"].get_history()
+                                        except Exception:
+                                            pass
+                            else:
+                                # login_required=False: 모든 세션 검색 (하위 호환)
+                                for sess in ctx.sessions.values():
+                                    room = sess.get("rooms", {}).get(rid)
+                                    if room:
+                                        try:
+                                            msgs = room["history"].get_history()
+                                            break
+                                        except Exception:
+                                            pass
 
                         lines = [f"# {title}", ""]
                         for m in msgs or []:
