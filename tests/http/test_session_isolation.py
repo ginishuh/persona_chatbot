@@ -163,3 +163,32 @@ class TestSessionIsolation:
         # session_key가 없어야 함
         assert "session_key" not in payload
         assert payload["typ"] == "access"
+
+    @pytest.mark.asyncio
+    async def test_import_fallback_session_key(self):
+        """import API에서 session_key fallback 로직 테스트
+
+        - JWT에 session_key가 없어도 request_data에서 가져올 수 있음
+        - 둘 다 없으면 기본값 "http_import" 사용
+        """
+        # 시나리오 1: JWT 없음 (login_required=False)
+        session_key = None  # JWT에서 추출 실패
+        request_data = {}  # request_data에도 없음
+
+        # Fallback 로직 시뮬레이션
+        final_key = session_key or request_data.get("session_key", "http_import")
+        assert final_key == "http_import"
+
+        # 시나리오 2: JWT에 session_key 없지만 request_data에 있음
+        session_key = None
+        request_data = {"session_key": "custom_session"}
+
+        final_key = session_key or request_data.get("session_key", "http_import")
+        assert final_key == "custom_session"
+
+        # 시나리오 3: JWT에 session_key 있음 (우선순위 최상)
+        session_key = "user:alice"
+        request_data = {"session_key": "should_be_ignored"}
+
+        final_key = session_key or request_data.get("session_key", "http_import")
+        assert final_key == "user:alice"

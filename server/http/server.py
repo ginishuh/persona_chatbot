@@ -183,7 +183,8 @@ def run_http_server(ctx: AppContext):
                                             {
                                                 "context": json.loads(
                                                     asyncio.run_coroutine_threadsafe(
-                                                        ctx.db_handler.get_room(rid), ctx.loop
+                                                        ctx.db_handler.get_room(rid, session_key),
+                                                        ctx.loop,
                                                     )
                                                     .result(timeout=5)
                                                     .get("context")
@@ -687,17 +688,12 @@ def run_http_server(ctx: AppContext):
 
                         from server.ws.actions.importer import _import_single_room
 
-                        # 세션 키: JWT에서 추출한 것 사용 (없으면 에러)
+                        # 세션 키 결정 우선순위:
+                        # 1. JWT에서 추출한 session_key (가장 안전)
+                        # 2. request_data의 session_key (하위 호환)
+                        # 3. 기본값 "http_import" (로그인 비활성 모드)
                         if not session_key:
-                            self.send_response(401)
-                            self.send_header("Content-Type", "application/json")
-                            response_data = json.dumps(
-                                {"success": False, "error": "Session key required for import"}
-                            ).encode("utf-8")
-                            self.send_header("Content-Length", str(len(response_data)))
-                            self.end_headers()
-                            self.wfile.write(response_data)
-                            return
+                            session_key = request_data.get("session_key", "http_import")
 
                         # 비동기 import 실행
                         async def run_import():
