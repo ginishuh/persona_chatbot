@@ -32,52 +32,82 @@ class DBHandler:
         await self._migrate()
 
     async def _migrate(self) -> None:
-        """최초 스키마 생성(간단 버전). user_version은 후속 버전에서 사용."""
+        """스키마 버전 관리를 통한 마이그레이션"""
         assert self._conn is not None
-        await self._conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS sessions (
-                session_key TEXT PRIMARY KEY,
-                user_id INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
 
-            CREATE TABLE IF NOT EXISTS rooms (
-                session_key TEXT NOT NULL,
-                room_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                context TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (session_key, room_id),
-                FOREIGN KEY (session_key) REFERENCES sessions(session_key) ON DELETE CASCADE
-            );
-            CREATE INDEX IF NOT EXISTS idx_rooms_session ON rooms(session_key);
+        # 현재 DB 버전 확인
+        cursor = await self._conn.execute("PRAGMA user_version")
+        row = await cursor.fetchone()
+        current_version = row[0] if row else 0
 
-            CREATE TABLE IF NOT EXISTS messages (
-                message_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                room_id TEXT NOT NULL,
-                role TEXT NOT NULL CHECK(role in ('user','assistant')),
-                content TEXT NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id);
-            CREATE INDEX IF NOT EXISTS idx_messages_ts ON messages(timestamp);
+        # 버전 0: 초기 스키마 생성
+        if current_version < 1:
+            await self._conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS sessions (
+                    session_key TEXT PRIMARY KEY,
+                    user_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
 
-            CREATE TABLE IF NOT EXISTS token_usage (
-                usage_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_key TEXT NOT NULL,
-                room_id TEXT,
-                provider TEXT NOT NULL,
-                token_info TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_tok_sess ON token_usage(session_key);
-            CREATE INDEX IF NOT EXISTS idx_tok_room ON token_usage(room_id);
-            """
-        )
-        await self._conn.commit()
+                CREATE TABLE IF NOT EXISTS rooms (
+                    session_key TEXT NOT NULL,
+                    room_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    context TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (session_key, room_id),
+                    FOREIGN KEY (session_key) REFERENCES sessions(session_key) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_rooms_session ON rooms(session_key);
+
+                CREATE TABLE IF NOT EXISTS messages (
+                    message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    room_id TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK(role in ('user','assistant')),
+                    content TEXT NOT NULL,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id);
+                CREATE INDEX IF NOT EXISTS idx_messages_ts ON messages(timestamp);
+
+                CREATE TABLE IF NOT EXISTS token_usage (
+                    usage_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_key TEXT NOT NULL,
+                    room_id TEXT,
+                    provider TEXT NOT NULL,
+                    token_info TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_tok_sess ON token_usage(session_key);
+                CREATE INDEX IF NOT EXISTS idx_tok_room ON token_usage(room_id);
+
+                PRAGMA user_version = 1;
+                """
+            )
+            await self._conn.commit()
+
+        # 버전 1→2: users 테이블 추가 (회원제 시스템)
+        if current_version < 2:
+            await self._conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+                CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+                PRAGMA user_version = 2;
+                """
+            )
+            await self._conn.commit()
 
     # ===== Rooms =====
     async def _upsert_session_unlocked(self, session_key: str) -> None:
@@ -278,6 +308,86 @@ class DBHandler:
         )
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
+
+    # ===== Users =====
+    async def create_user(self, username: str, email: str, password_hash: str) -> int | None:
+        """사용자 생성
+
+        Returns:
+            user_id: 생성된 사용자 ID
+            None: 중복 사용자명/이메일로 실패
+        """
+        assert self._conn is not None
+        async with self._lock:
+            try:
+                cursor = await self._conn.execute(
+                    """
+                    INSERT INTO users(username, email, password_hash)
+                    VALUES(?, ?, ?)
+                    """,
+                    (username, email, password_hash),
+                )
+                await self._conn.commit()
+                return cursor.lastrowid
+            except Exception:
+                # UNIQUE constraint 위반 (중복 username 또는 email)
+                return None
+
+    async def get_user_by_username(self, username: str) -> dict[str, Any] | None:
+        """사용자명으로 사용자 조회"""
+        assert self._conn is not None
+        cursor = await self._conn.execute(
+            """
+            SELECT user_id, username, email, password_hash, created_at, last_login
+            FROM users
+            WHERE username = ?
+            """,
+            (username,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def get_user_by_email(self, email: str) -> dict[str, Any] | None:
+        """이메일로 사용자 조회"""
+        assert self._conn is not None
+        cursor = await self._conn.execute(
+            """
+            SELECT user_id, username, email, password_hash, created_at, last_login
+            FROM users
+            WHERE email = ?
+            """,
+            (email,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def get_user_by_id(self, user_id: int) -> dict[str, Any] | None:
+        """user_id로 사용자 조회"""
+        assert self._conn is not None
+        cursor = await self._conn.execute(
+            """
+            SELECT user_id, username, email, password_hash, created_at, last_login
+            FROM users
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def update_last_login(self, user_id: int) -> None:
+        """마지막 로그인 시간 업데이트"""
+        assert self._conn is not None
+        async with self._lock:
+            await self._conn.execute(
+                """
+                UPDATE users
+                SET last_login = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+                """,
+                (user_id,),
+            )
+            await self._conn.commit()
 
     async def close(self) -> None:
         if self._conn is not None:

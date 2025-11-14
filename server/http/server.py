@@ -702,7 +702,218 @@ def run_http_server(ctx: AppContext):
                 return super().do_GET()
 
         def do_POST(self):
-            """POST 요청 처리 (Import API)"""
+            """POST 요청 처리 (Import API, 회원가입, 로그인)"""
+            # 회원가입 API
+            if self.path == "/api/register":
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length)
+                    data = json.loads(body.decode("utf-8"))
+
+                    username = data.get("username", "").strip()
+                    email = data.get("email", "").strip()
+                    password = data.get("password", "")
+
+                    # 입력 검증
+                    if not username or not email or not password:
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {
+                                    "success": False,
+                                    "error": "username, email, password는 필수입니다",
+                                }
+                            ).encode("utf-8")
+                        )
+                        return
+
+                    # 비밀번호 해싱
+                    import bcrypt
+
+                    password_hash = bcrypt.hashpw(
+                        password.encode("utf-8"), bcrypt.gensalt()
+                    ).decode("utf-8")
+
+                    # DB에 사용자 생성 (비동기)
+                    import asyncio
+
+                    if not ctx.db_handler or not ctx.loop:
+                        raise RuntimeError("DB handler or event loop not available")
+
+                    future = asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.create_user(username, email, password_hash), ctx.loop
+                    )
+                    user_id = future.result(timeout=5)
+
+                    if user_id is None:
+                        # 중복 사용자명 또는 이메일
+                        self.send_response(409)  # Conflict
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {
+                                    "success": False,
+                                    "error": "사용자명 또는 이메일이 이미 존재합니다",
+                                }
+                            ).encode("utf-8")
+                        )
+                        return
+
+                    # 성공
+                    self.send_response(201)  # Created
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    response_data = json.dumps(
+                        {"success": True, "user_id": user_id, "username": username}
+                    ).encode("utf-8")
+                    self.send_header("Content-Length", str(len(response_data)))
+                    self.end_headers()
+                    self.wfile.write(response_data)
+                    return
+
+                except json.JSONDecodeError as e:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"success": False, "error": f"JSON 파싱 실패: {str(e)}"}).encode(
+                            "utf-8"
+                        )
+                    )
+                    return
+                except Exception as e:
+                    logger.exception("Register API error")
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"success": False, "error": str(e)}).encode("utf-8")
+                    )
+                    return
+
+            # 로그인 API
+            if self.path == "/api/login":
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length)
+                    data = json.loads(body.decode("utf-8"))
+
+                    username = data.get("username", "").strip()
+                    password = data.get("password", "")
+
+                    # 입력 검증
+                    if not username or not password:
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {"success": False, "error": "username과 password는 필수입니다"}
+                            ).encode("utf-8")
+                        )
+                        return
+
+                    # DB에서 사용자 조회 (비동기)
+                    import asyncio
+
+                    if not ctx.db_handler or not ctx.loop:
+                        raise RuntimeError("DB handler or event loop not available")
+
+                    future = asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.get_user_by_username(username), ctx.loop
+                    )
+                    user = future.result(timeout=5)
+
+                    if not user:
+                        # 사용자 없음
+                        self.send_response(401)  # Unauthorized
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {
+                                    "success": False,
+                                    "error": "사용자명 또는 비밀번호가 올바르지 않습니다",
+                                }
+                            ).encode("utf-8")
+                        )
+                        return
+
+                    # 비밀번호 검증
+                    import bcrypt
+
+                    password_hash = user.get("password_hash", "")
+                    if not bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8")):
+                        # 비밀번호 불일치
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {
+                                    "success": False,
+                                    "error": "사용자명 또는 비밀번호가 올바르지 않습니다",
+                                }
+                            ).encode("utf-8")
+                        )
+                        return
+
+                    # 로그인 성공 → JWT 발급
+                    user_id = user.get("user_id")
+                    session_key = f"user:{username}"
+
+                    # JWT 발급 함수 import
+                    from server.websocket_server import issue_access_token, issue_refresh_token
+
+                    access_token, access_exp = issue_access_token(session_key, user_id)
+                    refresh_token, refresh_exp = issue_refresh_token(session_key, user_id)
+
+                    # last_login 업데이트 (비동기)
+                    asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.update_last_login(user_id), ctx.loop
+                    )
+
+                    # 성공 응답
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    response_data = json.dumps(
+                        {
+                            "success": True,
+                            "user_id": user_id,
+                            "username": username,
+                            "access_token": access_token,
+                            "access_exp": access_exp,
+                            "refresh_token": refresh_token,
+                            "refresh_exp": refresh_exp,
+                        }
+                    ).encode("utf-8")
+                    self.send_header("Content-Length", str(len(response_data)))
+                    self.end_headers()
+                    self.wfile.write(response_data)
+                    return
+
+                except json.JSONDecodeError as e:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"success": False, "error": f"JSON 파싱 실패: {str(e)}"}).encode(
+                            "utf-8"
+                        )
+                    )
+                    return
+                except Exception as e:
+                    logger.exception("Login API error")
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"success": False, "error": str(e)}).encode("utf-8")
+                    )
+                    return
+
             # Import API
             if self.path.startswith("/api/import"):
                 try:
