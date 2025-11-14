@@ -27,9 +27,9 @@ async def db_with_data():
         await db.upsert_room(room_id, session_key, "테스트 채팅방", context)
 
         # 메시지 추가
-        await db.save_message(room_id, "user", "안녕하세요")
-        await db.save_message(room_id, "assistant", "[캐릭터]: 반갑습니다")
-        await db.save_message(room_id, "user", "잘 지내세요?")
+        await db.save_message(room_id, "user", "안녕하세요", session_key)
+        await db.save_message(room_id, "assistant", "[캐릭터]: 반갑습니다", session_key)
+        await db.save_message(room_id, "user", "잘 지내세요?", session_key)
 
         # 토큰 사용량 추가
         token_info = json.dumps({"input_tokens": 100, "output_tokens": 200})
@@ -176,7 +176,7 @@ class TestExportEndpoints:
         db, session_key, room_id = db_with_data
 
         # 모든 메시지 조회
-        all_messages = await db.list_messages(room_id)
+        all_messages = await db.list_messages(room_id, session_key=session_key)
         assert len(all_messages) == 3
 
         # 날짜 범위로 조회 (실제 타임스탬프 사용)
@@ -185,7 +185,9 @@ class TestExportEndpoints:
             last_ts = all_messages[-1]["timestamp"]
 
             # 전체 범위
-            filtered = await db.list_messages_range(room_id, first_ts, last_ts)
+            filtered = await db.list_messages_range(
+                room_id, session_key=session_key, start=first_ts, end=last_ts
+            )
             assert len(filtered) >= 1  # 최소 1개 이상
 
     @pytest.mark.asyncio

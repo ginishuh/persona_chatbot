@@ -447,6 +447,29 @@ class DBHandler:
 
             await self._conn.commit()
 
+    async def list_rooms_by_user_id(self, user_id: int) -> list[dict[str, Any]]:
+        """user_id로 방 목록 조회 (세션 JOIN)
+
+        Args:
+            user_id: 사용자 ID
+
+        Returns:
+            방 목록 (room_id, title, context, created_at, updated_at, session_key)
+        """
+        assert self._conn is not None
+        cur = await self._conn.execute(
+            """
+            SELECT r.room_id, r.title, r.context, r.created_at, r.updated_at, r.session_key
+            FROM rooms r
+            JOIN sessions s ON r.session_key = s.session_key
+            WHERE s.user_id = ?
+            ORDER BY r.updated_at DESC
+            """,
+            (user_id,),
+        )
+        rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
     # ===== Messages =====
     async def save_message(
         self, room_id: str, role: str, content: str, session_key: str = "default"
@@ -610,15 +633,28 @@ class DBHandler:
         return [dict(r) for r in rows]
 
     # ===== Users =====
-    async def create_user(self, username: str, password_hash: str, email: str = None) -> int:
-        """사용자 생성 (회원가입 또는 seed)"""
+    async def create_user(self, username: str, email: str, password_hash: str) -> int | None:
+        """사용자 생성
+
+        Returns:
+            user_id: 생성된 사용자 ID
+            None: 중복 사용자명/이메일로 실패
+        """
         assert self._conn is not None
-        cur = await self._conn.execute(
-            "INSERT INTO users(username, password_hash, email) VALUES(?, ?, ?)",
-            (username, password_hash, email),
-        )
-        await self._conn.commit()
-        return cur.lastrowid
+        async with self._lock:
+            try:
+                cursor = await self._conn.execute(
+                    """
+                    INSERT INTO users(username, email, password_hash)
+                    VALUES(?, ?, ?)
+                    """,
+                    (username, email, password_hash),
+                )
+                await self._conn.commit()
+                return cursor.lastrowid
+            except Exception:
+                # UNIQUE constraint 위반 (중복 username 또는 email)
+                return None
 
     async def get_user_by_username(self, username: str) -> dict[str, Any] | None:
         """사용자명으로 조회"""
