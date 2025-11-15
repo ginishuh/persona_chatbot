@@ -36,21 +36,12 @@ logger = logging.getLogger(__name__)
 # 핸들러 초기화
 # 프로젝트 루트 경로 (server/ 폴더의 상위 디렉토리)
 project_root = Path(__file__).parent.parent
-LOGIN_PASSWORD = os.getenv("APP_LOGIN_PASSWORD", "")
-LOGIN_REQUIRED = bool(LOGIN_PASSWORD)
+# HTTP JWT 인증만 사용 (WebSocket 레거시 인증 제거됨)
 JWT_SECRET = os.getenv("APP_JWT_SECRET", "")
 JWT_ALGORITHM = os.getenv("APP_JWT_ALGORITHM", "HS256")
-# 기존 APP_JWT_TTL 호환: 설정 시 access TTL로 사용
-ACCESS_TTL_SECONDS = int(os.getenv("APP_ACCESS_TTL", os.getenv("APP_JWT_TTL", "604800")))
+ACCESS_TTL_SECONDS = int(os.getenv("APP_ACCESS_TTL", "604800"))
 REFRESH_TTL_SECONDS = int(os.getenv("APP_REFRESH_TTL", "2592000"))  # 30일
 BIND_HOST = os.getenv("APP_BIND_HOST", "127.0.0.1")
-LOGIN_USERNAME = os.getenv("APP_LOGIN_USERNAME", "")
-LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("APP_LOGIN_MAX_ATTEMPTS", "5"))
-LOGIN_RATE_LIMIT_WINDOW = timedelta(minutes=int(os.getenv("APP_LOGIN_LOCK_MINUTES", "15")))
-TOKEN_EXPIRED_GRACE = timedelta(minutes=int(os.getenv("APP_JWT_GRACE_MINUTES", "60")))
-
-if LOGIN_REQUIRED and not JWT_SECRET:
-    raise RuntimeError("APP_JWT_SECRET must be set when APP_LOGIN_PASSWORD is enabled")
 
 file_handler = FileHandler()
 git_handler = GitHandler()
@@ -181,223 +172,23 @@ async def send_auth_required(websocket, reason="missing_token"):
 
 
 async def handle_login_action(websocket, data):
-    """로그인/토큰 검증 처리
+    """WebSocket 로그인 액션 (레거시 - HTTP API 사용 권장)
 
-    변경점:
-    - 로그인 성공 시 성인동의를 자동으로 True로 설정합니다.
-    - 세션키(session_key)를 발급/반환하여 재연결 시 상태를 유지합니다.
+    HTTP API (/api/login)로 로그인하여 JWT 토큰을 받은 후 사용하세요.
+    WebSocket에서는 더 이상 로그인 처리를 하지 않습니다.
     """
-    # 세션 확보 및 성인 동의 자동 설정
-    session_key, session_obj = _get_or_create_session(websocket, data)
-    try:
-        session_obj.setdefault("settings", {})["adult_consent"] = True
-    except Exception:
-        pass
-    if not LOGIN_REQUIRED:
-        await websocket.send(
-            json.dumps(
-                {
-                    "action": "login",
-                    "data": {
-                        "success": True,
-                        "token": None,
-                        "session_key": session_key,
-                    },
-                }
-            )
-        )
-        return
-
-    client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
-    now = datetime.utcnow()
-    attempts = login_attempts.setdefault(client_ip, [])
-    attempts[:] = [(ts, success) for ts, success in attempts if now - ts < LOGIN_RATE_LIMIT_WINDOW]
-    recent_failures = sum(1 for ts, success in attempts if not success)
-
-    if recent_failures >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
-        await websocket.send(
-            json.dumps(
-                {
-                    "action": "login",
-                    "data": {
-                        "success": False,
-                        "error": "로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.",
-                        "code": "rate_limited",
-                    },
-                }
-            )
-        )
-        return
-
-    def record_attempt(success: bool):
-        attempts.append((datetime.utcnow(), success))
-
-    token = data.get("token")
-    username = data.get("username", "")
-    password = data.get("password", "")
-
-    if token:
-        # Access 토큰으로 재인증/갱신 (웹소켓 keep-alive용)
-        payload, error = verify_token(token, expected_type="access")
-        if error:
-            if error == "token_expired":
-                try:
-                    unverified = jwt.decode(
-                        token, options={"verify_signature": False, "verify_exp": False}
-                    )
-                    exp = datetime.fromtimestamp(unverified.get("exp"))
-                    if datetime.utcnow() - exp < TOKEN_EXPIRED_GRACE:
-                        # 기존 토큰의 session_key 유지
-                        old_session_key = unverified.get("session_key")
-                        new_token, expires_at = issue_access_token(old_session_key)
-                        # refresh 토큰은 회전하지 않음(명시적 refresh에서 회전)
-                        await websocket.send(
-                            json.dumps(
-                                {
-                                    "action": "login",
-                                    "data": {
-                                        "success": True,
-                                        "token": new_token,
-                                        "expires_at": expires_at,
-                                        "renewed": True,
-                                    },
-                                }
-                            )
-                        )
-                        record_attempt(True)
-                        return
-                except Exception:
-                    pass
-
-            await websocket.send(
-                json.dumps(
-                    {
-                        "action": "login",
-                        "data": {
-                            "success": False,
-                            "error": "토큰이 유효하지 않습니다.",
-                            "code": error,
-                        },
-                    }
-                )
-            )
-            record_attempt(False)
-            return
-
-        # 토큰 검증 성공: 기존 session_key 유지
-        token_session_key = payload.get("session_key") if payload else None
-        new_token, expires_at = issue_access_token(token_session_key)
-        await websocket.send(
-            json.dumps(
-                {
-                    "action": "login",
-                    "data": {
-                        "success": True,
-                        "token": new_token,
-                        "expires_at": expires_at,
-                        "renewed": True,
-                        "session_key": session_key,
-                    },
-                }
-            )
-        )
-        record_attempt(True)
-        return
-
-    # 사용자명 검사(설정된 경우)
-    if LOGIN_USERNAME:
-        if not username or username != LOGIN_USERNAME:
-            await websocket.send(
-                json.dumps(
-                    {
-                        "action": "login",
-                        "data": {
-                            "success": False,
-                            "error": "아이디가 일치하지 않습니다.",
-                            "code": "invalid_username",
-                        },
-                    }
-                )
-            )
-            record_attempt(False)
-            return
-
-    if password and password == LOGIN_PASSWORD:
-        # 로그인 성공: username 기반 세션으로 전환 (다중 기기 동기화)
-        if username and LOGIN_USERNAME and db_handler:
-            user_session_key = f"user:{username}"
-
-            # 현재 websocket의 이전 session_key만 마이그레이션 (안전)
-            # 로그인 직전의 UUID 세션으로 저장된 rooms만 user:{username}으로 전환
-            old_session_key = session_key
-            if old_session_key != user_session_key and not old_session_key.startswith("user:"):
-                try:
-                    # 이 session_key로 저장된 rooms만 조회
-                    old_rooms = await db_handler.list_rooms(old_session_key)
-                    migrated_count = 0
-                    for room in old_rooms:
-                        room_id = room.get("room_id")
-                        title = room.get("title", room_id)
-                        context = room.get("context")
-                        # user:{username}으로 재저장
-                        await db_handler.upsert_room(room_id, user_session_key, title, context)
-                        migrated_count += 1
-                    if migrated_count > 0:
-                        logger.info(
-                            f"Migrated {migrated_count} rooms from {old_session_key} to {user_session_key}"
-                        )
-                except Exception as e:
-                    logger.error(f"Migration failed: {e}")
-
-            # 기존 랜덤 세션 제거
-            if old_session_key != user_session_key and old_session_key in sessions:
-                sessions.pop(old_session_key, None)
-
-            # username 기반 세션 생성 또는 재사용
-            if user_session_key not in sessions:
-                sessions[user_session_key] = {
-                    "settings": {"retention_enabled": False, "adult_consent": True},
-                    "rooms": {},
-                    "username": username,
-                }
-            websocket_to_session[websocket] = user_session_key
-            session_key = user_session_key
-
-        # 로그인 성공: session_key를 JWT에 포함
-        issued, expires_at = issue_access_token(session_key)
-        refresh, refresh_exp = issue_refresh_token(session_key)
-        await websocket.send(
-            json.dumps(
-                {
-                    "action": "login",
-                    "data": {
-                        "success": True,
-                        "token": issued,
-                        "expires_at": expires_at,
-                        "refresh_token": refresh,
-                        "refresh_expires_at": refresh_exp,
-                        "renewed": False,
-                        "session_key": session_key,
-                    },
-                }
-            )
-        )
-        record_attempt(True)
-        return
-
     await websocket.send(
         json.dumps(
             {
                 "action": "login",
                 "data": {
                     "success": False,
-                    "error": "비밀번호가 일치하지 않습니다.",
-                    "code": "invalid_password",
+                    "error": "HTTP API(/api/login)로 로그인하세요. WebSocket 로그인은 더 이상 지원되지 않습니다.",
+                    "code": "deprecated",
                 },
             }
         )
     )
-    record_attempt(False)
 
 
 async def handle_token_refresh_action(websocket, data):
@@ -452,12 +243,8 @@ async def handle_message(websocket, message):
             await handle_token_refresh_action(websocket, data)
             return
 
-        if LOGIN_REQUIRED:
-            token = data.get("token")
-            _, token_error = auth_verify_token(APP_CTX, token, expected_type="access")
-            if token_error:
-                await auth_send_auth_required(APP_CTX, websocket, token_error)
-                return
+        # HTTP JWT 인증만 사용 (WebSocket에서는 토큰 검증하지 않음)
+        # login_required=False이므로 모든 액션 허용
 
         # 라우터 우선 위임(등록된 액션이면 여기서 종료)
         try:
@@ -689,14 +476,11 @@ async def websocket_handler(websocket):
                     "data": {
                         "success": True,
                         "message": "Connected to Persona Chat WebSocket Server",
-                        "login_required": LOGIN_REQUIRED,
+                        "login_required": False,  # HTTP API로 로그인 필요
                     },
                 }
             )
         )
-
-        if LOGIN_REQUIRED:
-            await send_auth_required(websocket)
 
         # 메시지 수신 루프
         async for message in websocket:
@@ -736,13 +520,13 @@ async def main():
     APP_CTX = AppContext(
         project_root=project_root,
         bind_host=BIND_HOST,
-        login_required=LOGIN_REQUIRED,
+        login_required=False,  # HTTP API 로그인만 사용
         jwt_secret=JWT_SECRET,
         jwt_algorithm=JWT_ALGORITHM,
         access_ttl_seconds=ACCESS_TTL_SECONDS,
         refresh_ttl_seconds=REFRESH_TTL_SECONDS,
-        login_username=LOGIN_USERNAME,
-        login_rate_limit_max_attempts=LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
+        login_username="",  # 레거시 제거됨
+        login_rate_limit_max_attempts=int(os.getenv("APP_LOGIN_MAX_ATTEMPTS", "5")),
         login_rate_limit_window_seconds=int(os.getenv("APP_LOGIN_LOCK_MINUTES", "15")) * 60,
         token_expired_grace_seconds=int(os.getenv("APP_JWT_GRACE_MINUTES", "60")) * 60,
     )
