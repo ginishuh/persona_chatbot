@@ -543,6 +543,31 @@
         </div>
     </div>
 
+    <!-- 채팅방 이름 입력 모달 -->
+    <div id="roomNameModal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="roomNameTitle">
+        <div class="settings-modal-overlay"></div>
+        <div class="settings-modal-content" style="max-width: 400px;">
+            <div class="settings-modal-header">
+                <h2 id="roomNameTitle">📝 새 채팅방 만들기</h2>
+                <button id="roomNameCloseBtn" class="btn-icon" title="닫기">✕</button>
+            </div>
+            <div class="settings-modal-body">
+                <label for="roomNameInput" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">채팅방 이름</label>
+                <input
+                    type="text"
+                    id="roomNameInput"
+                    class="form-control"
+                    placeholder="예: 판타지 월드, 학교 생활, SF 우주..."
+                    style="width: 100%; padding: 0.5rem; font-size: 1rem; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 1rem;"
+                />
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button id="roomNameCancelBtn" class="btn" style="background: #6c757d; color: white;">취소</button>
+                    <button id="roomNameConfirmBtn" class="btn" style="background: #007bff; color: white;">생성</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 방 목록(Home) 모달 -->
     <div id="roomsModal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="roomsTitle">
         <div class="settings-modal-overlay"></div>

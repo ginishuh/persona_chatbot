@@ -118,6 +118,13 @@ const adminCloseBtn = document.getElementById('adminCloseBtn');
 const pendingUsersList = document.getElementById('pendingUsersList');
 const noPendingUsers = document.getElementById('noPendingUsers');
 
+// 채팅방 이름 입력 모달 요소
+const roomNameModal = document.getElementById('roomNameModal');
+const roomNameInput = document.getElementById('roomNameInput');
+const roomNameCloseBtn = document.getElementById('roomNameCloseBtn');
+const roomNameCancelBtn = document.getElementById('roomNameCancelBtn');
+const roomNameConfirmBtn = document.getElementById('roomNameConfirmBtn');
+
 let currentAssistantMessage = null;
 let characterColors = {}; // 캐릭터별 색상 매핑
 let authRequired = false;
@@ -1301,8 +1308,21 @@ if (roomSelect) {
 }
 if (roomAddBtn) {
     roomAddBtn.addEventListener('click', () => {
-        const name = prompt('새 채팅방 이름', 'room_' + Math.random().toString(36).slice(2, 6));
-        if (!name) return;
+        // 모달 열기
+        roomNameInput.value = ''; // 입력 초기화
+        roomNameModal.classList.remove('hidden');
+        setTimeout(() => roomNameInput.focus(), 100); // 포커스
+    });
+}
+
+// 채팅방 이름 모달 - 확인 버튼
+if (roomNameConfirmBtn) {
+    roomNameConfirmBtn.addEventListener('click', () => {
+        const name = roomNameInput.value.trim();
+        if (!name) {
+            alert('채팅방 이름을 입력하세요.');
+            return;
+        }
         const r = sanitizeRoomName(name);
         if (!rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) rooms.push(r);
         currentRoom = r;
@@ -1315,6 +1335,30 @@ if (roomAddBtn) {
         refreshRoomViews();
         log(`채팅방 추가: ${r}`, 'success');
         announce(`채팅방 추가: ${r}`);
+
+        // 모달 닫기
+        roomNameModal.classList.add('hidden');
+    });
+}
+
+// 채팅방 이름 모달 - 닫기 버튼들
+if (roomNameCloseBtn) {
+    roomNameCloseBtn.addEventListener('click', () => {
+        roomNameModal.classList.add('hidden');
+    });
+}
+if (roomNameCancelBtn) {
+    roomNameCancelBtn.addEventListener('click', () => {
+        roomNameModal.classList.add('hidden');
+    });
+}
+
+// 채팅방 이름 모달 - Enter 키로 확인
+if (roomNameInput) {
+    roomNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.isComposing) {
+            roomNameConfirmBtn?.click();
+        }
     });
 }
 // roomDelBtn 제거됨 - 각 채팅방 옆에 개별 삭제 버튼으로 대체
