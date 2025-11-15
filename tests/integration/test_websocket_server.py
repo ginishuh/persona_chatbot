@@ -35,7 +35,11 @@ async def ws_server(tmp_path):
     os.environ["DB_PATH"] = str(data_dir / "test.db")
 
     # 서버 모듈을 동적으로 import (환경변수 설정 후)
-    from server import websocket_server
+    import importlib
+
+    from server import websocket_server as _ws_mod
+
+    websocket_server = importlib.reload(_ws_mod)
 
     # 프로젝트 루트 경로 오버라이드
     websocket_server.project_root = tmp_path
