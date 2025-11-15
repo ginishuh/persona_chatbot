@@ -1560,7 +1560,8 @@ function attemptTokenRefresh() {
     if (refreshToken) {
         sendMessage({ action: 'token_refresh', refresh_token: refreshToken }, { skipToken: true, skipRetry: true });
     } else {
-        sendMessage({ action: 'login' });
+        // HTTP API로 로그인 필요
+        showLoginModal();
     }
 }
 
@@ -1813,37 +1814,16 @@ function handleMessage(msg) {
         case 'connected':
             log('서버 연결 완료', 'success');
             if (data && data.login_required) {
-                authRequired = true;
-                isAuthenticated = false;
-                autoLoginRequested = false;
-                if (authToken) {
-                    const consent = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
-                    sendMessage({ action: 'login', adult_consent: consent || undefined });
-                } else {
-                    // 자동 로그인 시도
-                    try {
-                        const auto = localStorage.getItem(LOGIN_AUTOLOGIN_KEY) === '1';
-                        const user = localStorage.getItem(LOGIN_USER_KEY) || '';
-                        const pw = localStorage.getItem(LOGIN_SAVED_PW_KEY) || '';
-                        if (auto && user && pw) {
-                            const consent = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
-                            sendMessage({ action: 'login', username: user, password: pw, adult_consent: consent || undefined }, { skipToken: true });
-                        } else {
-                            showLoginModal();
-                        }
-                    } catch (_) {
-                        showLoginModal();
-                    }
-                }
-            } else {
+                // 레거시: 더 이상 사용되지 않음 (login_required는 항상 false)
                 authRequired = false;
-                isAuthenticated = true;
+                isAuthenticated = false;
+                showLoginModal();
+            } else {
+                // login_required=false: HTTP API로 로그인하면 됨
+                authRequired = false;
+                isAuthenticated = false;
                 hideLoginModal();
                 resumePendingRoute();
-                if (!autoLoginRequested) {
-                    autoLoginRequested = true;
-                    sendMessage({ action: 'login' }, { skipToken: true });
-                }
                 initializeAppData();
             }
             break;
