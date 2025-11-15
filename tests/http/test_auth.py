@@ -267,26 +267,7 @@ class TestJWTWithUserID:
 class TestUserDataIsolation:
     """user_id 기반 데이터 격리 테스트"""
 
-    @pytest.mark.asyncio
-    async def test_user_session_storage(self, db_empty):
-        """로그인 시 user_id가 세션에 저장되는지 테스트"""
-        import bcrypt
-
-        # 사용자 생성
-        password_hash = bcrypt.hashpw(b"password123", bcrypt.gensalt()).decode("utf-8")
-        user_id = await db_empty.create_user("testuser", "test@example.com", password_hash)
-
-        # 세션 생성 (로그인 시뮬레이션)
-        session_key = "user:testuser"
-        await db_empty.upsert_session(session_key, user_id)
-
-        # 세션 조회로 user_id 확인
-        cursor = await db_empty._conn.execute(
-            "SELECT user_id FROM sessions WHERE session_key = ?", (session_key,)
-        )
-        row = await cursor.fetchone()
-        assert row is not None
-        assert row["user_id"] == user_id
+    # test_user_session_storage는 sessions 테이블이 제거되어 삭제됨 (user_id 기반 시스템)
 
     @pytest.mark.asyncio
     async def test_list_rooms_by_user_id(self):
@@ -310,49 +291,42 @@ class TestUserDataIsolation:
             assert user1_id is not None
             assert user2_id is not None
 
-            # Alice 세션 및 방 생성
-            session1 = "user:alice"
-            await db.upsert_session(session1, user1_id)
+            # Alice 방 생성
             await db.upsert_room(
                 "room-a1",
-                session1,
+                user1_id,
                 "Alice's Room 1",
                 json.dumps({"world": "Alice World"}),
-                user1_id,
             )
             await db.upsert_room(
                 "room-a2",
-                session1,
+                user1_id,
                 "Alice's Room 2",
                 json.dumps({"world": "Alice World"}),
-                user1_id,
             )
 
-            # Bob 세션 및 방 생성
-            session2 = "user:bob"
-            await db.upsert_session(session2, user2_id)
+            # Bob 방 생성
             await db.upsert_room(
                 "room-b1",
-                session2,
+                user2_id,
                 "Bob's Room 1",
                 json.dumps({"world": "Bob World"}),
-                user2_id,
             )
 
             # Alice의 방 목록 조회 (user_id로)
-            alice_rooms = await db.list_rooms_by_user_id(user1_id)
+            alice_rooms = await db.list_rooms(user1_id)
             assert len(alice_rooms) == 2
             assert {r["room_id"] for r in alice_rooms} == {"room-a1", "room-a2"}
             assert all(r["title"].startswith("Alice") for r in alice_rooms)
 
             # Bob의 방 목록 조회 (user_id로)
-            bob_rooms = await db.list_rooms_by_user_id(user2_id)
+            bob_rooms = await db.list_rooms(user2_id)
             assert len(bob_rooms) == 1
             assert bob_rooms[0]["room_id"] == "room-b1"
             assert bob_rooms[0]["title"] == "Bob's Room 1"
 
             # 존재하지 않는 user_id로 조회 → 빈 목록
-            nonexistent_rooms = await db.list_rooms_by_user_id(9999)
+            nonexistent_rooms = await db.list_rooms(9999)
             assert len(nonexistent_rooms) == 0
 
             await db.close()
@@ -375,33 +349,33 @@ class TestUserDataIsolation:
             user1_id = await db.create_user("user1", "user1@example.com", pw_hash)
             user2_id = await db.create_user("user2", "user2@example.com", pw_hash)
 
-            # User1: 세션 및 방 생성
-            session1 = "user:user1"
-            await db.upsert_session(session1, user1_id)
-            await db.upsert_room("room-001", session1, "User1 Room", None, user1_id)
-            await db.save_message("room-001", "user", "User1's message")
+            # User1: 방 생성
+            await db.upsert_room("room-001", user1_id, "User1 Room", None)
+            await db.save_message("room-001", "user", "User1's message", user1_id)
 
-            # User2: 같은 room_id로 방 생성 (session_key가 다르므로 가능)
-            session2 = "user:user2"
-            await db.upsert_session(session2, user2_id)
-            await db.upsert_room("room-001", session2, "User2 Room", None, user2_id)
-            await db.save_message("room-001", "user", "User2's message")
+            # User2: 같은 room_id로 방 생성 (user_id가 다르므로 가능)
+            await db.upsert_room("room-001", user2_id, "User2 Room", None)
+            await db.save_message("room-001", "user", "User2's message", user2_id)
 
             # User1의 방 조회 (user_id로)
-            user1_rooms = await db.list_rooms_by_user_id(user1_id)
+            user1_rooms = await db.list_rooms(user1_id)
             assert len(user1_rooms) == 1
             assert user1_rooms[0]["title"] == "User1 Room"
-            assert user1_rooms[0]["session_key"] == session1
+            assert user1_rooms[0]["user_id"] == user1_id
 
             # User2의 방 조회 (user_id로)
-            user2_rooms = await db.list_rooms_by_user_id(user2_id)
+            user2_rooms = await db.list_rooms(user2_id)
             assert len(user2_rooms) == 1
             assert user2_rooms[0]["title"] == "User2 Room"
-            assert user2_rooms[0]["session_key"] == session2
+            assert user2_rooms[0]["user_id"] == user2_id
 
-            # 메시지는 room_id로 구분되므로 둘 다 조회됨 (room 격리와 무관)
-            # 실제로는 room_id가 충돌하지 않도록 UUID 등을 사용해야 함
-            messages = await db.list_messages("room-001")
-            assert len(messages) == 2  # 두 사용자의 메시지 모두 조회됨
+            # 메시지는 user_id별로 격리됨
+            user1_messages = await db.list_messages("room-001", user1_id)
+            assert len(user1_messages) == 1
+            assert user1_messages[0]["content"] == "User1's message"
+
+            user2_messages = await db.list_messages("room-001", user2_id)
+            assert len(user2_messages) == 1
+            assert user2_messages[0]["content"] == "User2's message"
 
             await db.close()

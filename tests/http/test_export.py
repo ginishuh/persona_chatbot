@@ -20,22 +20,23 @@ async def db_with_data():
         await db.initialize()
 
         # 테스트 데이터 생성
-        session_key = "test_session"
+        user_id = await db.create_user("testuser", "test@example.com", "hash")
+        await db.approve_user(user_id, user_id)
         room_id = "test_room"
         context = json.dumps({"world": "판타지 세계", "characters": [{"name": "테스트 캐릭터"}]})
 
-        await db.upsert_room(room_id, session_key, "테스트 채팅방", context)
+        await db.upsert_room(room_id, user_id, "테스트 채팅방", context)
 
         # 메시지 추가
-        await db.save_message(room_id, "user", "안녕하세요")
-        await db.save_message(room_id, "assistant", "[캐릭터]: 반갑습니다")
-        await db.save_message(room_id, "user", "잘 지내세요?")
+        await db.save_message(room_id, "user", "안녕하세요", user_id)
+        await db.save_message(room_id, "assistant", "[캐릭터]: 반갑습니다", user_id)
+        await db.save_message(room_id, "user", "잘 지내세요?", user_id)
 
         # 토큰 사용량 추가
         token_info = json.dumps({"input_tokens": 100, "output_tokens": 200})
-        await db.save_token_usage(session_key, room_id, "claude", token_info)
+        await db.save_token_usage(user_id, room_id, "claude", token_info)
 
-        yield db, session_key, room_id
+        yield db, user_id, room_id
 
         await db.close()
 
@@ -46,30 +47,30 @@ class TestExportEndpoints:
     @pytest.mark.asyncio
     async def test_db_data_preparation(self, db_with_data):
         """테스트 데이터가 정상적으로 준비되었는지 확인"""
-        db, session_key, room_id = db_with_data
+        db, user_id, room_id = db_with_data
 
         # Room 확인
-        room = await db.get_room(room_id)
+        room = await db.get_room(room_id, user_id)
         assert room is not None
         assert room["title"] == "테스트 채팅방"
 
         # Messages 확인
-        messages = await db.list_messages(room_id)
+        messages = await db.list_messages(room_id, user_id)
         assert len(messages) == 3
 
         # Token usage 확인
-        usage = await db.list_token_usage_range(room_id)
+        usage = await db.list_token_usage_range(room_id, user_id)
         assert len(usage) == 1
 
     @pytest.mark.asyncio
     async def test_export_json_data_structure(self, db_with_data):
         """Export 데이터 구조 검증 (실제 HTTP 요청 없이)"""
-        db, session_key, room_id = db_with_data
+        db, user_id, room_id = db_with_data
 
         # 방 데이터 조회
-        room = await db.get_room(room_id)
-        messages = await db.list_messages(room_id)
-        token_usage = await db.list_token_usage_range(room_id)
+        room = await db.get_room(room_id, user_id)
+        messages = await db.list_messages(room_id, user_id)
+        token_usage = await db.list_token_usage_range(room_id, user_id)
 
         # Export 데이터 구조 생성
         export_data = {
@@ -116,28 +117,28 @@ class TestExportEndpoints:
     @pytest.mark.asyncio
     async def test_export_multiple_rooms(self, db_with_data):
         """여러 채팅방 Export 데이터 구조 검증"""
-        db, session_key, _ = db_with_data
+        db, user_id, _ = db_with_data
 
         # 추가 채팅방 생성
         room_id_2 = "test_room_2"
-        await db.upsert_room(room_id_2, session_key, "두 번째 채팅방", None)
-        await db.save_message(room_id_2, "user", "두 번째 방 메시지")
+        await db.upsert_room(room_id_2, user_id, "두 번째 채팅방", None)
+        await db.save_message(room_id_2, "user", "두 번째 방 메시지", user_id)
 
         # 전체 방 목록 조회
-        rooms = await db.list_rooms(session_key)
+        rooms = await db.list_rooms(user_id)
         assert len(rooms) == 2
 
         # Export 데이터 구조 생성 (전체)
         export_data = {
             "version": "1.0",
             "export_type": "full_backup",
-            "session_key": session_key,
+            "user_id": user_id,
             "rooms": [],
         }
 
         for room in rooms:
-            messages = await db.list_messages(room["room_id"])
-            token_usage = await db.list_token_usage_range(room["room_id"])
+            messages = await db.list_messages(room["room_id"], user_id)
+            token_usage = await db.list_token_usage_range(room["room_id"], user_id)
 
             export_data["rooms"].append(
                 {
@@ -173,10 +174,10 @@ class TestExportEndpoints:
     @pytest.mark.asyncio
     async def test_export_date_range_filtering(self, db_with_data):
         """날짜 범위 필터링 테스트"""
-        db, session_key, room_id = db_with_data
+        db, user_id, room_id = db_with_data
 
         # 모든 메시지 조회
-        all_messages = await db.list_messages(room_id)
+        all_messages = await db.list_messages(room_id, user_id)
         assert len(all_messages) == 3
 
         # 날짜 범위로 조회 (실제 타임스탬프 사용)
@@ -185,20 +186,22 @@ class TestExportEndpoints:
             last_ts = all_messages[-1]["timestamp"]
 
             # 전체 범위
-            filtered = await db.list_messages_range(room_id, first_ts, last_ts)
+            filtered = await db.list_messages_range(
+                room_id, user_id=user_id, start=first_ts, end=last_ts
+            )
             assert len(filtered) >= 1  # 최소 1개 이상
 
     @pytest.mark.asyncio
     async def test_export_empty_room(self, db_with_data):
         """빈 채팅방 Export 테스트"""
-        db, session_key, _ = db_with_data
+        db, user_id, _ = db_with_data
 
         # 빈 방 생성
         empty_room_id = "empty_room"
-        await db.upsert_room(empty_room_id, session_key, "빈 채팅방", None)
+        await db.upsert_room(empty_room_id, user_id, "빈 채팅방", None)
 
         # 메시지 조회
-        messages = await db.list_messages(empty_room_id)
+        messages = await db.list_messages(empty_room_id, user_id)
         assert len(messages) == 0
 
         # Export 데이터 구조
@@ -221,9 +224,9 @@ class TestExportEndpoints:
     @pytest.mark.asyncio
     async def test_export_context_parsing(self, db_with_data):
         """Context JSON 파싱 테스트"""
-        db, session_key, room_id = db_with_data
+        db, user_id, room_id = db_with_data
 
-        room = await db.get_room(room_id)
+        room = await db.get_room(room_id, user_id)
         assert room["context"] is not None
 
         # Context 파싱
@@ -235,9 +238,9 @@ class TestExportEndpoints:
     @pytest.mark.asyncio
     async def test_export_ndjson_format(self, db_with_data):
         """NDJSON 스트리밍 형식 검증"""
-        db, session_key, room_id = db_with_data
+        db, user_id, room_id = db_with_data
 
-        messages = await db.list_messages(room_id)
+        messages = await db.list_messages(room_id, user_id)
 
         # NDJSON 라인 생성
         ndjson_lines = []
@@ -247,7 +250,7 @@ class TestExportEndpoints:
         ndjson_lines.append(json.dumps(meta, ensure_ascii=False))
 
         # Room 라인
-        room = await db.get_room(room_id)
+        room = await db.get_room(room_id, user_id)
         room_line = {
             "type": "room",
             "room_id": room["room_id"],

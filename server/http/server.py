@@ -113,7 +113,7 @@ def run_http_server(ctx: AppContext):
                     end = self._parse_date((qs.get("end", [None]))[0], end=True)
 
                     # 인증: 로그인 환경에서는 JWT 필요
-                    session_key = None  # JWT에서 추출한 session_key (세션별 데이터 격리)
+                    user_id = None  # JWT에서 추출한 user_id (사용자별 데이터 격리)
                     if ctx.login_required:
                         token = None
                         authz = self.headers.get("Authorization")
@@ -132,9 +132,30 @@ def run_http_server(ctx: AppContext):
                             self.end_headers()
                             self.wfile.write(body)
                             return
-                        # JWT payload에서 session_key 추출
+                        # JWT payload에서 user_id 추출
                         if payload:
-                            session_key = payload.get("session_key")
+                            user_id = payload.get("user_id")
+                        if not user_id:
+                            body = json.dumps(
+                                {"success": False, "error": "user_id not found in token"}
+                            ).encode("utf-8")
+                            self.send_response(401)
+                            self.send_header("Content-Type", "application/json")
+                            self.send_header("Content-Length", str(len(body)))
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
+                    else:
+                        # 비로그인 모드는 더 이상 지원하지 않음
+                        body = json.dumps({"success": False, "error": "login required"}).encode(
+                            "utf-8"
+                        )
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
 
                     export_obj = {
                         "version": "1.0",
@@ -146,12 +167,12 @@ def run_http_server(ctx: AppContext):
                         # DB 우선: 다른 스레드의 이벤트 루프에서 실행
                         try:
                             if ctx.db_handler and getattr(ctx, "loop", None):
-                                # 먼저 room 소유권 확인 (session_key로 격리)
+                                # 먼저 room 소유권 확인 (user_id로 격리)
                                 room_row = asyncio.run_coroutine_threadsafe(
-                                    ctx.db_handler.get_room(rid, session_key), ctx.loop
+                                    ctx.db_handler.get_room(rid, user_id), ctx.loop
                                 ).result(timeout=5)
 
-                                # room이 현재 session_key에 속하지 않으면 빈 결과 반환
+                                # room이 현재 user_id에 속하지 않으면 빈 결과 반환
                                 if not room_row:
                                     return {"room_id": rid, "title": rid, "messages": []}
 
@@ -164,7 +185,7 @@ def run_http_server(ctx: AppContext):
                                 if "messages" in includes:
                                     msgs = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_messages_range(
-                                            rid, start=start, end=end
+                                            rid, user_id=user_id, start=start, end=end
                                         ),
                                         ctx.loop,
                                     ).result(timeout=5)
@@ -182,11 +203,12 @@ def run_http_server(ctx: AppContext):
                                 if "token_usage" in includes:
                                     usage = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_token_usage_range(
-                                            rid, start=start, end=end
+                                            rid, user_id=user_id, start=start, end=end
                                         ),
                                         ctx.loop,
                                     ).result(timeout=5)
                                     if usage:
+                                        # user_id는 이미 각 usage 항목에 포함됨
                                         base["token_usage"] = usage
 
                                 # context
@@ -198,55 +220,8 @@ def run_http_server(ctx: AppContext):
 
                                 return base
                         except Exception:
-                            pass
-
-                        # 폴백: 메모리 세션 (session_key로 격리)
-                        # login_required일 때는 session_key가 일치하는 세션만 검색
-                        if session_key and ctx.login_required:
-                            # session_key가 일치하는 세션만 검색
-                            target_sess = ctx.sessions.get(session_key)
-                            if target_sess:
-                                room = target_sess.get("rooms", {}).get(rid)
-                                if room:
-                                    hist = room.get("history")
-                                    messages = []
-                                    if hist and "messages" in includes:
-                                        for m in getattr(hist, "full_history", []):
-                                            messages.append(
-                                                {
-                                                    "role": m.get("role"),
-                                                    "content": m.get("content"),
-                                                    "timestamp": datetime.utcnow().isoformat()
-                                                    + "Z",
-                                                }
-                                            )
-                                    base = {"room_id": rid, "title": rid}
-                                    if messages:
-                                        base["messages"] = messages
-                                    return base
-                        else:
-                            # login_required=False: 모든 세션 검색 (하위 호환)
-                            for sess in ctx.sessions.values():
-                                room = sess.get("rooms", {}).get(rid)
-                                if room:
-                                    hist = room.get("history")
-                                    messages = []
-                                    if hist and "messages" in includes:
-                                        for m in getattr(hist, "full_history", []):
-                                            messages.append(
-                                                {
-                                                    "role": m.get("role"),
-                                                    "content": m.get("content"),
-                                                    "timestamp": datetime.utcnow().isoformat()
-                                                    + "Z",
-                                                }
-                                            )
-                                    base = {"room_id": rid, "title": rid}
-                                    if messages:
-                                        base["messages"] = messages
-                                    return base
-
-                        return {"room_id": rid, "title": rid, "messages": []}
+                            # DB 조회 실패 시 빈 결과 반환 (user_id 기반 시스템)
+                            return {"room_id": rid, "title": rid, "messages": []}
 
                     if scope == "single":
                         export_obj["rooms"] = [room_snapshot(room_id)]
@@ -316,6 +291,7 @@ def run_http_server(ctx: AppContext):
                     end = self._parse_date((qs.get("end", [None]))[0], end=True)
 
                     # 인증
+                    user_id = None
                     if ctx.login_required:
                         token = None
                         authz = self.headers.get("Authorization")
@@ -323,7 +299,7 @@ def run_http_server(ctx: AppContext):
                             token = authz.split(" ", 1)[1].strip()
                         if not token:
                             token = (qs.get("token", [None]))[0]
-                        _, err = auth_verify_token(ctx, token, expected_type="access")
+                        payload, err = auth_verify_token(ctx, token, expected_type="access")
                         if err:
                             body = json.dumps(
                                 {"success": False, "error": f"unauthorized: {err}"}
@@ -334,6 +310,30 @@ def run_http_server(ctx: AppContext):
                             self.end_headers()
                             self.wfile.write(body)
                             return
+                        # JWT payload에서 user_id 추출
+                        if payload:
+                            user_id = payload.get("user_id")
+                        if not user_id:
+                            body = json.dumps(
+                                {"success": False, "error": "user_id not found in token"}
+                            ).encode("utf-8")
+                            self.send_response(401)
+                            self.send_header("Content-Type", "application/json")
+                            self.send_header("Content-Length", str(len(body)))
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
+                    else:
+                        # 비로그인 모드는 더 이상 지원하지 않음
+                        body = json.dumps({"success": False, "error": "login required"}).encode(
+                            "utf-8"
+                        )
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
 
                     tsname = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
                     self.send_response(200)
@@ -361,12 +361,12 @@ def run_http_server(ctx: AppContext):
                         # DB 우선
                         try:
                             if ctx.db_handler and getattr(ctx, "loop", None):
-                                # 먼저 room 소유권 확인 (session_key로 격리)
+                                # 먼저 room 소유권 확인 (user_id로 격리)
                                 room_row = asyncio.run_coroutine_threadsafe(
-                                    ctx.db_handler.get_room(rid, session_key), ctx.loop
+                                    ctx.db_handler.get_room(rid, user_id), ctx.loop
                                 ).result(timeout=5)
 
-                                # room이 현재 session_key에 속하지 않으면 스킵
+                                # room이 현재 user_id에 속하지 않으면 스킵
                                 if not room_row:
                                     return
 
@@ -382,7 +382,7 @@ def run_http_server(ctx: AppContext):
                                 if "messages" in includes:
                                     msgs = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_messages_range(
-                                            rid, start=start, end=end
+                                            rid, user_id=user_id, start=start, end=end
                                         ),
                                         ctx.loop,
                                     ).result(timeout=10)
@@ -401,7 +401,7 @@ def run_http_server(ctx: AppContext):
                                 if "token_usage" in includes:
                                     usages = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_token_usage_range(
-                                            rid, start=start, end=end
+                                            rid, user_id=user_id, start=start, end=end
                                         ),
                                         ctx.loop,
                                     ).result(timeout=10)
@@ -410,7 +410,7 @@ def run_http_server(ctx: AppContext):
                                             {
                                                 "type": "token_usage",
                                                 "room_id": rid,
-                                                "session_key": u.get("session_key"),
+                                                "user_id": u.get("user_id"),
                                                 "provider": u.get("provider"),
                                                 "token_info": u.get("token_info"),
                                                 "timestamp": str(u.get("timestamp")),
@@ -418,52 +418,7 @@ def run_http_server(ctx: AppContext):
                                         )
                                 return
                         except Exception:
-                            pass
-
-                        # 폴백: 메모리 세션 (session_key로 격리)
-                        try:
-                            if session_key and ctx.login_required:
-                                # login_required일 때는 session_key가 일치하는 세션만 검색
-                                target_sess = ctx.sessions.get(session_key)
-                                if target_sess:
-                                    room = target_sess.get("rooms", {}).get(rid)
-                                    if room:
-                                        self._write_ndjson_line({"type": "room", "room_id": rid})
-                                        if "messages" in includes:
-                                            hist = room.get("history")
-                                            for m in getattr(hist, "full_history", []) or []:
-                                                self._write_ndjson_line(
-                                                    {
-                                                        "type": "message",
-                                                        "room_id": rid,
-                                                        "role": m.get("role"),
-                                                        "content": m.get("content"),
-                                                        "timestamp": datetime.utcnow().isoformat()
-                                                        + "Z",
-                                                    }
-                                                )
-                                        return
-                            else:
-                                # login_required=False: 모든 세션 검색 (하위 호환)
-                                for sess in ctx.sessions.values():
-                                    room = sess.get("rooms", {}).get(rid)
-                                    if room:
-                                        self._write_ndjson_line({"type": "room", "room_id": rid})
-                                        if "messages" in includes:
-                                            hist = room.get("history")
-                                            for m in getattr(hist, "full_history", []) or []:
-                                                self._write_ndjson_line(
-                                                    {
-                                                        "type": "message",
-                                                        "room_id": rid,
-                                                        "role": m.get("role"),
-                                                        "content": m.get("content"),
-                                                        "timestamp": datetime.utcnow().isoformat()
-                                                        + "Z",
-                                                    }
-                                                )
-                                        return
-                        except Exception:
+                            # DB 조회 실패 시 스킵 (user_id 기반 시스템)
                             pass
 
                     # 방 집합 계산 후 스트리밍
@@ -525,7 +480,7 @@ def run_http_server(ctx: AppContext):
                     end = self._parse_date((qs.get("end", [None]))[0], end=True)
 
                     # 인증
-                    session_key = None  # JWT에서 추출한 session_key (세션별 데이터 격리)
+                    user_id = None  # JWT에서 추출한 user_id (사용자별 데이터 격리)
                     if ctx.login_required:
                         token = None
                         authz = self.headers.get("Authorization")
@@ -544,9 +499,30 @@ def run_http_server(ctx: AppContext):
                             self.end_headers()
                             self.wfile.write(body)
                             return
-                        # JWT payload에서 session_key 추출
+                        # JWT payload에서 user_id 추출
                         if payload:
-                            session_key = payload.get("session_key")
+                            user_id = payload.get("user_id")
+                        if not user_id:
+                            body = json.dumps(
+                                {"success": False, "error": "user_id not found in token"}
+                            ).encode("utf-8")
+                            self.send_response(401)
+                            self.send_header("Content-Type", "application/json")
+                            self.send_header("Content-Length", str(len(body)))
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
+                    else:
+                        # 비로그인 모드는 더 이상 지원하지 않음
+                        body = json.dumps({"success": False, "error": "login required"}).encode(
+                            "utf-8"
+                        )
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
 
                     def render_md(rid: str) -> tuple[str, bytes]:
                         title = rid
@@ -554,44 +530,34 @@ def run_http_server(ctx: AppContext):
                         # DB 우선
                         try:
                             if ctx.db_handler and getattr(ctx, "loop", None):
-                                # 먼저 room 소유권 확인 (session_key로 격리)
+                                # 먼저 room 소유권 확인 (user_id로 격리)
                                 row = asyncio.run_coroutine_threadsafe(
-                                    ctx.db_handler.get_room(rid, session_key), ctx.loop
+                                    ctx.db_handler.get_room(rid, user_id), ctx.loop
                                 ).result(timeout=5)
 
-                                # room이 현재 session_key에 속할 때만 메시지 가져오기
+                                # room이 현재 user_id에 속할 때만 메시지 가져오기
                                 if row:
                                     if row.get("title"):
                                         title = row.get("title")
                                     msgs = asyncio.run_coroutine_threadsafe(
                                         ctx.db_handler.list_messages_range(
-                                            rid, start=start, end=end
+                                            rid, user_id=user_id, start=start, end=end
                                         ),
                                         ctx.loop,
                                     ).result(timeout=10)
                         except Exception:
                             pass
 
-                        # 폴백: 메모리 세션 (session_key로 격리)
+                        # 폴백: 메모리 세션 (user_id로 격리)
                         if not msgs:
-                            if session_key and ctx.login_required:
-                                # login_required일 때는 session_key가 일치하는 세션만 검색
-                                target_sess = ctx.sessions.get(session_key)
+                            if user_id:
+                                # user_id가 일치하는 세션만 검색
+                                target_sess = ctx.sessions.get(user_id)
                                 if target_sess:
                                     room = target_sess.get("rooms", {}).get(rid)
                                     if room:
                                         try:
                                             msgs = room["history"].get_history()
-                                        except Exception:
-                                            pass
-                            else:
-                                # login_required=False: 모든 세션 검색 (하위 호환)
-                                for sess in ctx.sessions.values():
-                                    room = sess.get("rooms", {}).get(rid)
-                                    if room:
-                                        try:
-                                            msgs = room["history"].get_history()
-                                            break
                                         except Exception:
                                             pass
 
@@ -860,6 +826,23 @@ def run_http_server(ctx: AppContext):
                         )
                         return
 
+                    # 승인 여부 확인
+                    is_approved = user.get("is_approved", 0)
+                    if not is_approved:
+                        # 승인 대기 중
+                        self.send_response(403)  # Forbidden
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {
+                                    "success": False,
+                                    "error": "관리자 승인이 필요합니다. 승인 후 다시 로그인해주세요.",
+                                }
+                            ).encode("utf-8")
+                        )
+                        return
+
                     # 로그인 성공 → JWT 발급
                     user_id = user.get("user_id")
                     session_key = f"user:{username}"
@@ -870,13 +853,11 @@ def run_http_server(ctx: AppContext):
                     access_token, access_exp = issue_access_token(session_key, user_id)
                     refresh_token, refresh_exp = issue_refresh_token(session_key, user_id)
 
-                    # last_login 업데이트 및 세션 저장 (비동기)
+                    # last_login 업데이트 (비동기)
                     asyncio.run_coroutine_threadsafe(
-                        ctx.db_handler.update_last_login(user_id), ctx.loop
+                        ctx.db_handler.update_user_last_login(user_id), ctx.loop
                     )
-                    asyncio.run_coroutine_threadsafe(
-                        ctx.db_handler.upsert_session(session_key, user_id), ctx.loop
-                    )
+                    # user_id 기반 시스템에서는 sessions 테이블이 없음 (메모리에서만 관리)
 
                     # 성공 응답
                     self.send_response(200)
@@ -886,6 +867,7 @@ def run_http_server(ctx: AppContext):
                             "success": True,
                             "user_id": user_id,
                             "username": username,
+                            "role": user.get("role", "user"),
                             "access_token": access_token,
                             "access_exp": access_exp,
                             "refresh_token": refresh_token,
@@ -917,11 +899,213 @@ def run_http_server(ctx: AppContext):
                     )
                     return
 
+            # Admin API: 승인 대기 목록 조회
+            if self.path == "/api/admin/pending-users":
+                try:
+                    # JWT 인증
+                    token = None
+                    authz = self.headers.get("Authorization")
+                    if authz and authz.lower().startswith("bearer "):
+                        token = authz.split(" ", 1)[1].strip()
+
+                    payload, err = auth_verify_token(ctx, token, expected_type="access")
+                    if err:
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": f"인증 실패: {err}"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    # 관리자 권한 확인
+                    user_id = payload.get("user_id") if payload else None
+                    if not user_id:
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": "유효하지 않은 토큰"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    import asyncio
+
+                    if not ctx.db_handler or not ctx.loop:
+                        raise RuntimeError("DB handler or event loop not available")
+
+                    # 사용자 조회
+                    future = asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.get_user_by_id(user_id), ctx.loop
+                    )
+                    admin_user = future.result(timeout=5)
+
+                    if not admin_user or admin_user.get("role") != "admin":
+                        self.send_response(403)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {"success": False, "error": "관리자 권한이 필요합니다"}
+                            ).encode("utf-8")
+                        )
+                        return
+
+                    # 승인 대기 사용자 목록 조회
+                    future = asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.list_pending_users(), ctx.loop
+                    )
+                    pending_users = future.result(timeout=5)
+
+                    # 성공 응답
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    response_data = json.dumps(
+                        {"success": True, "users": pending_users}, ensure_ascii=False
+                    ).encode("utf-8")
+                    self.send_header("Content-Length", str(len(response_data)))
+                    self.end_headers()
+                    self.wfile.write(response_data)
+                    return
+
+                except Exception as e:
+                    logger.exception("Admin pending-users API error")
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"success": False, "error": str(e)}).encode("utf-8")
+                    )
+                    return
+
+            # Admin API: 사용자 승인
+            if self.path == "/api/admin/approve-user":
+                try:
+                    content_length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(content_length)
+                    data = json.loads(body.decode("utf-8"))
+
+                    # JWT 인증
+                    token = None
+                    authz = self.headers.get("Authorization")
+                    if authz and authz.lower().startswith("bearer "):
+                        token = authz.split(" ", 1)[1].strip()
+
+                    payload, err = auth_verify_token(ctx, token, expected_type="access")
+                    if err:
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": f"인증 실패: {err}"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    # 관리자 권한 확인
+                    admin_user_id = payload.get("user_id") if payload else None
+                    if not admin_user_id:
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": "유효하지 않은 토큰"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    import asyncio
+
+                    if not ctx.db_handler or not ctx.loop:
+                        raise RuntimeError("DB handler or event loop not available")
+
+                    # 관리자 확인
+                    future = asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.get_user_by_id(admin_user_id), ctx.loop
+                    )
+                    admin_user = future.result(timeout=5)
+
+                    if not admin_user or admin_user.get("role") != "admin":
+                        self.send_response(403)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps(
+                                {"success": False, "error": "관리자 권한이 필요합니다"}
+                            ).encode("utf-8")
+                        )
+                        return
+
+                    # 승인할 사용자 ID 확인
+                    target_user_id = data.get("user_id")
+                    if not target_user_id:
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": "user_id는 필수입니다"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    # 사용자 승인
+                    future = asyncio.run_coroutine_threadsafe(
+                        ctx.db_handler.approve_user(target_user_id, admin_user_id), ctx.loop
+                    )
+                    success = future.result(timeout=5)
+
+                    if not success:
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(
+                            json.dumps({"success": False, "error": "사용자 승인 실패"}).encode(
+                                "utf-8"
+                            )
+                        )
+                        return
+
+                    # 성공 응답
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    response_data = json.dumps({"success": True}).encode("utf-8")
+                    self.send_header("Content-Length", str(len(response_data)))
+                    self.end_headers()
+                    self.wfile.write(response_data)
+                    return
+
+                except json.JSONDecodeError as e:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"success": False, "error": f"JSON 파싱 실패: {str(e)}"}).encode(
+                            "utf-8"
+                        )
+                    )
+                    return
+                except Exception as e:
+                    logger.exception("Admin approve-user API error")
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"success": False, "error": str(e)}).encode("utf-8")
+                    )
+                    return
+
             # Import API
             if self.path.startswith("/api/import"):
                 try:
                     # JWT 인증 (Export와 동일)
-                    session_key = None  # JWT에서 추출한 session_key (세션별 데이터 격리)
+                    user_id = None  # JWT에서 추출한 user_id (사용자별 데이터 격리)
                     if ctx.login_required:
                         parsed = urlparse(self.path)
                         qs = parse_qs(parsed.query)
@@ -941,9 +1125,26 @@ def run_http_server(ctx: AppContext):
                             self.end_headers()
                             self.wfile.write(body)
                             return
-                        # JWT payload에서 session_key 추출
+                        # JWT payload에서 user_id 추출
                         if payload:
-                            session_key = payload.get("session_key")
+                            user_id = payload.get("user_id")
+                        if not user_id:
+                            body = json.dumps(
+                                {"success": False, "error": "user_id not found in token"}
+                            ).encode()
+                            self.send_response(401)
+                            self.send_header("Content-Type", "application/json")
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
+                    else:
+                        # 비로그인 모드는 더 이상 지원하지 않음
+                        body = json.dumps({"success": False, "error": "login required"}).encode()
+                        self.send_response(401)
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
 
                     # Content-Length 파싱
                     content_length = int(self.headers.get("Content-Length", 0))
@@ -977,13 +1178,6 @@ def run_http_server(ctx: AppContext):
 
                         from server.ws.actions.importer import _import_single_room
 
-                        # 세션 키 결정 우선순위:
-                        # 1. JWT에서 추출한 session_key (가장 안전)
-                        # 2. request_data의 session_key (하위 호환)
-                        # 3. 기본값 "http_import" (로그인 비활성 모드)
-                        if not session_key:
-                            session_key = request_data.get("session_key", "http_import")
-
                         # 비동기 import 실행
                         async def run_import():
                             exported_type = json_data.get("export_type", "").lower()
@@ -994,8 +1188,9 @@ def run_http_server(ctx: AppContext):
                                 room = json_data.get("room", {})
                                 rid, cnt = await _import_single_room(
                                     ctx,
-                                    session_key,
-                                    room,
+                                    websocket=None,  # HTTP에서는 websocket 없음
+                                    user_id=user_id,
+                                    room_obj=room,
                                     target_room_id=target_room_id,
                                     duplicate_policy=duplicate_policy,
                                 )
@@ -1006,8 +1201,9 @@ def run_http_server(ctx: AppContext):
                                 for r in rooms:
                                     rid, cnt = await _import_single_room(
                                         ctx,
-                                        session_key,
-                                        r,
+                                        websocket=None,
+                                        user_id=user_id,
+                                        room_obj=r,
                                         target_room_id=None,
                                         duplicate_policy=duplicate_policy,
                                     )
@@ -1018,8 +1214,9 @@ def run_http_server(ctx: AppContext):
                                 room = json_data.get("room") or json_data
                                 rid, cnt = await _import_single_room(
                                     ctx,
-                                    session_key,
-                                    room,
+                                    websocket=None,
+                                    user_id=user_id,
+                                    room_obj=room,
                                     target_room_id=target_room_id,
                                     duplicate_policy=duplicate_policy,
                                 )

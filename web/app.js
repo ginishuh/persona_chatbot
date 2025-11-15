@@ -110,6 +110,28 @@ const registerPasswordInput = document.getElementById('registerPassword');
 const registerPasswordConfirmInput = document.getElementById('registerPasswordConfirm');
 const registerButton = document.getElementById('registerButton');
 const registerError = document.getElementById('registerError');
+// 로그인/로그아웃 버튼
+const loginBtn = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+
+// 모바일 더보기 메뉴의 로그인/로그아웃/관리 버튼
+const moreLoginBtn = document.getElementById('moreLoginBtn');
+const moreLogoutBtn = document.getElementById('moreLogoutBtn');
+const moreAdminBtn = document.getElementById('moreAdminBtn');
+
+// 관리자 요소
+const adminBtn = document.getElementById('adminBtn');
+const adminModal = document.getElementById('adminModal');
+const adminCloseBtn = document.getElementById('adminCloseBtn');
+const pendingUsersList = document.getElementById('pendingUsersList');
+const noPendingUsers = document.getElementById('noPendingUsers');
+
+// 채팅방 이름 입력 모달 요소
+const roomNameModal = document.getElementById('roomNameModal');
+const roomNameInput = document.getElementById('roomNameInput');
+const roomNameCloseBtn = document.getElementById('roomNameCloseBtn');
+const roomNameCancelBtn = document.getElementById('roomNameCancelBtn');
+const roomNameConfirmBtn = document.getElementById('roomNameConfirmBtn');
 
 let currentAssistantMessage = null;
 let characterColors = {}; // 캐릭터별 색상 매핑
@@ -123,6 +145,7 @@ const AUTH_TOKEN_KEY = 'persona_auth_token';
 const AUTH_EXP_KEY = 'persona_auth_exp';
 const REFRESH_TOKEN_KEY = 'persona_refresh_token';
 const REFRESH_EXP_KEY = 'persona_refresh_exp';
+const USER_ROLE_KEY = 'persona_user_role';
 // 세션/채팅방 로컬키
 const SESSION_KEY_KEY = 'persona_session_key';
 const ROOMS_KEY = 'persona_rooms';
@@ -136,6 +159,7 @@ let refreshRetryCount = 0;
 let refreshInProgress = false;
 let lastRequest = null; // 재전송용 마지막 사용자 액션
 let sessionKey = '';
+let userRole = 'user'; // 사용자 역할 ('user' | 'admin')
 let rooms = []; // 초기에는 빈 배열 (사용자가 명시적으로 생성해야 함)
 let currentRoom = null; // 초기에는 채팅방 없음 (ChatGPT/Claude.ai 스타일)
 let pendingRoutePath = null; // 로그인 이후 복원할 경로
@@ -506,7 +530,12 @@ function buildExportUrl() {
     if (start) params.set('start', start.replace('T','T')); // 그대로 전달
     if (end) params.set('end', end.replace('T','T'));
     if (!ndjson && zip) params.set('format','zip');
-    if (appConfig.login_required && authToken) params.set('token', authToken);
+    if (appConfig.login_required && authToken) {
+        params.set('token', authToken);
+    } else if (sessionKey) {
+        // 비로그인 모드: session_key를 쿼리 파라미터로 전달
+        params.set('session_key', sessionKey);
+    }
     return `${base}?${params.toString()}`;
 }
 
@@ -601,7 +630,12 @@ function buildExportUrlFrom(prefix) {
     if (start) params.set('start', start);
     if (end) params.set('end', end);
     if (!ndjson && zip) params.set('format','zip');
-    if (appConfig.login_required && authToken) params.set('token', authToken);
+    if (appConfig.login_required && authToken) {
+        params.set('token', authToken);
+    } else if (sessionKey) {
+        // 비로그인 모드: session_key를 쿼리 파라미터로 전달
+        params.set('session_key', sessionKey);
+    }
     return `${base}?${params.toString()}`;
 }
 
@@ -754,6 +788,16 @@ function renderRoomScreenView(roomId) {
 
 // History 화면
 function renderHistoryScreenView(id) {
+    // Export URL에 token 또는 session_key 추가
+    const params = new URLSearchParams({ scope: 'single', room_id: id });
+    if (appConfig.login_required && authToken) {
+        params.set('token', authToken);
+    } else if (sessionKey) {
+        params.set('session_key', sessionKey);
+    }
+    const jsonUrl = `/api/export?${params.toString()}`;
+    const ndjsonUrl = `/api/export/stream?${params.toString()}`;
+
     const html = `
       <section aria-labelledby="historyScreenTitle">
         <h1 id="historyScreenTitle">히스토리</h1>
@@ -761,8 +805,8 @@ function renderHistoryScreenView(id) {
         <div style="display:flex; gap:0.5rem; margin-top:0.5rem; flex-wrap:wrap;">
           <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(id)}')">← 돌아가기</button>
           <button class="btn" onclick="downloadRoomMd('${id}')">MD 다운로드</button>
-          <a class="btn" href="/api/export?scope=single&room_id=${encodeURIComponent(id)}" target="_blank">JSON</a>
-          <a class="btn" href="/api/export/stream?scope=single&room_id=${encodeURIComponent(id)}" target="_blank">NDJSON</a>
+          <a class="btn" href="${jsonUrl}" target="_blank">JSON</a>
+          <a class="btn" href="${ndjsonUrl}" target="_blank">NDJSON</a>
         </div>
       </section>`;
     showScreen(html);
@@ -786,7 +830,12 @@ function renderHistorySnapshotScreen(history) {
 
 function downloadRoomMd(rid) {
     const params = new URLSearchParams({ room_id: rid });
-    if (appConfig.login_required && authToken) params.set('token', authToken);
+    if (appConfig.login_required && authToken) {
+        params.set('token', authToken);
+    } else if (sessionKey) {
+        // 비로그인 모드: session_key를 쿼리 파라미터로 전달
+        params.set('session_key', sessionKey);
+    }
     const url = `/api/export/md?${params.toString()}`;
     try { window.open(url, '_blank'); } catch (_) { location.href = url; }
 }
@@ -871,17 +920,11 @@ document.getElementById('rmCloseBtn')?.addEventListener('click', closeRoomsModal
 document.querySelector('#roomsModal .settings-modal-overlay')?.addEventListener('click', closeRoomsModal);
 document.getElementById('rmSearch')?.addEventListener('input', populateRoomsModal);
 document.getElementById('rmNewBtn')?.addEventListener('click', () => {
-    const name = prompt('새 채팅방 이름', 'room_' + Math.random().toString(36).slice(2, 6));
-    if (!name) return;
-    const r = sanitizeRoomName(name);
-    if (!rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) rooms.push(r);
-    currentRoom = r;
-    persistRooms();
-    renderRoomsUI();
-    const config = collectRoomConfig(r);
-    sendMessage({ action: 'room_save', room_id: r, config });
-    setTimeout(() => sendMessage({ action: 'room_list' }), 300);
-    navigate(`/rooms/${encodeURIComponent(r)}`);
+    // roomNameModal 사용 (한글 입력 지원)
+    roomNameInput.value = ''; // 입력 초기화
+    roomNameModal.classList.remove('hidden');
+    setTimeout(() => roomNameInput.focus(), 100); // 포커스
+    closeRoomsModal(); // 기존 모달 닫기
 });
 
 // ===== 3열 우측 패널: 방 목록 렌더 =====
@@ -1145,7 +1188,8 @@ function initializeAppData() {
 
 // ===== 채팅방 관리 =====
 function sanitizeRoomName(name) {
-    const sanitized = (name || '').trim().replace(/[^A-Za-z0-9_\-]/g, '_');
+    // 한글, 영문, 숫자, 공백, 밑줄, 하이픈 허용
+    const sanitized = (name || '').trim().replace(/[^\uAC00-\uD7A3A-Za-z0-9_\-\s]/g, '_');
     return sanitized || 'room_untitled';
 }
 
@@ -1268,8 +1312,21 @@ if (roomSelect) {
 }
 if (roomAddBtn) {
     roomAddBtn.addEventListener('click', () => {
-        const name = prompt('새 채팅방 이름', 'room_' + Math.random().toString(36).slice(2, 6));
-        if (!name) return;
+        // 모달 열기
+        roomNameInput.value = ''; // 입력 초기화
+        roomNameModal.classList.remove('hidden');
+        setTimeout(() => roomNameInput.focus(), 100); // 포커스
+    });
+}
+
+// 채팅방 이름 모달 - 확인 버튼
+if (roomNameConfirmBtn) {
+    roomNameConfirmBtn.addEventListener('click', () => {
+        const name = roomNameInput.value.trim();
+        if (!name) {
+            alert('채팅방 이름을 입력하세요.');
+            return;
+        }
         const r = sanitizeRoomName(name);
         if (!rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) rooms.push(r);
         currentRoom = r;
@@ -1277,11 +1334,39 @@ if (roomAddBtn) {
         renderRoomsUI();
         // 현재 설정으로 방 저장
         const config = collectRoomConfig(r);
+        console.log('[ROOM_SAVE] session_key:', sessionKey, 'room_id:', r, 'config:', config);
         sendMessage({ action: 'room_save', room_id: r, config });
         setTimeout(() => { sendMessage({ action: 'room_list' }); renderRoomsRightPanelList(); }, 300);
         refreshRoomViews();
         log(`채팅방 추가: ${r}`, 'success');
         announce(`채팅방 추가: ${r}`);
+
+        // 새 채팅방으로 이동
+        navigate(`/rooms/${encodeURIComponent(r)}`);
+
+        // 모달 닫기
+        roomNameModal.classList.add('hidden');
+    });
+}
+
+// 채팅방 이름 모달 - 닫기 버튼들
+if (roomNameCloseBtn) {
+    roomNameCloseBtn.addEventListener('click', () => {
+        roomNameModal.classList.add('hidden');
+    });
+}
+if (roomNameCancelBtn) {
+    roomNameCancelBtn.addEventListener('click', () => {
+        roomNameModal.classList.add('hidden');
+    });
+}
+
+// 채팅방 이름 모달 - Enter 키로 확인
+if (roomNameInput) {
+    roomNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.isComposing) {
+            roomNameConfirmBtn?.click();
+        }
     });
 }
 // roomDelBtn 제거됨 - 각 채팅방 옆에 개별 삭제 버튼으로 대체
@@ -1483,7 +1568,8 @@ function attemptTokenRefresh() {
     if (refreshToken) {
         sendMessage({ action: 'token_refresh', refresh_token: refreshToken }, { skipToken: true, skipRetry: true });
     } else {
-        sendMessage({ action: 'login' });
+        // HTTP API로 로그인 필요
+        showLoginModal();
     }
 }
 
@@ -1662,6 +1748,15 @@ async function submitLogin() {
             localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
             localStorage.setItem(REFRESH_EXP_KEY, refreshTokenExpiresAt);
 
+            // 사용자 역할 저장
+            userRole = data.role || 'user';
+            localStorage.setItem(USER_ROLE_KEY, userRole);
+
+            // 관리자 버튼 표시/숨김
+            if (adminBtn) {
+                adminBtn.style.display = (userRole === 'admin') ? 'block' : 'none';
+            }
+
             // 아이디 저장
             if (rememberIdCheckbox?.checked) {
                 localStorage.setItem(LOGIN_USER_KEY, username);
@@ -1681,6 +1776,17 @@ async function submitLogin() {
             isAuthenticated = true;
             hideLoginModal();
             log(`${username}님 로그인 성공`, 'success');
+
+            // 버튼 가시성 업데이트 (헤더 + 더보기 메뉴)
+            loginBtn.style.display = 'none';
+            moreLoginBtn.style.display = 'none';
+            logoutBtn.style.display = 'block';
+            moreLogoutBtn.style.display = 'block';
+            if (userRole === 'admin') {
+                adminBtn.style.display = 'block';
+                moreAdminBtn.style.display = 'block';
+            }
+            console.log('[LOGIN] 버튼 가시성:', { loginBtn: loginBtn.style.display, logoutBtn: logoutBtn.style.display, adminBtn: adminBtn.style.display, userRole });
 
             // WebSocket 재연결 (토큰 포함)
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -1728,37 +1834,16 @@ function handleMessage(msg) {
         case 'connected':
             log('서버 연결 완료', 'success');
             if (data && data.login_required) {
-                authRequired = true;
-                isAuthenticated = false;
-                autoLoginRequested = false;
-                if (authToken) {
-                    const consent = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
-                    sendMessage({ action: 'login', adult_consent: consent || undefined });
-                } else {
-                    // 자동 로그인 시도
-                    try {
-                        const auto = localStorage.getItem(LOGIN_AUTOLOGIN_KEY) === '1';
-                        const user = localStorage.getItem(LOGIN_USER_KEY) || '';
-                        const pw = localStorage.getItem(LOGIN_SAVED_PW_KEY) || '';
-                        if (auto && user && pw) {
-                            const consent = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
-                            sendMessage({ action: 'login', username: user, password: pw, adult_consent: consent || undefined }, { skipToken: true });
-                        } else {
-                            showLoginModal();
-                        }
-                    } catch (_) {
-                        showLoginModal();
-                    }
-                }
-            } else {
+                // 레거시: 더 이상 사용되지 않음 (login_required는 항상 false)
                 authRequired = false;
-                isAuthenticated = true;
+                isAuthenticated = false;
+                showLoginModal();
+            } else {
+                // login_required=false: HTTP API로 로그인하면 됨
+                authRequired = false;
+                isAuthenticated = false;
                 hideLoginModal();
                 resumePendingRoute();
-                if (!autoLoginRequested) {
-                    autoLoginRequested = true;
-                    sendMessage({ action: 'login' }, { skipToken: true });
-                }
                 initializeAppData();
             }
             break;
@@ -3093,6 +3178,8 @@ function updateTokenDisplay(tokenUsage) {
 }
 
 // ===== 이벤트 리스너 바인딩(동적) =====
+let isComposing = false; // IME 입력 중 플래그 (한글, 일본어, 중국어 등)
+
 function bindChatEvents() {
     refreshChatRefs();
     try {
@@ -3101,8 +3188,17 @@ function bindChatEvents() {
             sendChatBtn.dataset.bound = '1';
         }
         if (chatInput && !chatInput.dataset.bound) {
+            // IME 입력 시작/종료 감지
+            chatInput.addEventListener('compositionstart', () => {
+                isComposing = true;
+            });
+            chatInput.addEventListener('compositionend', () => {
+                isComposing = false;
+            });
+
             chatInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                // IME 입력 중이 아닐 때만 Enter로 전송
+                if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
                     e.preventDefault();
                     sendChatMessage();
                 }
@@ -3148,6 +3244,195 @@ if (settingsModalOverlay) {
         disableFocusTrap(settingsModal);
         try { window.__lastSettingsTrigger?.focus?.(); } catch (_) {}
     });
+}
+
+// ===== 관리자 모달 =====
+// 로그인 버튼
+if (loginBtn) {
+    loginBtn.addEventListener('click', () => {
+        showLoginModal();
+    });
+}
+if (moreLoginBtn) {
+    moreLoginBtn.addEventListener('click', () => {
+        showLoginModal();
+    });
+}
+
+// 로그아웃 핸들러
+function handleLogout() {
+    clearAuthToken();
+    setRefreshToken('', '');
+    localStorage.removeItem(USER_ROLE_KEY);
+    userRole = 'user';
+    isAuthenticated = false;
+    adminBtn.style.display = 'none';
+    moreAdminBtn.style.display = 'none';
+    loginBtn.style.display = 'block';
+    moreLoginBtn.style.display = 'block';
+    logoutBtn.style.display = 'none';
+    moreLogoutBtn.style.display = 'none';
+    log('로그아웃 되었습니다.', 'info');
+    location.reload();
+}
+
+// 로그아웃 버튼
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', handleLogout);
+}
+if (moreLogoutBtn) {
+    moreLogoutBtn.addEventListener('click', handleLogout);
+}
+
+// 관리자 모달 열기
+async function openAdminModal() {
+    adminModal.classList.remove('hidden');
+    await fetchPendingUsers();
+}
+
+if (adminBtn) {
+    adminBtn.addEventListener('click', openAdminModal);
+}
+if (moreAdminBtn) {
+    moreAdminBtn.addEventListener('click', openAdminModal);
+}
+
+// 관리자 모달 닫기
+if (adminCloseBtn) {
+    adminCloseBtn.addEventListener('click', () => {
+        adminModal.classList.add('hidden');
+    });
+}
+
+// 승인 대기 사용자 목록 조회
+async function fetchPendingUsers() {
+    if (!authToken) {
+        log('관리자 권한이 필요합니다.', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/pending-users', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            renderPendingUsers(data.users || []);
+        } else {
+            log(data.error || '사용자 목록 조회 실패', 'error');
+            renderPendingUsers([]);
+        }
+    } catch (error) {
+        console.error('Fetch pending users error:', error);
+        log('서버 오류가 발생했습니다.', 'error');
+        renderPendingUsers([]);
+    }
+}
+
+// 승인 대기 사용자 목록 렌더링
+function renderPendingUsers(users) {
+    if (!users || users.length === 0) {
+        pendingUsersList.style.display = 'none';
+        noPendingUsers.style.display = 'block';
+        return;
+    }
+
+    pendingUsersList.style.display = 'block';
+    noPendingUsers.style.display = 'none';
+
+    pendingUsersList.innerHTML = users.map(user => `
+        <div class="pending-user-card" style="
+            background: #f8f9fa;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        ">
+            <div style="flex: 1;">
+                <div style="font-weight: 600; color: #333; margin-bottom: 0.25rem;">
+                    ${escapeHtml(user.username)}
+                </div>
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">
+                    📧 ${escapeHtml(user.email)}
+                </div>
+                <div style="font-size: 0.75rem; color: #999;">
+                    가입일: ${new Date(user.created_at).toLocaleString('ko-KR')}
+                </div>
+            </div>
+            <button
+                class="approve-user-btn btn btn-sm"
+                data-user-id="${user.user_id}"
+                style="
+                    background: #28a745;
+                    color: white;
+                    border: none;
+                    padding: 0.5rem 1rem;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 0.875rem;
+                    white-space: nowrap;
+                "
+            >
+                ✓ 승인
+            </button>
+        </div>
+    `).join('');
+
+    // 승인 버튼 이벤트 리스너 등록
+    document.querySelectorAll('.approve-user-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const userId = parseInt(e.target.dataset.userId);
+            await approveUser(userId);
+        });
+    });
+}
+
+// 사용자 승인
+async function approveUser(userId) {
+    if (!authToken) {
+        log('관리자 권한이 필요합니다.', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/approve-user', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ user_id: userId })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            log('사용자 승인이 완료되었습니다.', 'success');
+            // 목록 새로고침
+            await fetchPendingUsers();
+        } else {
+            log(data.error || '승인 실패', 'error');
+        }
+    } catch (error) {
+        console.error('Approve user error:', error);
+        log('서버 오류가 발생했습니다.', 'error');
+    }
+}
+
+// HTML 이스케이프 함수
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // ===== 파일 관리 =====
@@ -4198,6 +4483,32 @@ window.addEventListener('load', async () => {
     document.getElementById('moreMenuDropdown')?.classList.add('hidden');
     document.getElementById('mobileOverlay')?.classList.remove('active');
     document.getElementById('participantsModal')?.classList.add('hidden');
+
+    // 인증 상태에 따라 로그인/로그아웃 버튼 가시성 설정
+    const savedToken = localStorage.getItem(AUTH_TOKEN_KEY);
+    const savedExp = localStorage.getItem(AUTH_EXP_KEY);
+    if (savedToken && savedExp && new Date(savedExp) > new Date()) {
+        authToken = savedToken;
+        authTokenExpiresAt = savedExp;
+        isAuthenticated = true;
+        userRole = localStorage.getItem(USER_ROLE_KEY) || 'user';
+        loginBtn.style.display = 'none';
+        moreLoginBtn.style.display = 'none';
+        logoutBtn.style.display = 'block';
+        moreLogoutBtn.style.display = 'block';
+        if (userRole === 'admin') {
+            adminBtn.style.display = 'block';
+            moreAdminBtn.style.display = 'block';
+        }
+    } else {
+        loginBtn.style.display = 'block';
+        moreLoginBtn.style.display = 'block';
+        logoutBtn.style.display = 'none';
+        moreLogoutBtn.style.display = 'none';
+        adminBtn.style.display = 'none';
+        moreAdminBtn.style.display = 'none';
+    }
+
     connect();
     // 연결 전이라도 라우트 화면을 먼저 표시(데이터는 연결 후 갱신)
     try { renderCurrentScreenFrom(location.pathname); } catch (_) {}

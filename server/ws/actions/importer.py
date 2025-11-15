@@ -15,7 +15,8 @@ def _gen_room_id(prefix: str = "imported") -> str:
 
 async def _import_single_room(
     ctx: AppContext,
-    session_key: str,
+    websocket,
+    user_id: int,
     room_obj: dict,
     *,
     target_room_id: str | None,
@@ -30,13 +31,13 @@ async def _import_single_room(
     if ctx.db_handler:
         try:
             await ctx.db_handler.upsert_room(
-                rid, session_key, title, json.dumps(context, ensure_ascii=False)
+                rid, user_id, title, json.dumps(context, ensure_ascii=False)
             )
         except Exception:
             pass
 
     # 메모리 세션 방 핸들
-    _, sess = sm.get_or_create_session(ctx, None, {"session_key": session_key})
+    _, sess = sm.get_or_create_session(ctx, websocket, user_id)
     _, room = sm.get_room(ctx, sess, rid)
 
     # 메시지 삽입(간단 정책)
@@ -64,7 +65,7 @@ async def _import_single_room(
         # DB 저장
         try:
             if ctx.db_handler:
-                await ctx.db_handler.save_message(rid, role, content)
+                await ctx.db_handler.save_message(rid, role, content, user_id)
         except Exception:
             pass
         imported += 1
@@ -82,15 +83,22 @@ async def import_data(ctx: AppContext, websocket, data: dict[str, Any]):
     - json_data: export JSON 객체(single_room or full_backup)
     """
     try:
+        # JWT 토큰에서 user_id 추출
+        user_id = sm.get_user_id_from_token(ctx, data)
+        if not user_id:
+            await websocket.send(
+                json.dumps(
+                    {"action": "import_data", "data": {"success": False, "error": "인증 필요"}}
+                )
+            )
+            return
+
         import_mode = (data.get("import_mode") or "new").lower()
         duplicate_policy = (data.get("duplicate_policy") or "skip").lower()
         if duplicate_policy not in {"skip", "add"}:
             duplicate_policy = "skip"
         target_room_id = data.get("target_room_id") if import_mode == "merge" else None
         payload = data.get("json_data") or {}
-
-        # 세션키 확보
-        session_key, _ = sm.get_or_create_session(ctx, websocket, data)
 
         exported_type = (payload.get("export_type") or "").lower()
         new_room_ids: list[str] = []
@@ -100,7 +108,8 @@ async def import_data(ctx: AppContext, websocket, data: dict[str, Any]):
             room = payload.get("room") or {}
             rid, cnt = await _import_single_room(
                 ctx,
-                session_key,
+                websocket,
+                user_id,
                 room,
                 target_room_id=target_room_id,
                 duplicate_policy=duplicate_policy,
@@ -111,7 +120,12 @@ async def import_data(ctx: AppContext, websocket, data: dict[str, Any]):
             rooms = payload.get("rooms") or []
             for r in rooms:
                 rid, cnt = await _import_single_room(
-                    ctx, session_key, r, target_room_id=None, duplicate_policy=duplicate_policy
+                    ctx,
+                    websocket,
+                    user_id,
+                    r,
+                    target_room_id=None,
+                    duplicate_policy=duplicate_policy,
                 )
                 new_room_ids.append(rid)
                 messages_imported += cnt
@@ -120,7 +134,8 @@ async def import_data(ctx: AppContext, websocket, data: dict[str, Any]):
             room = payload.get("room") or payload
             rid, cnt = await _import_single_room(
                 ctx,
-                session_key,
+                websocket,
+                user_id,
                 room,
                 target_room_id=target_room_id,
                 duplicate_policy=duplicate_policy,
