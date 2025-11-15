@@ -892,7 +892,7 @@ def run_http_server(ctx: AppContext):
 
                     # last_login 업데이트 및 세션 저장 (비동기)
                     asyncio.run_coroutine_threadsafe(
-                        ctx.db_handler.update_last_login(user_id), ctx.loop
+                        ctx.db_handler.update_user_last_login(user_id), ctx.loop
                     )
                     asyncio.run_coroutine_threadsafe(
                         ctx.db_handler.upsert_session(session_key, user_id), ctx.loop

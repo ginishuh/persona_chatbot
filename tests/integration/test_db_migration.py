@@ -353,10 +353,10 @@ async def test_migration_user_version():
         db = DBHandler(db_path)
         await db.initialize()
 
-        # 3. user_version이 2로 업데이트되었는지 확인 (v0 → v1 → v2)
+        # 3. user_version이 3으로 업데이트되었는지 확인 (v0 → v1 → v2 → v3)
         cur = await db._conn.execute("PRAGMA user_version")
         row = await cur.fetchone()
-        assert row[0] == 2
+        assert row[0] == 3
 
         await db.close()
     finally:
