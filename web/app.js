@@ -137,6 +137,7 @@ let currentAssistantMessage = null;
 let characterColors = {}; // 캐릭터별 색상 매핑
 let authRequired = false;
 let isAuthenticated = false;
+let isReconnecting = false; // 의도적인 재연결 여부
 let currentProvider = 'claude'; // 최근 전송에 사용한 프로바이더
 let participants = []; // 현재 대화 참여자 목록
 let pendingConsentResend = false; // 성인 동의 직후 직전 요청 재전송
@@ -1041,7 +1042,11 @@ function connect() {
         updateStatus('disconnected', '연결 끊김');
         log('연결이 끊어졌습니다. 5초 후 재연결...', 'error');
         authRequired = false;
-        isAuthenticated = false;
+        // 의도적인 재연결(로그인 후 등)이 아닐 때만 인증 상태 초기화
+        if (!isReconnecting) {
+            isAuthenticated = false;
+        }
+        isReconnecting = false; // 플래그 초기화
         autoLoginRequested = false;
         hideLoginModal();
         clearTimeout(tokenRefreshTimeout);
@@ -1611,7 +1616,7 @@ function showLoginModal() {
         const auto = localStorage.getItem(LOGIN_AUTOLOGIN_KEY) === '1';
         if (rememberIdCheckbox) rememberIdCheckbox.checked = !!savedUser;
         if (autoLoginCheckbox) autoLoginCheckbox.checked = auto;
-        if (loginAdultConsent) loginAdultConsent.checked = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
+        if (adultConsent) adultConsent.checked = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
     } catch (_) {}
     if (loginPasswordInput) loginPasswordInput.value = '';
     loginError.textContent = '';
@@ -1790,6 +1795,7 @@ async function submitLogin() {
 
             // WebSocket 재연결 (토큰 포함)
             if (ws && ws.readyState === WebSocket.OPEN) {
+                isReconnecting = true; // 의도적인 재연결 표시
                 ws.close();
             }
             connect();
@@ -1905,7 +1911,7 @@ function handleMessage(msg) {
                         localStorage.removeItem(LOGIN_SAVED_PW_KEY);
                     }
                     // 성인 동의 저장(선택)
-                    if (loginAdultConsent && loginAdultConsent.checked) {
+                    if (adultConsent && adultConsent.checked) {
                         localStorage.setItem(LOGIN_ADULT_KEY, '1');
                     }
                 } catch (_) {}
