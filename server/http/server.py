@@ -208,6 +208,7 @@ def run_http_server(ctx: AppContext):
                                         ctx.loop,
                                     ).result(timeout=5)
                                     if usage:
+                                        # user_id는 이미 각 usage 항목에 포함됨
                                         base["token_usage"] = usage
 
                                 # context
@@ -409,7 +410,7 @@ def run_http_server(ctx: AppContext):
                                             {
                                                 "type": "token_usage",
                                                 "room_id": rid,
-                                                "session_key": u.get("session_key"),
+                                                "user_id": u.get("user_id"),
                                                 "provider": u.get("provider"),
                                                 "token_info": u.get("token_info"),
                                                 "timestamp": str(u.get("timestamp")),

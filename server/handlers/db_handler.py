@@ -1,10 +1,15 @@
 import asyncio
+import logging
 import os
+import shutil
 from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import aiosqlite
+
+logger = logging.getLogger(__name__)
 
 
 class DBHandler:
@@ -106,6 +111,7 @@ class DBHandler:
             current_version = 4
         elif current_version < 4:
             # 구버전 DB: v4로 마이그레이션 (기존 데이터 버림)
+            await self._maybe_backup_legacy_db()
             await self._migrate_to_v4()
             current_version = 4
 
@@ -113,6 +119,27 @@ class DBHandler:
         if current_version == TARGET_VERSION:
             await self._conn.execute(f"PRAGMA user_version = {TARGET_VERSION}")
             await self._conn.commit()
+
+    async def _maybe_backup_legacy_db(self) -> None:
+        """구버전 DB를 파괴하기 전에 백업 파일을 생성."""
+        db_file = Path(self.db_path)
+        if not db_file.exists():
+            return
+
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        backup_name = f"{db_file.name}.legacy-{timestamp}.bak"
+        backup_path = db_file.with_name(backup_name)
+
+        try:
+            # SQLite WAL 모드일 수 있으므로 본파일과 부가 파일들을 같이 복사
+            shutil.copy2(db_file, backup_path)
+            for suffix in ("-wal", "-shm"):
+                aux = db_file.with_name(db_file.name + suffix)
+                if aux.exists():
+                    shutil.copy2(aux, backup_path.with_name(backup_name + suffix))
+            logger.warning("Legacy DB backup created at %s", backup_path)
+        except Exception:
+            logger.exception("Failed to create legacy DB backup before migration")
 
     async def _migrate_to_v1(self) -> None:
         """v0 → v1: rooms와 messages 테이블에 복합 PK 및 세션 격리 구현."""

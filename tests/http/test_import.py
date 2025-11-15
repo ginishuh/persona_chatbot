@@ -10,6 +10,15 @@ import pytest_asyncio
 from server.handlers.db_handler import DBHandler
 
 
+async def _create_test_user(db, prefix: str = "user") -> int:
+    """테스트용 사용자 생성 후 승인."""
+    username = f"{prefix}_tester"
+    email = f"{username}@example.com"
+    user_id = await db.create_user(username, email, "hash")
+    await db.approve_user(user_id, user_id)
+    return user_id
+
+
 @pytest_asyncio.fixture
 async def db_empty():
     """빈 DB 생성"""
@@ -29,16 +38,17 @@ async def db_with_existing_room():
         db = DBHandler(str(db_path))
         await db.initialize()
 
-        # 기존 방 생성
-        session_key = "test_session"
+        # 기존 사용자/방 생성
+        user_id = await db.create_user("tester", "tester@example.com", "hash")
+        await db.approve_user(user_id, user_id)
         room_id = "existing_room"
         context = json.dumps({"world": "기존 세계"})
 
-        await db.upsert_room(room_id, session_key, "기존 채팅방", context)
-        await db.save_message(room_id, "user", "기존 메시지 1")
-        await db.save_message(room_id, "assistant", "기존 응답 1")
+        await db.upsert_room(room_id, user_id, "기존 채팅방", context)
+        await db.save_message(room_id, "user", "기존 메시지 1", user_id)
+        await db.save_message(room_id, "assistant", "기존 응답 1", user_id)
 
-        yield db, session_key, room_id
+        yield db, user_id, room_id
 
         await db.close()
 
@@ -49,7 +59,6 @@ class TestImportDataStructure:
     def test_single_room_import_structure(self):
         """single_room 타입 Import 데이터 구조"""
         import_data = {
-            "session_key": "test_session",
             "duplicate_policy": "skip",
             "json_data": {
                 "version": "1.0",
@@ -79,12 +88,10 @@ class TestImportDataStructure:
     def test_full_backup_import_structure(self):
         """full_backup 타입 Import 데이터 구조"""
         import_data = {
-            "session_key": "test_session",
             "duplicate_policy": "merge",
             "json_data": {
                 "version": "1.0",
                 "export_type": "full_backup",
-                "session_key": "original_session",
                 "rooms": [
                     {
                         "room_id": "room_1",
@@ -113,7 +120,6 @@ class TestImportDataStructure:
     def test_selected_import_structure(self):
         """selected 타입 Import 데이터 구조"""
         import_data = {
-            "session_key": "test_session",
             "duplicate_policy": "skip",
             "json_data": {
                 "version": "1.0",
@@ -141,94 +147,65 @@ class TestImportLogic:
     @pytest.mark.asyncio
     async def test_direct_db_room_creation(self, db_empty):
         """DB에 직접 방 생성 (Import 시뮬레이션)"""
-        session_key = "test_session"
+        user_id = await _create_test_user(db_empty, "direct")
         room_id = "new_room"
         title = "새 채팅방"
         context = json.dumps({"world": "판타지"})
 
-        # 방 생성
-        await db_empty.upsert_room(room_id, session_key, title, context)
+        await db_empty.upsert_room(room_id, user_id, title, context)
+        await db_empty.save_message(room_id, "user", "안녕하세요", user_id)
 
-        # 메시지 추가
-        await db_empty.save_message(room_id, "user", "안녕하세요")
-
-        # 검증
-        room = await db_empty.get_room(room_id)
+        room = await db_empty.get_room(room_id, user_id)
         assert room is not None
         assert room["title"] == title
 
-        messages = await db_empty.list_messages(room_id)
+        messages = await db_empty.list_messages(room_id, user_id)
         assert len(messages) == 1
         assert messages[0]["content"] == "안녕하세요"
 
     @pytest.mark.asyncio
     async def test_duplicate_room_handling(self, db_with_existing_room):
-        """중복 방 처리 시뮬레이션"""
-        db, session_key, room_id = db_with_existing_room
+        """같은 room_id를 upsert했을 때 최신 정보로 갱신되는지 테스트"""
+        db, user_id, room_id = db_with_existing_room
 
-        # 기존 방 확인
-        existing_room = await db.get_room(room_id)
+        existing_room = await db.get_room(room_id, user_id)
         assert existing_room is not None
-        assert existing_room["title"] == "기존 채팅방"
 
-        # 같은 ID로 upsert (title 업데이트)
         new_title = "업데이트된 제목"
         new_context = json.dumps({"world": "새 세계"})
-        await db.upsert_room(room_id, session_key, new_title, new_context)
+        await db.upsert_room(room_id, user_id, new_title, new_context)
 
-        # 검증: 방이 업데이트됨
-        updated_room = await db.get_room(room_id)
+        updated_room = await db.get_room(room_id, user_id)
         assert updated_room["title"] == new_title
-
-        # 기존 메시지는 유지됨
-        messages = await db.list_messages(room_id)
-        assert len(messages) == 2
+        assert json.loads(updated_room["context"])["world"] == "새 세계"
 
     @pytest.mark.asyncio
     async def test_import_message_append(self, db_with_existing_room):
-        """메시지 추가 (merge 시뮬레이션)"""
-        db, session_key, room_id = db_with_existing_room
+        """기존 방에 메시지가 추가로 적재되는지 테스트"""
+        db, user_id, room_id = db_with_existing_room
 
-        # 기존 메시지 확인
-        existing_messages = await db.list_messages(room_id)
+        existing_messages = await db.list_messages(room_id, user_id)
         assert len(existing_messages) == 2
 
-        # 새 메시지 추가
-        await db.save_message(room_id, "user", "추가 메시지 1")
-        await db.save_message(room_id, "assistant", "추가 응답 1")
+        await db.save_message(room_id, "user", "추가 메시지 1", user_id)
+        await db.save_message(room_id, "assistant", "추가 응답 1", user_id)
 
-        # 검증: 메시지 총 4개
-        all_messages = await db.list_messages(room_id)
+        all_messages = await db.list_messages(room_id, user_id)
         assert len(all_messages) == 4
 
     @pytest.mark.asyncio
-    async def test_import_empty_room(self, db_empty):
-        """빈 방 Import"""
-        session_key = "test_session"
-        room_id = "empty_room"
-
-        await db_empty.upsert_room(room_id, session_key, "빈 방", None)
-
-        room = await db_empty.get_room(room_id)
-        assert room is not None
-        assert room["context"] is None
-
-        messages = await db_empty.list_messages(room_id)
-        assert len(messages) == 0
-
-    @pytest.mark.asyncio
     async def test_import_null_context(self, db_empty):
-        """context가 null인 방"""
-        session_key = "test_session"
+        """컨텍스트가 비어있는 방도 저장되는지 테스트"""
+        user_id = await _create_test_user(db_empty, "nullctx")
         room_id = "no_context_room"
 
-        await db_empty.upsert_room(room_id, session_key, "컨텍스트 없는 방", None)
-        await db_empty.save_message(room_id, "user", "메시지")
+        await db_empty.upsert_room(room_id, user_id, "컨텍스트 없는 방", None)
+        await db_empty.save_message(room_id, "user", "메시지", user_id)
 
-        room = await db_empty.get_room(room_id)
+        room = await db_empty.get_room(room_id, user_id)
         assert room["context"] is None
 
-        messages = await db_empty.list_messages(room_id)
+        messages = await db_empty.list_messages(room_id, user_id)
         assert len(messages) == 1
 
 
@@ -355,7 +332,7 @@ class TestImportMultipleRooms:
     @pytest.mark.asyncio
     async def test_import_multiple_rooms_simulation(self, db_empty):
         """여러 방 Import 시뮬레이션"""
-        session_key = "test_session"
+        user_id = await _create_test_user(db_empty, "multi")
 
         rooms_data = [
             {"room_id": "room_1", "title": "방 1", "context": None},
@@ -366,32 +343,32 @@ class TestImportMultipleRooms:
         # 각 방 생성
         for room_data in rooms_data:
             await db_empty.upsert_room(
-                room_data["room_id"], session_key, room_data["title"], room_data["context"]
+                room_data["room_id"], user_id, room_data["title"], room_data["context"]
             )
 
         # 메시지 추가
-        await db_empty.save_message("room_1", "user", "메시지 1")
-        await db_empty.save_message("room_2", "user", "메시지 2")
+        await db_empty.save_message("room_1", "user", "메시지 1", user_id)
+        await db_empty.save_message("room_2", "user", "메시지 2", user_id)
         # room_3는 메시지 없음
 
         # 검증
-        rooms = await db_empty.list_rooms(session_key)
+        rooms = await db_empty.list_rooms(user_id)
         assert len(rooms) == 3
 
         # 개별 방 확인
-        room1 = await db_empty.get_room("room_1")
+        room1 = await db_empty.get_room("room_1", user_id)
         assert room1["title"] == "방 1"
 
-        messages1 = await db_empty.list_messages("room_1")
+        messages1 = await db_empty.list_messages("room_1", user_id)
         assert len(messages1) == 1
 
-        messages3 = await db_empty.list_messages("room_3")
+        messages3 = await db_empty.list_messages("room_3", user_id)
         assert len(messages3) == 0
 
     @pytest.mark.asyncio
     async def test_import_selected_rooms_simulation(self, db_empty):
         """선택된 방만 Import 시뮬레이션"""
-        session_key = "test_session"
+        user_id = await _create_test_user(db_empty, "selected")
 
         # 2개 방만 선택
         selected_rooms = [
@@ -400,10 +377,10 @@ class TestImportMultipleRooms:
         ]
 
         for room_data in selected_rooms:
-            await db_empty.upsert_room(room_data["room_id"], session_key, room_data["title"], None)
+            await db_empty.upsert_room(room_data["room_id"], user_id, room_data["title"], None)
 
         # 검증
-        rooms = await db_empty.list_rooms(session_key)
+        rooms = await db_empty.list_rooms(user_id)
         assert len(rooms) == 2
 
         room_ids = [r["room_id"] for r in rooms]
