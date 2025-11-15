@@ -302,7 +302,7 @@ async def websocket_handler(websocket):
                     "data": {
                         "success": True,
                         "message": "Connected to Persona Chat WebSocket Server",
-                        "login_required": False,  # HTTP API로 로그인 필요
+                        "login_required": bool(APP_CTX and APP_CTX.login_required),
                     },
                 }
             )

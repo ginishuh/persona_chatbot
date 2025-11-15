@@ -3,7 +3,7 @@ let ws = null;
 let appConfig = {
     ws_url: '',
     ws_port: 8765,
-    login_required: false,
+    login_required: true,
     show_token_usage: true
 };
 
@@ -1837,22 +1837,30 @@ function handleMessage(msg) {
     const { action, data } = msg;
 
     switch (action) {
-        case 'connected':
+        case 'connected': {
             log('서버 연결 완료', 'success');
-            if (data && data.login_required) {
-                // 레거시: 더 이상 사용되지 않음 (login_required는 항상 false)
-                authRequired = false;
-                isAuthenticated = false;
-                showLoginModal();
+            const requiresLogin = Boolean(data && data.login_required);
+            appConfig.login_required = requiresLogin;
+            if (requiresLogin) {
+                authRequired = true;
+                if (authToken) {
+                    isAuthenticated = true;
+                    hideLoginModal();
+                    resumePendingRoute();
+                    initializeAppData();
+                } else {
+                    isAuthenticated = false;
+                    showLoginModal();
+                }
             } else {
-                // login_required=false: HTTP API로 로그인하면 됨
                 authRequired = false;
-                isAuthenticated = false;
+                isAuthenticated = true;
                 hideLoginModal();
                 resumePendingRoute();
                 initializeAppData();
             }
             break;
+        }
 
         case 'auth_required':
             authRequired = true;
