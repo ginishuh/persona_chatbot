@@ -187,6 +187,10 @@
 
     <!-- 모바일 더보기 메뉴 -->
     <div id="moreMenuDropdown" class="more-menu-dropdown hidden">
+        <button class="more-menu-item" id="moreLoginBtn" style="display: none;">🔐 로그인</button>
+        <button class="more-menu-item" id="moreLogoutBtn" style="display: none;">🚪 로그아웃</button>
+        <button class="more-menu-item" id="moreAdminBtn" style="display: none;">👤 관리</button>
+        <div class="more-menu-divider"></div>
         <button class="more-menu-item" id="moreParticipantsBtn">👥 참여자</button>
         <button class="more-menu-item" id="moreSettingsBtn">⚙️ 설정</button>
         <button class="more-menu-item" id="moreClearHistoryBtn">🗑️ 대화 초기화</button>
@@ -200,8 +204,6 @@
         <div class="more-menu-item-static" id="moreSessionBadge">
             <span>세션: </span><span id="moreSessionBadgeText">OFF</span>
         </div>
-        <div class="more-menu-divider"></div>
-        <button class="more-menu-item logout-btn" id="logoutBtn">🚪 로그아웃</button>
     </div>
 
     <div class="container">
@@ -223,6 +225,8 @@
                 ⋮
             </button>
             <div class="header-actions">
+                <button id="loginBtn" class="btn btn-sm" title="로그인" style="background: #007bff; color: white;">🔐 로그인</button>
+                <button id="logoutBtn" class="btn btn-sm" title="로그아웃" style="display: none; background: #6c757d; color: white;">🚪 로그아웃</button>
                 <button id="adminBtn" class="btn btn-sm" title="관리자 페이지" style="display: none; background: #dc3545; color: white;">👤 관리</button>
                 <button id="participantsBtn" class="btn btn-sm" title="참여자 관리">👥 참여자</button>
                 <button id="settingsBtn" class="btn btn-sm" title="설정">⚙️ 설정</button>

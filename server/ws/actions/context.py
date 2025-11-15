@@ -64,20 +64,22 @@ async def set_context(ctx: AppContext, websocket, data: dict[str, Any]):
     if choice_count is not None:
         ch.set_choice_count(choice_count)
 
-    # room_id가 있으면 DB에 저장
+    # room_id가 있으면 DB에 저장 (user_id 기반)
     if room_id and ctx.db_handler:
         try:
-            # 현재 세션 키 가져오기
-            session_key, _ = sm.get_or_create_session(ctx, websocket, data)
+            # JWT 토큰에서 user_id 추출
+            user_id = sm.get_user_id_from_token(ctx, data)
+            if not user_id:
+                logger.warning("No user_id found in token, skipping DB save")
+            else:
+                # 기존 room 정보 가져오기 (title 유지)
+                existing_room = await ctx.db_handler.get_room(room_id, user_id)
+                title = existing_room["title"] if existing_room else room_id
 
-            # 기존 room 정보 가져오기 (title 유지, 세션 키로 격리)
-            existing_room = await ctx.db_handler.get_room(room_id, session_key)
-            title = existing_room["title"] if existing_room else room_id
-
-            # context를 JSON으로 변환하여 저장
-            context_json = json.dumps(ch.get_context(), ensure_ascii=False)
-            await ctx.db_handler.upsert_room(room_id, session_key, title, context_json)
-            logger.info(f"Room context saved to DB: room_id={room_id}, session_key={session_key}")
+                # context를 JSON으로 변환하여 저장
+                context_json = json.dumps(ch.get_context(), ensure_ascii=False)
+                await ctx.db_handler.upsert_room(room_id, user_id, title, context_json)
+                logger.info(f"Room context saved to DB: room_id={room_id}, user_id={user_id}")
         except Exception as e:
             logger.error(f"Failed to save room context to DB: {e}")
 
@@ -127,22 +129,24 @@ async def get_context(ctx: AppContext, websocket, data: dict[str, Any]):
 
     room_id = data.get("room_id")
 
-    # room_id가 있으면 DB에서 로드 (세션 키로 격리)
+    # room_id가 있으면 DB에서 로드 (user_id 기반)
     if room_id and ctx.db_handler:
         try:
-            # 현재 세션 키 가져오기
-            session_key, _ = sm.get_or_create_session(ctx, websocket, data)
-
-            # 세션 키로 격리된 방 조회
-            room = await ctx.db_handler.get_room(room_id, session_key)
-            if room and room.get("context"):
-                # JSON 문자열을 dict로 파싱
-                context_dict = json.loads(room["context"])
-                # ContextHandler에 적용
-                ch.load_from_dict(context_dict)
-                logger.info(
-                    f"Room context loaded from DB: room_id={room_id}, session_key={session_key}"
-                )
+            # JWT 토큰에서 user_id 추출
+            user_id = sm.get_user_id_from_token(ctx, data)
+            if not user_id:
+                logger.warning("No user_id found in token, skipping DB load")
+            else:
+                # user_id로 방 조회
+                room = await ctx.db_handler.get_room(room_id, user_id)
+                if room and room.get("context"):
+                    # JSON 문자열을 dict로 파싱
+                    context_dict = json.loads(room["context"])
+                    # ContextHandler에 적용
+                    ch.load_from_dict(context_dict)
+                    logger.info(
+                        f"Room context loaded from DB: room_id={room_id}, user_id={user_id}"
+                    )
         except Exception as e:
             logger.error(f"Failed to load room context from DB: {e}")
 

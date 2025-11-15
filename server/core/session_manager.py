@@ -1,41 +1,71 @@
-"""세션/채팅방 유틸리티
+"""세션/채팅방 유틸리티 (user_id 기반)
 
-웹소켓 연결과 무관하게 세션/방 상태를 관리합니다.
+웹소켓 연결과 무관하게 사용자별 세션/방 상태를 관리합니다.
 """
 
 from __future__ import annotations
 
-import uuid
+import logging
 
 from .app_context import AppContext
 
+logger = logging.getLogger(__name__)
 
-def get_or_create_session(ctx: AppContext, websocket, data: dict | None):
-    """세션키 해석 및 생성.
 
-    인증 후 명시적으로 전달된 session_key만 사용 (DoS 방지)
+def get_user_id_from_token(ctx: AppContext, data: dict | None) -> int | None:
+    """JWT 토큰에서 user_id 추출
 
-    반환: (session_key, session_dict)
+    Args:
+        ctx: 애플리케이션 컨텍스트
+        data: WebSocket 메시지 데이터 (token 필드 포함)
+
+    Returns:
+        user_id 또는 None (인증 실패 시)
     """
-    key = None
-    if isinstance(data, dict):
-        key = data.get("session_key") or None
+    if not isinstance(data, dict):
+        return None
 
-    # 기존 session_key 사용 (data에 명시적으로 전달됨)
-    if key and key in ctx.sessions:
-        ctx.websocket_to_session[websocket] = key
-    else:
-        # websocket에 연결된 기존 세션 찾기
-        key = ctx.websocket_to_session.get(websocket)
-        if not key or key not in ctx.sessions:
-            # 랜덤 UUID로 새 세션 생성
-            key = uuid.uuid4().hex
-            ctx.sessions[key] = {
-                "settings": {"retention_enabled": False, "adult_consent": bool(ctx.login_required)},
-                "rooms": {},
-            }
-            ctx.websocket_to_session[websocket] = key
-    return key, ctx.sessions[key]
+    token = data.get("token")
+    if not token:
+        return None
+
+    try:
+        # JWT 검증 (ctx.auth 모듈 사용)
+        from server.core.auth import verify_token as auth_verify_token
+
+        payload, error = auth_verify_token(ctx, token, expected_type="access")
+        if error or not payload:
+            return None
+
+        user_id = payload.get("user_id")
+        return user_id if isinstance(user_id, int) else None
+    except Exception as e:
+        logger.warning(f"Failed to extract user_id from token: {e}")
+        return None
+
+
+def get_or_create_session(ctx: AppContext, websocket, user_id: int):
+    """사용자 세션 가져오기 또는 생성 (user_id 기반)
+
+    Args:
+        ctx: 애플리케이션 컨텍스트
+        websocket: WebSocket 연결
+        user_id: 사용자 ID
+
+    Returns:
+        (user_id, session_dict)
+    """
+    # WebSocket에 user_id 매핑 저장
+    ctx.websocket_to_session[websocket] = user_id
+
+    # user_id 기반 세션 생성/조회
+    if user_id not in ctx.sessions:
+        ctx.sessions[user_id] = {
+            "settings": {"adult_consent": bool(ctx.login_required)},
+            "rooms": {},
+        }
+
+    return user_id, ctx.sessions[user_id]
 
 
 def get_room(ctx: AppContext, session: dict, room_id: str | None):
@@ -51,25 +81,21 @@ def get_room(ctx: AppContext, session: dict, room_id: str | None):
     return rid, room
 
 
-def initialize_client_state(ctx: AppContext, websocket):
-    get_or_create_session(ctx, websocket, None)
-
-
 def clear_client_sessions(ctx: AppContext, websocket, room_id: str | None = None):
-    """프로바이더 세션 초기화(히스토리 유지)."""
-    key = ctx.websocket_to_session.get(websocket)
-    if key and key in ctx.sessions:
+    """프로바이더 세션 초기화 (히스토리 유지, user_id 기반)"""
+    user_id = ctx.websocket_to_session.get(websocket)
+    if user_id and user_id in ctx.sessions:
         claude_session_ids = []
         if room_id:
             rid = room_id or "default"
-            room = ctx.sessions[key].get("rooms", {}).get(rid)
+            room = ctx.sessions[user_id].get("rooms", {}).get(rid)
             if room:
                 provider_sessions = room.get("provider_sessions", {})
                 if "claude" in provider_sessions:
                     claude_session_ids.append(provider_sessions["claude"])
                 room["provider_sessions"] = {}
         else:
-            for room in ctx.sessions[key].get("rooms", {}).values():
+            for room in ctx.sessions[user_id].get("rooms", {}).values():
                 provider_sessions = room.get("provider_sessions", {})
                 if "claude" in provider_sessions:
                     claude_session_ids.append(provider_sessions["claude"])
@@ -83,10 +109,5 @@ def clear_client_sessions(ctx: AppContext, websocket, room_id: str | None = None
 
 
 def remove_client_sessions(ctx: AppContext, websocket):
+    """WebSocket 연결 종료 시 매핑 제거"""
     ctx.websocket_to_session.pop(websocket, None)
-
-
-def is_session_retention_enabled(ctx: AppContext, websocket, session: dict | None = None):
-    sess = session or get_or_create_session(ctx, websocket, None)[1]
-    settings = sess.get("settings", {})
-    return settings.get("retention_enabled", False)

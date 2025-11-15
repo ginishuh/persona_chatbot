@@ -71,22 +71,10 @@ websocket_to_session: dict = {}
 sessions: dict = {}
 
 
-def _get_or_create_session(websocket, data: dict | None):
-    if APP_CTX is None:
-        raise RuntimeError("App context not initialized")
-    return sm.get_or_create_session(APP_CTX, websocket, data)
-
-
-def _get_room(session: dict, room_id: str | None):
-    if APP_CTX is None:
-        raise RuntimeError("App context not initialized")
-    return sm.get_room(APP_CTX, session, room_id)
-
-
 def initialize_client_state(websocket):
-    if APP_CTX is None:
-        raise RuntimeError("App context not initialized")
-    sm.initialize_client_state(APP_CTX, websocket)
+    """WebSocket 연결 시 클라이언트 상태 초기화 (user_id 기반이므로 불필요)"""
+    # user_id 기반 시스템에서는 JWT 토큰으로 인증하므로 초기화 불필요
+    pass
 
 
 def clear_client_sessions(websocket, room_id: str | None = None):
@@ -99,12 +87,6 @@ def remove_client_sessions(websocket):
     if APP_CTX is None:
         raise RuntimeError("App context not initialized")
     sm.remove_client_sessions(APP_CTX, websocket)
-
-
-def is_session_retention_enabled(websocket, session: dict | None = None):
-    if APP_CTX is None:
-        raise RuntimeError("App context not initialized")
-    return sm.is_session_retention_enabled(APP_CTX, websocket, session)
 
 
 ## stories 파서는 제거되었습니다(스토리 기능 비활성화).
@@ -278,166 +260,10 @@ async def handle_message(websocket, message):
 
         # 히스토리 관련 액션은 라우터 처리
 
-        # AI 채팅 (컨텍스트 + 히스토리 포함, 채팅방 단위)
-        elif action == "chat":
-            logger.info(f"chat 액션 처리 시작 - prompt 길이: {len(data.get('prompt', ''))}")
-            prompt = data.get("prompt", "")
-            # provider 파라미터 (없으면 컨텍스트의 기본값 사용)
-            provider = data.get(
-                "provider", context_handler.get_context().get("ai_provider", "claude")
-            )
-            logger.info(f"provider 선택: {provider}")
-            # 세션/채팅방 해석
-            key, sess = _get_or_create_session(websocket, data)
-            rid, room = _get_room(sess, data.get("room_id"))
-            provider_sessions = room.setdefault("provider_sessions", {})
-            retention_enabled = is_session_retention_enabled(websocket, sess)
-            provider_session_id = provider_sessions.get(provider) if retention_enabled else None
+        # chat 액션은 router(server/ws/actions/chat.py)에서 처리됩니다
+        # 레거시 chat 분기는 제거되었습니다 (user_id 기반 시스템)
 
-            # 성인 모드 동의 확인(세션)
-            try:
-                ctx = context_handler.get_context()
-                level = (ctx.get("adult_level") or "").lower()
-                consent = sess.get("settings", {}).get("adult_consent", False)
-                if level in {"enhanced", "extreme"} and not consent:
-                    await websocket.send(
-                        json.dumps(
-                            {
-                                "action": "consent_required",
-                                "data": {
-                                    "required": True,
-                                    "message": "성인 전용 기능입니다. 본인은 성인이며 이용에 따른 모든 책임은 사용자 본인에게 있음을 동의해야 합니다.",
-                                },
-                            }
-                        )
-                    )
-                    return
-            except Exception:
-                pass
-
-            # 사용자 메시지를 히스토리에 추가(채팅방) + DB 영속화(가능 시)
-            room["history"].add_user_message(prompt)
-            try:
-                if APP_CTX and APP_CTX.db_handler:
-                    # 세션/방이 DB에 없을 수 있으므로 방 upsert 보장(컨텍스트는 room_save에서 관리)
-                    await APP_CTX.db_handler.upsert_room(rid, key, rid, None)
-                    await APP_CTX.db_handler.save_message(rid, "user", prompt, key)
-            except Exception:
-                logger.exception("DB save (user message) failed; continuing without DB persistence")
-
-            # 히스토리 텍스트 가져오기(채팅방)
-            # 제공자별 세션 지원 여부 확인
-            provider_supports_session = provider in ("claude", "droid")
-            # 세션 유지가 활성화되어 있고, 제공자가 세션을 지원하고, 기존 세션이 있으면 히스토리 주입 불필요
-            # (세션으로 기억하므로 토큰 절약)
-            if retention_enabled and provider_supports_session and provider_session_id:
-                history_text = ""
-            else:
-                history_text = room["history"].get_history_text()
-
-            # System prompt 생성 (히스토리 포함 여부는 위에서 결정)
-            system_prompt = context_handler.build_system_prompt(history_text)
-
-            # 스트리밍 콜백: 각 JSON 라인을 클라이언트에 전송
-            async def stream_callback(json_data):
-                await websocket.send(json.dumps({"action": "chat_stream", "data": json_data}))
-
-            # AI 제공자 선택
-            if provider == "droid":
-                handler = droid_handler
-            elif provider == "gemini":
-                handler = gemini_handler
-            else:  # claude (기본값)
-                handler = claude_handler
-
-            # 단일 시도 (폴백 없음)
-            # 선택 모델(프로바이더별 사용)
-            model = data.get("model")
-            if provider == "gemini":
-                result = await gemini_handler.send_message(
-                    prompt,
-                    system_prompt=system_prompt,
-                    callback=stream_callback,
-                    session_id=provider_session_id,
-                    model=model,
-                )
-            elif provider == "droid":
-                # 혼선 방지를 위해 서버 기본 모델(DROID_MODEL)만 사용
-                result = await droid_handler.send_message(
-                    prompt,
-                    system_prompt=system_prompt,
-                    callback=stream_callback,
-                    session_id=provider_session_id,
-                    model=None,
-                )
-            elif provider == "claude":
-                result = await claude_handler.send_message(
-                    prompt,
-                    system_prompt=system_prompt,
-                    callback=stream_callback,
-                    session_id=provider_session_id,
-                    model=model,
-                )
-            else:
-                result = {"success": False, "error": f"Unknown provider: {provider}"}
-
-            # AI 응답을 히스토리에 추가(채팅방) + DB 영속화
-            if result.get("success") and result.get("message"):
-                room["history"].add_assistant_message(result["message"])
-                try:
-                    if APP_CTX and APP_CTX.db_handler:
-                        await APP_CTX.db_handler.save_message(
-                            rid, "assistant", result["message"], key
-                        )
-                except Exception:
-                    logger.exception("DB save (assistant message) failed; continuing")
-
-            # 토큰 사용량 수집 및 누적
-            token_info = result.get("token_info")
-            if token_info is not None:
-                token_usage_handler.add_usage(
-                    session_key=key,
-                    room_id=rid,
-                    provider=provider,
-                    token_info=token_info,
-                )
-                try:
-                    if APP_CTX and APP_CTX.db_handler:
-                        await APP_CTX.db_handler.save_token_usage(
-                            session_key=key,
-                            room_id=rid,
-                            provider=provider,
-                            token_info=token_info,
-                        )
-                except Exception:
-                    logger.exception("DB save (token usage) failed; continuing")
-
-            # 토큰 사용량 요약 생성
-            token_summary = token_usage_handler.get_formatted_summary(
-                session_key=key,
-                room_id=rid,
-            )
-
-            # 최종 결과 전송
-            new_session_id = result.get("session_id")
-            if retention_enabled and new_session_id:
-                provider_sessions[provider] = new_session_id
-            elif not retention_enabled:
-                provider_sessions.pop(provider, None)
-
-            await websocket.send(
-                json.dumps(
-                    {
-                        "action": "chat_complete",
-                        "data": {
-                            **result,
-                            "provider_used": provider,
-                            "token_usage": token_summary,
-                        },
-                    }
-                )
-            )
-
+        # 등록되지 않은 액션
         else:
             await websocket.send(
                 json.dumps(
@@ -520,7 +346,7 @@ async def main():
     APP_CTX = AppContext(
         project_root=project_root,
         bind_host=BIND_HOST,
-        login_required=False,  # HTTP API 로그인만 사용
+        login_required=True,  # 로그인 필수 (user_id 기반 시스템)
         jwt_secret=JWT_SECRET,
         jwt_algorithm=JWT_ALGORITHM,
         access_ttl_seconds=ACCESS_TTL_SECONDS,

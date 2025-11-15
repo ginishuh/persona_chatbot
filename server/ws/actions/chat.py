@@ -28,12 +28,21 @@ async def chat(ctx: AppContext, websocket, data: dict):
     provider = data.get("provider", ctx.context_handler.get_context().get("ai_provider", "claude"))
     logger.info(f"[DEBUG] provider={provider}, prompt 길이={len(prompt)}")
 
-    # 세션/채팅방
-    session_key, sess = sm.get_or_create_session(ctx, websocket, data)
+    # JWT 토큰에서 user_id 추출
+    user_id = sm.get_user_id_from_token(ctx, data)
+    if not user_id:
+        await websocket.send(
+            json.dumps(
+                {"action": "chat_complete", "data": {"success": False, "error": "인증 필요"}}
+            )
+        )
+        return
+
+    # 사용자 세션/채팅방
+    user_id, sess = sm.get_or_create_session(ctx, websocket, user_id)
     rid, room = sm.get_room(ctx, sess, data.get("room_id"))
     provider_sessions: dict[str, Any] = room.setdefault("provider_sessions", {})
-    retention_enabled = sm.is_session_retention_enabled(ctx, websocket, sess)
-    provider_session_id = provider_sessions.get(provider) if retention_enabled else None
+    provider_session_id = provider_sessions.get(provider)
 
     # 성인 동의 확인
     try:
@@ -55,19 +64,18 @@ async def chat(ctx: AppContext, websocket, data: dict):
     except Exception:
         pass
 
-    # 사용자 메시지 추가 + DB에 세션/방 보장 후 저장
+    # 사용자 메시지 추가 + DB에 방/메시지 저장
     room["history"].add_user_message(prompt)
     try:
         if ctx.db_handler:
-            await ctx.db_handler.upsert_session(session_key)
-            await ctx.db_handler.upsert_room(rid, session_key, rid, None)
-            await ctx.db_handler.save_message(rid, "user", prompt, session_key)
+            await ctx.db_handler.upsert_room(rid, user_id, rid, None)
+            await ctx.db_handler.save_message(rid, "user", prompt, user_id)
     except Exception:
         pass
 
-    # 히스토리 텍스트 주입 여부 결정
+    # 히스토리 텍스트 (프로바이더 세션 사용 시 생략)
     provider_supports_session = provider in ("claude", "droid")
-    if retention_enabled and provider_supports_session and provider_session_id:
+    if provider_supports_session and provider_session_id:
         history_text = ""
     else:
         history_text = room["history"].get_history_text()
@@ -118,7 +126,7 @@ async def chat(ctx: AppContext, websocket, data: dict):
         room["history"].add_assistant_message(msg)
         try:
             if ctx.db_handler:
-                await ctx.db_handler.save_message(rid, "assistant", msg, session_key)
+                await ctx.db_handler.save_message(rid, "assistant", msg, user_id)
         except Exception:
             pass
 
@@ -126,7 +134,7 @@ async def chat(ctx: AppContext, websocket, data: dict):
     token_info = result.get("token_info")
     if token_info is not None:
         ctx.token_usage_handler.add_usage(
-            session_key=session_key,
+            session_key=str(user_id),  # token_usage_handler는 레거시 호환용
             room_id=rid,
             provider=provider,
             token_info=token_info,
@@ -135,7 +143,7 @@ async def chat(ctx: AppContext, websocket, data: dict):
         if ctx.db_handler:
             try:
                 await ctx.db_handler.save_token_usage(
-                    session_key=session_key,
+                    user_id=user_id,
                     room_id=rid,
                     provider=provider,
                     token_info=token_info,
@@ -144,14 +152,14 @@ async def chat(ctx: AppContext, websocket, data: dict):
                 logger.error(f"Failed to save token usage to DB: {e}")
 
     token_summary = ctx.token_usage_handler.get_formatted_summary(
-        session_key=session_key, room_id=rid
+        session_key=str(user_id), room_id=rid  # 레거시 호환용
     )
 
-    # 세션 유지 시 세션ID 업데이트
+    # 프로바이더 세션ID 업데이트
     new_session_id = result.get("session_id")
-    if retention_enabled and new_session_id:
+    if new_session_id:
         provider_sessions[provider] = new_session_id
-    elif not retention_enabled:
+    else:
         provider_sessions.pop(provider, None)
 
     await websocket.send(

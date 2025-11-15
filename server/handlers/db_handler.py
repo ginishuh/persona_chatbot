@@ -32,7 +32,7 @@ class DBHandler:
         await self._migrate()
 
     async def _migrate(self) -> None:
-        """DB 버전 관리 및 마이그레이션 시스템."""
+        """DB 버전 관리 및 마이그레이션 시스템 (user_id 기반)."""
         assert self._conn is not None
 
         # 현재 DB 버전 확인
@@ -40,79 +40,74 @@ class DBHandler:
         row = await cur.fetchone()
         current_version = row[0] if row else 0
 
-        # 최신 버전
-        TARGET_VERSION = 3
+        # 최신 버전: v4 (user_id 기반 재설계)
+        TARGET_VERSION = 4
 
         if current_version == 0:
-            # 테이블 존재 여부 확인 (새 DB vs 구버전 DB 구분)
-            cur = await self._conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='rooms'"
+            # 새 DB: v4 스키마로 바로 생성
+            await self._conn.executescript(
+                """
+                -- users 테이블
+                CREATE TABLE users (
+                    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    email TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP,
+                    is_approved INTEGER DEFAULT 0,
+                    role TEXT DEFAULT 'user',
+                    approved_by INTEGER,
+                    approved_at TIMESTAMP
+                );
+
+                -- rooms 테이블 (user_id 기반)
+                CREATE TABLE rooms (
+                    user_id INTEGER NOT NULL,
+                    room_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    context TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, room_id),
+                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+                );
+                CREATE INDEX idx_rooms_user ON rooms(user_id);
+                CREATE INDEX idx_rooms_updated ON rooms(updated_at);
+
+                -- messages 테이블 (user_id 기반)
+                CREATE TABLE messages (
+                    message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    room_id TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK(role in ('user','assistant')),
+                    content TEXT NOT NULL,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id, room_id) REFERENCES rooms(user_id, room_id) ON DELETE CASCADE
+                );
+                CREATE INDEX idx_messages_room ON messages(user_id, room_id);
+                CREATE INDEX idx_messages_ts ON messages(timestamp);
+
+                -- token_usage 테이블 (user_id 기반)
+                CREATE TABLE token_usage (
+                    usage_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    room_id TEXT,
+                    provider TEXT NOT NULL,
+                    token_info TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+                );
+                CREATE INDEX idx_tok_user ON token_usage(user_id);
+                CREATE INDEX idx_tok_room ON token_usage(room_id);
+                """
             )
-            row = await cur.fetchone()
-            is_new_db = row is None
-
-            if is_new_db:
-                # 새 DB: v1 스키마로 바로 생성
-                await self._conn.executescript(
-                    """
-                    CREATE TABLE sessions (
-                        session_key TEXT PRIMARY KEY,
-                        user_id INTEGER,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-
-                    CREATE TABLE rooms (
-                        session_key TEXT NOT NULL,
-                        room_id TEXT NOT NULL,
-                        title TEXT NOT NULL,
-                        context TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        PRIMARY KEY (session_key, room_id),
-                        FOREIGN KEY (session_key) REFERENCES sessions(session_key) ON DELETE CASCADE
-                    );
-                    CREATE INDEX idx_rooms_session ON rooms(session_key);
-
-                    CREATE TABLE messages (
-                        message_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        session_key TEXT NOT NULL,
-                        room_id TEXT NOT NULL,
-                        role TEXT NOT NULL CHECK(role in ('user','assistant')),
-                        content TEXT NOT NULL,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-                    CREATE INDEX idx_messages_room_session ON messages(room_id, session_key);
-                    CREATE INDEX idx_messages_ts ON messages(timestamp);
-
-                    CREATE TABLE token_usage (
-                        usage_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        session_key TEXT NOT NULL,
-                        room_id TEXT,
-                        provider TEXT NOT NULL,
-                        token_info TEXT,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-                    CREATE INDEX idx_tok_sess ON token_usage(session_key);
-                    CREATE INDEX idx_tok_room ON token_usage(room_id);
-                    """
-                )
-                await self._conn.commit()
-                current_version = 1
-            else:
-                # 구버전 DB: 마이그레이션 필요
-                await self._migrate_to_v1()
-                current_version = 1
-
-        # v1 → v2: users 테이블 추가
-        if current_version < 2:
-            await self._migrate_to_v2()
-            current_version = 2
-
-        # v2 → v3: users 테이블에 승인 및 역할 관리 추가
-        if current_version < 3:
-            await self._migrate_to_v3()
-            current_version = 3
+            await self._conn.commit()
+            current_version = 4
+        elif current_version < 4:
+            # 구버전 DB: v4로 마이그레이션 (기존 데이터 버림)
+            await self._migrate_to_v4()
+            current_version = 4
 
         # 버전 업데이트
         if current_version == TARGET_VERSION:
@@ -333,220 +328,186 @@ class DBHandler:
 
         await self._conn.commit()
 
+    async def _migrate_to_v4(self) -> None:
+        """v3 → v4: user_id 기반 재설계 (기존 데이터 삭제)."""
+        assert self._conn is not None
+
+        # 기존 테이블 모두 삭제
+        await self._conn.execute("DROP TABLE IF EXISTS messages")
+        await self._conn.execute("DROP TABLE IF EXISTS rooms")
+        await self._conn.execute("DROP TABLE IF EXISTS sessions")
+        await self._conn.execute("DROP TABLE IF EXISTS token_usage")
+
+        # users 테이블은 유지 (이미 존재)
+
+        # 새 스키마로 테이블 생성
+        await self._conn.executescript(
+            """
+            -- rooms 테이블 (user_id 기반)
+            CREATE TABLE rooms (
+                user_id INTEGER NOT NULL,
+                room_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                context TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, room_id),
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_rooms_user ON rooms(user_id);
+            CREATE INDEX idx_rooms_updated ON rooms(updated_at);
+
+            -- messages 테이블 (user_id 기반)
+            CREATE TABLE messages (
+                message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                room_id TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role in ('user','assistant')),
+                content TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id, room_id) REFERENCES rooms(user_id, room_id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_messages_room ON messages(user_id, room_id);
+            CREATE INDEX idx_messages_ts ON messages(timestamp);
+
+            -- token_usage 테이블 (user_id 기반)
+            CREATE TABLE token_usage (
+                usage_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                room_id TEXT,
+                provider TEXT NOT NULL,
+                token_info TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_tok_user ON token_usage(user_id);
+            CREATE INDEX idx_tok_room ON token_usage(room_id);
+            """
+        )
+
+        await self._conn.commit()
+
     # ===== Rooms =====
-    async def _upsert_session_unlocked(self, session_key: str, user_id: int | None = None) -> None:
-        """Lock 없이 세션 upsert (내부용)
-
-        Args:
-            session_key: 세션 키
-            user_id: 사용자 ID (회원제 시스템용, None이면 비회원 세션)
-        """
-        assert self._conn is not None
-        if user_id is not None:
-            # user_id가 있으면 함께 저장/업데이트
-            await self._conn.execute(
-                """
-                INSERT INTO sessions(session_key, user_id) VALUES(?, ?)
-                ON CONFLICT(session_key) DO UPDATE SET
-                    last_accessed=CURRENT_TIMESTAMP,
-                    user_id=excluded.user_id
-                """,
-                (session_key, user_id),
-            )
-        else:
-            # user_id 없으면 session_key만 저장
-            await self._conn.execute(
-                """
-                INSERT INTO sessions(session_key) VALUES(?)
-                ON CONFLICT(session_key) DO UPDATE SET last_accessed=CURRENT_TIMESTAMP
-                """,
-                (session_key,),
-            )
-
-    async def upsert_session(self, session_key: str, user_id: int | None = None) -> None:
-        """세션 생성 또는 업데이트
-
-        Args:
-            session_key: 세션 키
-            user_id: 사용자 ID (회원제 시스템용, None이면 비회원 세션)
-        """
-        assert self._conn is not None
-        async with self._lock:
-            await self._upsert_session_unlocked(session_key, user_id)
-            await self._conn.commit()
-
     async def upsert_room(
         self,
         room_id: str,
-        session_key: str,
+        user_id: int,
         title: str,
         context_json: str | None,
-        user_id: int | None = None,
     ) -> None:
-        """방 생성 또는 업데이트
+        """방 생성 또는 업데이트 (user_id 기반)
 
         Args:
             room_id: 방 ID
-            session_key: 세션 키
+            user_id: 사용자 ID
             title: 방 제목
             context_json: 컨텍스트 JSON
-            user_id: 사용자 ID (회원제 시스템용, None이면 비회원)
         """
         assert self._conn is not None
         async with self._lock:
-            await self._upsert_session_unlocked(session_key, user_id)
             await self._conn.execute(
                 """
-                INSERT INTO rooms(session_key, room_id, title, context)
+                INSERT INTO rooms(user_id, room_id, title, context)
                 VALUES(?, ?, ?, ?)
-                ON CONFLICT(session_key, room_id) DO UPDATE SET
+                ON CONFLICT(user_id, room_id) DO UPDATE SET
                   title=excluded.title,
                   context=excluded.context,
                   updated_at=CURRENT_TIMESTAMP
                 """,
-                (session_key, room_id, title, context_json),
+                (user_id, room_id, title, context_json),
             )
             await self._conn.commit()
 
-    async def list_rooms(self, session_key: str) -> list[dict[str, Any]]:
-        assert self._conn is not None
-        cur = await self._conn.execute(
-            "SELECT room_id, title, context, created_at, updated_at FROM rooms WHERE session_key = ? ORDER BY updated_at DESC",
-            (session_key,),
-        )
-        rows = await cur.fetchall()
-        return [dict(r) for r in rows]
-
-    async def get_room(self, room_id: str, session_key: str | None = None) -> dict[str, Any] | None:
-        """방 조회 (세션 키로 격리)
-
-        Args:
-            room_id: 방 ID
-            session_key: 세션 키 (None이면 세션 체크 안 함 - 하위 호환용, 보안상 권장하지 않음)
-        """
-        assert self._conn is not None
-        if session_key is not None:
-            # 세션 키로 격리 (권장)
-            cur = await self._conn.execute(
-                "SELECT room_id, session_key, title, context, created_at, updated_at FROM rooms WHERE room_id = ? AND session_key = ?",
-                (room_id, session_key),
-            )
-        else:
-            # 하위 호환용 (보안 취약)
-            cur = await self._conn.execute(
-                "SELECT room_id, session_key, title, context, created_at, updated_at FROM rooms WHERE room_id = ?",
-                (room_id,),
-            )
-        row = await cur.fetchone()
-        return dict(row) if row else None
-
-    async def delete_room(self, room_id: str, session_key: str | None = None) -> None:
-        """방 삭제 (세션 키로 격리)
-
-        Args:
-            room_id: 방 ID
-            session_key: 세션 키 (None이면 세션 체크 안 함 - 하위 호환용, 보안상 권장하지 않음)
-
-        Note:
-            메시지와 토큰 사용량도 함께 삭제됩니다 (CASCADE 대체)
-        """
-        assert self._conn is not None
-        async with self._lock:
-            if session_key is not None:
-                # 세션 키로 격리하여 삭제 (권장)
-                # 관련 메시지 먼저 삭제
-                await self._conn.execute(
-                    "DELETE FROM messages WHERE room_id = ? AND session_key = ?",
-                    (room_id, session_key),
-                )
-
-                # 관련 토큰 사용량 삭제
-                await self._conn.execute(
-                    "DELETE FROM token_usage WHERE room_id = ? AND session_key = ?",
-                    (room_id, session_key),
-                )
-
-                # 방 삭제
-                await self._conn.execute(
-                    "DELETE FROM rooms WHERE room_id = ? AND session_key = ?",
-                    (room_id, session_key),
-                )
-            else:
-                # 하위 호환용 (보안 취약 - 모든 세션의 데이터 삭제)
-                await self._conn.execute("DELETE FROM messages WHERE room_id = ?", (room_id,))
-                await self._conn.execute("DELETE FROM token_usage WHERE room_id = ?", (room_id,))
-                await self._conn.execute("DELETE FROM rooms WHERE room_id = ?", (room_id,))
-
-            await self._conn.commit()
-
-    async def list_rooms_by_user_id(self, user_id: int) -> list[dict[str, Any]]:
-        """user_id로 방 목록 조회 (세션 JOIN)
+    async def list_rooms(self, user_id: int) -> list[dict[str, Any]]:
+        """채팅방 목록 조회 (user_id 기반)
 
         Args:
             user_id: 사용자 ID
 
         Returns:
-            방 목록 (room_id, title, context, created_at, updated_at, session_key)
+            방 목록 (user_id, room_id, title, context, created_at, updated_at)
         """
         assert self._conn is not None
         cur = await self._conn.execute(
             """
-            SELECT r.room_id, r.title, r.context, r.created_at, r.updated_at, r.session_key
-            FROM rooms r
-            JOIN sessions s ON r.session_key = s.session_key
-            WHERE s.user_id = ?
-            ORDER BY r.updated_at DESC
+            SELECT user_id, room_id, title, context, created_at, updated_at
+            FROM rooms
+            WHERE user_id = ?
+            ORDER BY updated_at DESC
             """,
             (user_id,),
         )
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
 
+    async def get_room(self, room_id: str, user_id: int) -> dict[str, Any] | None:
+        """방 조회 (user_id 기반)
+
+        Args:
+            room_id: 방 ID
+            user_id: 사용자 ID
+        """
+        assert self._conn is not None
+        cur = await self._conn.execute(
+            "SELECT user_id, room_id, title, context, created_at, updated_at FROM rooms WHERE room_id = ? AND user_id = ?",
+            (room_id, user_id),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+    async def delete_room(self, room_id: str, user_id: int) -> None:
+        """방 삭제 (user_id 기반)
+
+        Args:
+            room_id: 방 ID
+            user_id: 사용자 ID
+
+        Note:
+            메시지와 토큰 사용량은 FOREIGN KEY CASCADE로 자동 삭제됩니다
+        """
+        assert self._conn is not None
+        async with self._lock:
+            # 방 삭제 (CASCADE로 메시지와 토큰 사용량 자동 삭제)
+            await self._conn.execute(
+                "DELETE FROM rooms WHERE room_id = ? AND user_id = ?",
+                (room_id, user_id),
+            )
+            await self._conn.commit()
+
     # ===== Messages =====
-    async def save_message(
-        self, room_id: str, role: str, content: str, session_key: str = "default"
-    ) -> None:
-        """메시지 저장 (세션 키로 격리)
+    async def save_message(self, room_id: str, role: str, content: str, user_id: int) -> None:
+        """메시지 저장 (user_id 기반)
 
         Args:
             room_id: 방 ID
             role: 'user' 또는 'assistant'
             content: 메시지 내용
-            session_key: 세션 키 (기본값: "default")
+            user_id: 사용자 ID
         """
         assert self._conn is not None
         async with self._lock:
             await self._conn.execute(
-                "INSERT INTO messages(session_key, room_id, role, content) VALUES(?,?,?,?)",
-                (session_key, room_id, role, content),
+                "INSERT INTO messages(user_id, room_id, role, content) VALUES(?,?,?,?)",
+                (user_id, room_id, role, content),
             )
             await self._conn.commit()
 
     async def list_messages(
-        self, room_id: str, session_key: str | None = None, limit: int | None = None
+        self, room_id: str, user_id: int, limit: int | None = None
     ) -> list[dict[str, Any]]:
-        """메시지 조회 (세션 키로 격리)
+        """메시지 조회 (user_id 기반)
 
         Args:
             room_id: 방 ID
-            session_key: 세션 키 (None이면 세션 체크 안 함 - 하위 호환용, 보안상 권장하지 않음)
+            user_id: 사용자 ID
             limit: 최대 조회 개수
         """
         assert self._conn is not None
-        if session_key is not None:
-            # 세션 키로 격리 (권장)
-            sql = "SELECT message_id, role, content, timestamp FROM messages WHERE room_id=? AND session_key=? ORDER BY message_id ASC"
-            params: Iterable[Any] = (room_id, session_key)
-            if limit:
-                sql += " LIMIT ?"
-                params = (room_id, session_key, limit)
-        else:
-            # 하위 호환용 (보안 취약)
-            sql = "SELECT message_id, role, content, timestamp FROM messages WHERE room_id=? ORDER BY message_id ASC"
-            params = (room_id,)
-            if limit:
-                sql += " LIMIT ?"
-                params = (room_id, limit)
+        sql = "SELECT message_id, role, content, timestamp FROM messages WHERE room_id=? AND user_id=? ORDER BY message_id ASC"
+        params: Iterable[Any] = (room_id, user_id)
+        if limit:
+            sql += " LIMIT ?"
+            params = (room_id, user_id, limit)
         cur = await self._conn.execute(sql, params)
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
@@ -554,28 +515,21 @@ class DBHandler:
     async def list_messages_range(
         self,
         room_id: str,
-        session_key: str | None = None,
+        user_id: int,
         start: str | None = None,
         end: str | None = None,
     ) -> list[dict[str, Any]]:
-        """방 메시지 조회(날짜 범위 필터, 세션 키로 격리).
+        """방 메시지 조회 (날짜 범위 필터, user_id 기반)
 
         Args:
             room_id: 방 ID
-            session_key: 세션 키 (None이면 세션 체크 안 함 - 하위 호환용, 보안상 권장하지 않음)
+            user_id: 사용자 ID
             start: 시작 시간 'YYYY-MM-DD HH:MM:SS'
             end: 종료 시간 'YYYY-MM-DD HH:MM:SS'
-
-        SQLite의 TIMESTAMP 텍스트 비교 특성을 활용합니다.
         """
         assert self._conn is not None
-        clauses = ["room_id = ?"]
-        params: list[Any] = [room_id]
-
-        if session_key is not None:
-            # 세션 키로 격리 (권장)
-            clauses.append("session_key = ?")
-            params.append(session_key)
+        clauses = ["room_id = ?", "user_id = ?"]
+        params: list[Any] = [room_id, user_id]
 
         if start:
             clauses.append("timestamp >= ?")
@@ -592,26 +546,21 @@ class DBHandler:
     async def list_token_usage_range(
         self,
         room_id: str,
-        session_key: str | None = None,
+        user_id: int,
         start: str | None = None,
         end: str | None = None,
     ) -> list[dict[str, Any]]:
-        """방별 토큰 사용량 조회(날짜 범위, 세션 키로 격리).
+        """방별 토큰 사용량 조회 (날짜 범위, user_id 기반)
 
         Args:
             room_id: 방 ID
-            session_key: 세션 키 (None이면 세션 체크 안 함 - 하위 호환용, 보안상 권장하지 않음)
+            user_id: 사용자 ID
             start: 시작 시간
             end: 종료 시간
         """
         assert self._conn is not None
-        clauses = ["room_id = ?"]
-        params: list[Any] = [room_id]
-
-        if session_key is not None:
-            # 세션 키로 격리 (권장)
-            clauses.append("session_key = ?")
-            params.append(session_key)
+        clauses = ["room_id = ?", "user_id = ?"]
+        params: list[Any] = [room_id, user_id]
 
         if start:
             clauses.append("timestamp >= ?")
@@ -620,19 +569,19 @@ class DBHandler:
             clauses.append("timestamp <= ?")
             params.append(end)
         where = " AND ".join(clauses)
-        sql = f"SELECT usage_id, session_key, provider, token_info, timestamp FROM token_usage WHERE {where} ORDER BY usage_id ASC"
+        sql = f"SELECT usage_id, user_id, provider, token_info, timestamp FROM token_usage WHERE {where} ORDER BY usage_id ASC"
         cur = await self._conn.execute(sql, params)
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
 
     async def save_token_usage(
         self,
-        session_key: str,
+        user_id: int,
         room_id: str,
         provider: str,
         token_info: dict | str | None,
     ) -> None:
-        """토큰 사용량 저장.
+        """토큰 사용량 저장 (user_id 기반)
 
         token_info는 dict 또는 JSON 문자열 허용. None이면 저장하지 않음.
         """
@@ -649,17 +598,18 @@ class DBHandler:
         async with self._lock:
             await self._conn.execute(
                 """
-                INSERT INTO token_usage(session_key, room_id, provider, token_info)
+                INSERT INTO token_usage(user_id, room_id, provider, token_info)
                 VALUES(?, ?, ?, ?)
                 """,
-                (session_key, room_id, provider, info_str),
+                (user_id, room_id, provider, info_str),
             )
             await self._conn.commit()
 
     async def list_all_rooms(self) -> list[dict[str, Any]]:
+        """모든 방 목록 조회 (관리자용)"""
         assert self._conn is not None
         cur = await self._conn.execute(
-            "SELECT room_id, title, session_key, created_at, updated_at FROM rooms ORDER BY updated_at DESC"
+            "SELECT user_id, room_id, title, created_at, updated_at FROM rooms ORDER BY updated_at DESC"
         )
         rows = await cur.fetchall()
         return [dict(r) for r in rows]

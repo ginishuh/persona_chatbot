@@ -110,6 +110,14 @@ const registerPasswordInput = document.getElementById('registerPassword');
 const registerPasswordConfirmInput = document.getElementById('registerPasswordConfirm');
 const registerButton = document.getElementById('registerButton');
 const registerError = document.getElementById('registerError');
+// 로그인/로그아웃 버튼
+const loginBtn = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+
+// 모바일 더보기 메뉴의 로그인/로그아웃/관리 버튼
+const moreLoginBtn = document.getElementById('moreLoginBtn');
+const moreLogoutBtn = document.getElementById('moreLogoutBtn');
+const moreAdminBtn = document.getElementById('moreAdminBtn');
 
 // 관리자 요소
 const adminBtn = document.getElementById('adminBtn');
@@ -137,6 +145,7 @@ const AUTH_TOKEN_KEY = 'persona_auth_token';
 const AUTH_EXP_KEY = 'persona_auth_exp';
 const REFRESH_TOKEN_KEY = 'persona_refresh_token';
 const REFRESH_EXP_KEY = 'persona_refresh_exp';
+const USER_ROLE_KEY = 'persona_user_role';
 // 세션/채팅방 로컬키
 const SESSION_KEY_KEY = 'persona_session_key';
 const ROOMS_KEY = 'persona_rooms';
@@ -911,17 +920,11 @@ document.getElementById('rmCloseBtn')?.addEventListener('click', closeRoomsModal
 document.querySelector('#roomsModal .settings-modal-overlay')?.addEventListener('click', closeRoomsModal);
 document.getElementById('rmSearch')?.addEventListener('input', populateRoomsModal);
 document.getElementById('rmNewBtn')?.addEventListener('click', () => {
-    const name = prompt('새 채팅방 이름', 'room_' + Math.random().toString(36).slice(2, 6));
-    if (!name) return;
-    const r = sanitizeRoomName(name);
-    if (!rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) rooms.push(r);
-    currentRoom = r;
-    persistRooms();
-    renderRoomsUI();
-    const config = collectRoomConfig(r);
-    sendMessage({ action: 'room_save', room_id: r, config });
-    setTimeout(() => sendMessage({ action: 'room_list' }), 300);
-    navigate(`/rooms/${encodeURIComponent(r)}`);
+    // roomNameModal 사용 (한글 입력 지원)
+    roomNameInput.value = ''; // 입력 초기화
+    roomNameModal.classList.remove('hidden');
+    setTimeout(() => roomNameInput.focus(), 100); // 포커스
+    closeRoomsModal(); // 기존 모달 닫기
 });
 
 // ===== 3열 우측 패널: 방 목록 렌더 =====
@@ -1185,7 +1188,8 @@ function initializeAppData() {
 
 // ===== 채팅방 관리 =====
 function sanitizeRoomName(name) {
-    const sanitized = (name || '').trim().replace(/[^A-Za-z0-9_\-]/g, '_');
+    // 한글, 영문, 숫자, 공백, 밑줄, 하이픈 허용
+    const sanitized = (name || '').trim().replace(/[^\uAC00-\uD7A3A-Za-z0-9_\-\s]/g, '_');
     return sanitized || 'room_untitled';
 }
 
@@ -1330,11 +1334,15 @@ if (roomNameConfirmBtn) {
         renderRoomsUI();
         // 현재 설정으로 방 저장
         const config = collectRoomConfig(r);
+        console.log('[ROOM_SAVE] session_key:', sessionKey, 'room_id:', r, 'config:', config);
         sendMessage({ action: 'room_save', room_id: r, config });
         setTimeout(() => { sendMessage({ action: 'room_list' }); renderRoomsRightPanelList(); }, 300);
         refreshRoomViews();
         log(`채팅방 추가: ${r}`, 'success');
         announce(`채팅방 추가: ${r}`);
+
+        // 새 채팅방으로 이동
+        navigate(`/rooms/${encodeURIComponent(r)}`);
 
         // 모달 닫기
         roomNameModal.classList.add('hidden');
@@ -1742,6 +1750,7 @@ async function submitLogin() {
 
             // 사용자 역할 저장
             userRole = data.role || 'user';
+            localStorage.setItem(USER_ROLE_KEY, userRole);
 
             // 관리자 버튼 표시/숨김
             if (adminBtn) {
@@ -1767,6 +1776,17 @@ async function submitLogin() {
             isAuthenticated = true;
             hideLoginModal();
             log(`${username}님 로그인 성공`, 'success');
+
+            // 버튼 가시성 업데이트 (헤더 + 더보기 메뉴)
+            loginBtn.style.display = 'none';
+            moreLoginBtn.style.display = 'none';
+            logoutBtn.style.display = 'block';
+            moreLogoutBtn.style.display = 'block';
+            if (userRole === 'admin') {
+                adminBtn.style.display = 'block';
+                moreAdminBtn.style.display = 'block';
+            }
+            console.log('[LOGIN] 버튼 가시성:', { loginBtn: loginBtn.style.display, logoutBtn: logoutBtn.style.display, adminBtn: adminBtn.style.display, userRole });
 
             // WebSocket 재연결 (토큰 포함)
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -3227,13 +3247,54 @@ if (settingsModalOverlay) {
 }
 
 // ===== 관리자 모달 =====
+// 로그인 버튼
+if (loginBtn) {
+    loginBtn.addEventListener('click', () => {
+        showLoginModal();
+    });
+}
+if (moreLoginBtn) {
+    moreLoginBtn.addEventListener('click', () => {
+        showLoginModal();
+    });
+}
+
+// 로그아웃 핸들러
+function handleLogout() {
+    clearAuthToken();
+    setRefreshToken('', '');
+    localStorage.removeItem(USER_ROLE_KEY);
+    userRole = 'user';
+    isAuthenticated = false;
+    adminBtn.style.display = 'none';
+    moreAdminBtn.style.display = 'none';
+    loginBtn.style.display = 'block';
+    moreLoginBtn.style.display = 'block';
+    logoutBtn.style.display = 'none';
+    moreLogoutBtn.style.display = 'none';
+    log('로그아웃 되었습니다.', 'info');
+    location.reload();
+}
+
+// 로그아웃 버튼
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', handleLogout);
+}
+if (moreLogoutBtn) {
+    moreLogoutBtn.addEventListener('click', handleLogout);
+}
 
 // 관리자 모달 열기
+async function openAdminModal() {
+    adminModal.classList.remove('hidden');
+    await fetchPendingUsers();
+}
+
 if (adminBtn) {
-    adminBtn.addEventListener('click', async () => {
-        adminModal.classList.remove('hidden');
-        await fetchPendingUsers();
-    });
+    adminBtn.addEventListener('click', openAdminModal);
+}
+if (moreAdminBtn) {
+    moreAdminBtn.addEventListener('click', openAdminModal);
 }
 
 // 관리자 모달 닫기
@@ -4422,6 +4483,32 @@ window.addEventListener('load', async () => {
     document.getElementById('moreMenuDropdown')?.classList.add('hidden');
     document.getElementById('mobileOverlay')?.classList.remove('active');
     document.getElementById('participantsModal')?.classList.add('hidden');
+
+    // 인증 상태에 따라 로그인/로그아웃 버튼 가시성 설정
+    const savedToken = localStorage.getItem(AUTH_TOKEN_KEY);
+    const savedExp = localStorage.getItem(AUTH_EXP_KEY);
+    if (savedToken && savedExp && new Date(savedExp) > new Date()) {
+        authToken = savedToken;
+        authTokenExpiresAt = savedExp;
+        isAuthenticated = true;
+        userRole = localStorage.getItem(USER_ROLE_KEY) || 'user';
+        loginBtn.style.display = 'none';
+        moreLoginBtn.style.display = 'none';
+        logoutBtn.style.display = 'block';
+        moreLogoutBtn.style.display = 'block';
+        if (userRole === 'admin') {
+            adminBtn.style.display = 'block';
+            moreAdminBtn.style.display = 'block';
+        }
+    } else {
+        loginBtn.style.display = 'block';
+        moreLoginBtn.style.display = 'block';
+        logoutBtn.style.display = 'none';
+        moreLogoutBtn.style.display = 'none';
+        adminBtn.style.display = 'none';
+        moreAdminBtn.style.display = 'none';
+    }
+
     connect();
     // 연결 전이라도 라우트 화면을 먼저 표시(데이터는 연결 후 갱신)
     try { renderCurrentScreenFrom(location.pathname); } catch (_) {}
