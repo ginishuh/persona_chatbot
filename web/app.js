@@ -3134,6 +3134,8 @@ function updateTokenDisplay(tokenUsage) {
 }
 
 // ===== 이벤트 리스너 바인딩(동적) =====
+let isComposing = false; // IME 입력 중 플래그 (한글, 일본어, 중국어 등)
+
 function bindChatEvents() {
     refreshChatRefs();
     try {
@@ -3142,8 +3144,17 @@ function bindChatEvents() {
             sendChatBtn.dataset.bound = '1';
         }
         if (chatInput && !chatInput.dataset.bound) {
+            // IME 입력 시작/종료 감지
+            chatInput.addEventListener('compositionstart', () => {
+                isComposing = true;
+            });
+            chatInput.addEventListener('compositionend', () => {
+                isComposing = false;
+            });
+
             chatInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                // IME 입력 중이 아닐 때만 Enter로 전송
+                if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
                     e.preventDefault();
                     sendChatMessage();
                 }
