@@ -23,9 +23,9 @@ async def room_list(ctx: AppContext, websocket, data: dict):
         )
         return
 
-    logger.info(f"[DEBUG] room_list - user_id: {user_id}")
+    logger.debug(f"[DEBUG] room_list - user_id: {user_id}")
     rows = await ctx.db_handler.list_rooms(user_id) if ctx.db_handler else []
-    logger.info(f"[DEBUG] room_list - DB에서 조회된 방: {len(rows)}개")
+    logger.debug(f"[DEBUG] room_list - DB에서 조회된 방: {len(rows)}개")
 
     def to_item(r):
         rid = r.get("room_id")
@@ -47,7 +47,7 @@ async def room_save(ctx: AppContext, websocket, data: dict):
     import logging
 
     logger = logging.getLogger(__name__)
-    logger.info("[DEBUG] room_save 시작")
+    logger.debug("[DEBUG] room_save 시작")
 
     if not ctx.db_handler:
         await websocket.send(
@@ -68,23 +68,35 @@ async def room_save(ctx: AppContext, websocket, data: dict):
         )
         return
 
-    room_id = data.get("room_id") or "default"
-    conf = data.get("config")
+    # Support both shapes: top-level `room_id`/`config` or nested under `data` key
+    payload = data.get("data") if isinstance(data.get("data"), dict) else {}
+    room_id = data.get("room_id") or payload.get("room_id") or "default"
+    conf = data.get("config") or payload.get("config")
     if not isinstance(conf, dict) or not conf:
         conf = {"room_id": room_id, "context": ctx.context_handler.get_context()}
 
-    logger.info(f"[DEBUG] room_id={room_id}, user_id={user_id}, conf 타입={type(conf)}")
+    logger.debug(f"[DEBUG] room_id={room_id}, user_id={user_id}, conf 타입={type(conf)}")
+    logger.debug(
+        f"[DEBUG] room_save - about to upsert room for user_id={user_id} room_id={room_id}"
+    )
 
     title = conf.get("title") or room_id
     context_json = json.dumps(conf.get("context") or {}, ensure_ascii=False)
-    logger.info("[DEBUG] upsert_room 호출 전")
+    logger.debug("[DEBUG] upsert_room 호출 전")
     await ctx.db_handler.upsert_room(room_id, user_id, title, context_json)
-    logger.info("[DEBUG] upsert_room 완료")
+    logger.debug("[DEBUG] upsert_room 완료")
+    # Debug prints to help diagnose test failures
+    logger.debug(
+        f"[DBG] room_save - upserted room: user_id={user_id} room_id={room_id} title={title} context={context_json}"
+    )
+    logger.debug(
+        f"[DEBUG] room_save - upsert_room completed for user_id={user_id} room_id={room_id}"
+    )
 
     await websocket.send(
         json.dumps({"action": "room_save", "data": {"success": True, "room_id": room_id}})
     )
-    logger.info("[DEBUG] room_save 응답 전송 완료")
+    logger.debug("[DEBUG] room_save 응답 전송 완료")
 
 
 async def room_load(ctx: AppContext, websocket, data: dict):
@@ -111,6 +123,10 @@ async def room_load(ctx: AppContext, websocket, data: dict):
 
     # user_id로 방 조회
     db_row = await ctx.db_handler.get_room(room_id, user_id)
+    logger.debug(
+        f"[DEBUG] room_load - get_room result for user_id={user_id} room_id={room_id}: {bool(db_row)}"
+    )
+    logger.debug(f"[DBG] room_load - db_row for user_id={user_id} room_id={room_id}: {db_row}")
     if not db_row:
         await websocket.send(
             json.dumps(
@@ -133,7 +149,7 @@ async def room_load(ctx: AppContext, websocket, data: dict):
         rid, room = sm.get_room(ctx, sess, room_id)
         if ctx.db_handler:
             rows = await ctx.db_handler.list_messages(room_id, user_id)
-            logger.info(
+            logger.debug(
                 f"[DEBUG] room_load - fetched {len(rows)} messages from DB for room={room_id} user_id={user_id}"
             )
             try:
@@ -157,7 +173,7 @@ async def room_load(ctx: AppContext, websocket, data: dict):
     try:
         if ctx.db_handler:
             history_rows = await ctx.db_handler.list_messages(room_id, user_id)
-            logger.info(
+            logger.debug(
                 f"[DEBUG] room_load - including {len(history_rows)} history rows in response for room={room_id} user_id={user_id}"
             )
     except Exception:
