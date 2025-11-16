@@ -3210,13 +3210,21 @@ function bindChatEvents() {
                 isComposing = false;
             });
 
-            chatInput.addEventListener('keydown', (e) => {
-                // IME 입력 중이 아닐 때만 Enter로 전송
-                if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-                    e.preventDefault();
-                    sendChatMessage();
-                }
-            });
+            // 모바일(터치) 환경에서는 Enter 키 전송을 막고 버튼으로만 전송하도록 처리
+            const isTouchDevice = (typeof window !== 'undefined') && (
+                ('ontouchstart' in window) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+            );
+
+            if (!isTouchDevice) {
+                chatInput.addEventListener('keydown', (e) => {
+                    // IME 입력 중이 아닐 때만 Enter로 전송
+                    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+                        e.preventDefault();
+                        sendChatMessage();
+                    }
+                });
+            }
+
             chatInput.dataset.bound = '1';
         }
     } catch (_) {}
