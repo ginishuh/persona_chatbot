@@ -34,7 +34,7 @@
 - **Exception - Base Documents**: English only
   - `docs/agents_base_en.md` (this file - SSOT)
   - `CLAUDE.md` (development guidelines - English)
-  - `AGENTS.md` (Korean summary referencing base)
+  - `AGENTS.md` (development guidelines - English)
 
 ### Document Synchronization
 - Use `python3 scripts/sync_docs.py` to synchronize CLAUDE.md from base

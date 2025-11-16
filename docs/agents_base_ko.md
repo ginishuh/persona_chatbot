@@ -33,7 +33,7 @@
 - **사용자 문서**: 한국어 (README.md 등)
 - **예외 - 기준 문서**: 영어만
   - `docs/agents_base_en.md` (이 파일 - SSOT)
-  - `CLAUDE.md` (개발 지침 - 영어)
+  - `CLAUDE.md` (영어 지침)
   - `AGENTS.md` (영어 지침)
 
 ### 문서 동기화
