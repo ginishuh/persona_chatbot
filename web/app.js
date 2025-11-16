@@ -2095,6 +2095,12 @@ function handleMessage(msg) {
                 const ctx = room.context || {};
                 // UI 반영
                 loadContext(ctx);
+                // 서버에서 전달한 히스토리가 있으면 메시지 화면에 즉시 렌더
+                try {
+                    if (Array.isArray(room.history) && room.history.length > 0) {
+                        renderHistorySnapshot(room.history);
+                    }
+                } catch (_) {}
                 // 사용자 프로필 필드 채움
                 try {
                     const prof = room.user_profile || {};
@@ -3230,9 +3236,12 @@ function bindChatEvents() {
             });
 
             // 모바일(터치) 환경에서는 Enter 키 전송을 막고 버튼으로만 전송하도록 처리
-            const isTouchDevice = (typeof window !== 'undefined') && (
-                ('ontouchstart' in window) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
-            );
+              const isTouchDevice = (typeof window !== 'undefined') && (
+                  ('ontouchstart' in window) ||
+                  (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
+                  (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+                  /Mobi|Android|iPhone|iPad|iPod|Windows Phone|webOS/i.test(navigator.userAgent)
+              );
 
             if (!isTouchDevice) {
                 chatInput.addEventListener('keydown', (e) => {

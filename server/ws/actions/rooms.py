@@ -124,6 +124,36 @@ async def room_load(ctx: AppContext, websocket, data: dict):
     if ctx_obj and ctx.context_handler:
         ctx.context_handler.load_from_dict(ctx_obj)
 
+    # 가능한 경우, DB에 저장된 메시지를 읽어와 세션의 room 히스토리에 복원
+    try:
+        _, sess = sm.get_or_create_session(ctx, websocket, user_id)
+        rid, room = sm.get_room(ctx, sess, room_id)
+        if ctx.db_handler:
+            rows = await ctx.db_handler.list_messages(room_id, user_id)
+            try:
+                room["history"].clear()
+                for m in rows:
+                    role = m.get("role")
+                    content = m.get("content") or ""
+                    if role == "user":
+                        room["history"].add_user_message(content)
+                    else:
+                        room["history"].add_assistant_message(content)
+            except Exception:
+                # 복원 실패 시 무시
+                pass
+    except Exception:
+        # 세션 생성 또는 DB 오류 시 복원 시도만 하고 계속 진행
+        pass
+
+    # 응답에 히스토리(있을 경우)를 포함시켜 클라이언트가 바로 렌더링
+    history_rows = []
+    try:
+        if ctx.db_handler:
+            history_rows = await ctx.db_handler.list_messages(room_id, user_id)
+    except Exception:
+        history_rows = []
+
     await websocket.send(
         json.dumps(
             {
@@ -134,6 +164,7 @@ async def room_load(ctx: AppContext, websocket, data: dict):
                         "room_id": room_id,
                         "title": db_row.get("title") or room_id,
                         "context": ctx_obj,
+                        "history": history_rows,
                     },
                 },
             }
