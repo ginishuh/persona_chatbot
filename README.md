@@ -2,11 +2,11 @@
 
 > "혼자 쓰는 채팅창"을 "캐릭터들이 뛰어노는 TRPG 테이블"로 바꾸는 웹 앱
 
-Persona Chat은 **웹 기반 멀티 캐릭터 대화·서사 관리 시스템**입니다.  
+Persona Chat은 **웹 기반 멀티 캐릭터 대화·서사 관리 시스템**입니다.
 Claude Code, Droid CLI, Gemini CLI를 AI 백엔드로 사용하고, WebSocket으로 **실시간 스트리밍 대화**를 제공합니다.
 
-> 2025-11-12 기준  
-> Claude ✅ / Droid ✅ / Gemini ✅  
+> 2025-11-12 기준
+> Claude ✅ / Droid ✅ / Gemini ✅
 > 로컬 실행과 Docker Compose 환경 모두에서 동작 확인 완료
 
 ---
@@ -56,7 +56,7 @@ Claude Code, Droid CLI, Gemini CLI를 AI 백엔드로 사용하고, WebSocket으
 - **멀티 AI 제공자**
   - Claude Code CLI
   - Gemini CLI
-  - Droid CLI  
+  - Droid CLI
   필요에 따라 선택 사용
 
 - **세션 & 맥락 관리**
@@ -78,7 +78,7 @@ Claude Code, Droid CLI, Gemini CLI를 AI 백엔드로 사용하고, WebSocket으
 
 - 혼자 LLM 채팅만 하기 아쉬운 분
 - **복수 캐릭터 롤플레이**나 **TRPG 로그**를 깔끔하게 관리하고 싶은 분
-- Claude/Gemini/Droid CLI를 이미 쓰고 있고,  
+- Claude/Gemini/Droid CLI를 이미 쓰고 있고,
   "이거로 내 전용 TRPG 테이블 만들면 좋겠다" 싶으신 분
 - 로컬에서 돌아가는, **개인 데이터가 밖으로 나가지 않는** 스토리 스튜디오가 필요한 분
 
@@ -121,7 +121,7 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 # 서버 시작
-python server/websocket_server.py
+python3 -m server.websocket_server
 ```
 
 서버가 뜨면:
@@ -205,6 +205,28 @@ docker compose down
 ```
 
 접속: [http://localhost:9000](http://localhost:9000)
+
+### 4) 관리자 계정 생성 (중요)
+
+**SQLite Lock 방지를 위해 관리자 계정은 반드시 컨테이너 안에서 생성**해야 합니다:
+
+```bash
+# 컨테이너 접속 후 관리자 계정 생성
+docker-compose -f docker-compose.yml.example exec persona-chatbot python3 -c "
+from server.handlers.db_handler import DBHandler
+import asyncio
+
+async def create_admin():
+    db = DBHandler('./data')
+    await db.initialize()
+    success = await db.create_admin_user('admin', 'your-password')
+    print('관리자 생성 성공' if success else '이미 존재함')
+
+asyncio.run(create_admin())
+"
+```
+
+호스트에서 직접 실행하면 SQLite Lock 문제가 발생합니다.
 
 ---
 
