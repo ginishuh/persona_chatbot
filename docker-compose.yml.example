@@ -12,6 +12,7 @@ services:
     volumes:
       - ./server:/app/server    # 개발 중 코드 수정 반영
       - ./web:/app/web          # 개발 중 웹 파일 수정 반영
+      - ./data:/app/data        # DB 및 영속성 저장 (중요)
       - ./persona_data:/app/persona_data  # 프리셋/워크스페이스 공유
       - ./chatbot_workspace:/app/chatbot_workspace  # CLAUDE 지침/작업 폴더 공유
       - ${FACTORY_AUTH_DIR?set FACTORY_AUTH_DIR}:/home/node/.factory     # Droid 커스텀 모델/인증 정보
@@ -27,6 +28,10 @@ services:
       - APP_LOGIN_USERNAME=${APP_LOGIN_USERNAME:-}
       - FACTORY_API_KEY=${FACTORY_API_KEY:-}
       - DROID_SKIP_PERMISSIONS_UNSAFE=1
+      # API-type login (HTTP API) 의 사용 예시:
+      # - APP_LOGIN_PASSWORD: 서버에서 단일 관리 비밀번호를 설정하면 HTTP 로그인(API)을 사용하도록 서버가 강제합니다.
+      # - APP_JWT_SECRET: JWT 서명에 사용할 강력한 시크릿을 반드시 설정하세요 (운영 환경 필수).
+      # 예: APP_LOGIN_PASSWORD=your-admin-password, APP_JWT_SECRET=$(openssl rand -hex 32)
       - APP_LOGIN_PASSWORD=${APP_LOGIN_PASSWORD:-}
       - APP_JWT_SECRET=${APP_JWT_SECRET:-}
       - APP_PUBLIC_WS_URL=${APP_PUBLIC_WS_URL:-}
