@@ -1419,6 +1419,9 @@ function collectRoomConfig(roomId) {
             narrative_separation: !!narrativeSeparation.checked,
             narrator_drive: narratorDrive ? narratorDrive.value : 'guide',
             output_level: outputLevel ? outputLevel.value : 'normal',
+            // 모델 및 세션 유지 설정을 방 컨텍스트에 포함
+            model: (typeof modelSelect !== 'undefined' && modelSelect) ? modelSelect.value : '',
+            session_retention: !!(typeof sessionRetentionToggle !== 'undefined' && sessionRetentionToggle && sessionRetentionToggle.checked),
             choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
             choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : 3,
             characters: Array.isArray(participants) ? participants : []
@@ -2900,6 +2903,22 @@ function loadContext(context) {
     narratorDescription.value = context.narrator_description || '';
     userIsNarrator.checked = context.user_is_narrator || false;
     aiProvider.value = context.ai_provider || 'claude';
+    // 모델 복원 (저장된 경우)
+    try {
+        if (typeof modelSelect !== 'undefined' && modelSelect && context.model !== undefined) {
+            // 모델이 빈 문자열이면 기본값을 유지
+            const val = context.model || '';
+            // 모델 옵션이 존재하면 복원
+            const found = [...modelSelect.options].some(o => o.value === val);
+            if (found) modelSelect.value = val;
+        }
+    } catch (_) {}
+    // 세션 유지 복원
+    try {
+        if (typeof sessionRetentionToggle !== 'undefined' && sessionRetentionToggle && context.session_retention !== undefined) {
+            sessionRetentionToggle.checked = !!context.session_retention;
+        }
+    } catch (_) {}
     adultLevel.value = context.adult_level || 'explicit';
     narrativeSeparation.checked = context.narrative_separation || false;
     if (narratorDrive) narratorDrive.value = context.narrator_drive || 'guide';
