@@ -204,6 +204,18 @@ function buildWebSocketUrl() {
     return `${protocol}://${host}:${port}`;
 }
 
+// 유틸: 터치(모바일) 디바이스 감지
+function isTouchDevice() {
+    try {
+        if (typeof window === 'undefined') return false;
+        if ('ontouchstart' in window) return true;
+        if (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) return true;
+        if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+        if (/Mobi|Android|iPhone|iPad|iPod|Windows Phone|webOS/i.test(navigator.userAgent)) return true;
+    } catch (_) {}
+    return false;
+}
+
 function setAuthToken(token, expiresAt) {
     authToken = token || '';
     authTokenExpiresAt = expiresAt || '';
@@ -3236,14 +3248,9 @@ function bindChatEvents() {
                 isComposing = false;
             });
 
-            // 모바일(터치) 환경에서는 Enter 키 전송을 막고 버튼으로만 전송하도록 처리
-                const isTouchDevice = (typeof window !== 'undefined') && (
-                  ('ontouchstart' in window) ||
-                  (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
-                  (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
-                  /Mobi|Android|iPhone|iPad|iPod|Windows Phone|webOS/i.test(navigator.userAgent)
-                );
-                try { console.debug('isTouchDevice check:', isTouchDevice, 'userAgent:', navigator.userAgent); } catch (_) {}
+                        // 모바일(터치) 환경에서는 Enter 키 전송을 막고 버튼으로만 전송하도록 처리
+                        const __isTouch = isTouchDevice();
+                        try { console.debug('isTouchDevice check:', __isTouch); } catch (_) {}
 
             // 터치(모바일) 디바이스에서는 Enter로 전송하지 않도록
             // 캐치/캡처 단계에서 기본 동작을 막아 다른 핸들러에 의해서
@@ -3251,9 +3258,9 @@ function bindChatEvents() {
             chatInput.addEventListener(
                 'keydown',
                 (e) => {
-                    try { console.debug('keydown on chatInput', e.key, 'isComposing', isComposing, 'isTouchDevice', isTouchDevice); } catch (_) {}
+                    try { console.debug('keydown on chatInput', e.key, 'isComposing', isComposing, 'isTouchDevice', __isTouch); } catch (_) {}
                     if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-                        if (isTouchDevice) {
+                        if (__isTouch) {
                             try { console.debug('Preventing Enter on touch device'); } catch (_) {}
                             e.preventDefault();
                             e.stopImmediatePropagation();

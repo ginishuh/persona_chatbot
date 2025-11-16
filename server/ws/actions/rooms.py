@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from datetime import datetime
 
 from server.core import session_manager as sm
@@ -23,9 +24,9 @@ async def room_list(ctx: AppContext, websocket, data: dict):
         )
         return
 
-    logger.debug(f"[DEBUG] room_list - user_id: {user_id}")
+    logger.debug(f"room_list - user_id: {user_id}")
     rows = await ctx.db_handler.list_rooms(user_id) if ctx.db_handler else []
-    logger.debug(f"[DEBUG] room_list - DB에서 조회된 방: {len(rows)}개")
+    logger.debug(f"room_list - DB에서 조회된 방: {len(rows)}개")
 
     def to_item(r):
         rid = r.get("room_id")
@@ -33,7 +34,7 @@ async def room_list(ctx: AppContext, websocket, data: dict):
         updated = r.get("updated_at") or r.get("created_at")
         try:
             modified = int(datetime.fromisoformat(str(updated)).timestamp())
-        except Exception:
+        except (ValueError, TypeError):
             modified = 0
         return {"room_id": rid, "title": title, "modified": modified}
 
@@ -47,7 +48,7 @@ async def room_save(ctx: AppContext, websocket, data: dict):
     import logging
 
     logger = logging.getLogger(__name__)
-    logger.debug("[DEBUG] room_save 시작")
+    logger.debug("room_save 시작")
 
     if not ctx.db_handler:
         await websocket.send(
@@ -75,28 +76,21 @@ async def room_save(ctx: AppContext, websocket, data: dict):
     if not isinstance(conf, dict) or not conf:
         conf = {"room_id": room_id, "context": ctx.context_handler.get_context()}
 
-    logger.debug(f"[DEBUG] room_id={room_id}, user_id={user_id}, conf 타입={type(conf)}")
-    logger.debug(
-        f"[DEBUG] room_save - about to upsert room for user_id={user_id} room_id={room_id}"
-    )
+    logger.debug(f"room_id={room_id}, user_id={user_id}, conf 타입={type(conf)}")
+    logger.debug(f"room_save - about to upsert room for user_id={user_id} room_id={room_id}")
 
     title = conf.get("title") or room_id
     context_json = json.dumps(conf.get("context") or {}, ensure_ascii=False)
-    logger.debug("[DEBUG] upsert_room 호출 전")
+    logger.debug("upsert_room 호출 전")
     await ctx.db_handler.upsert_room(room_id, user_id, title, context_json)
-    logger.debug("[DEBUG] upsert_room 완료")
-    # Debug prints to help diagnose test failures
-    logger.debug(
-        f"[DBG] room_save - upserted room: user_id={user_id} room_id={room_id} title={title} context={context_json}"
-    )
-    logger.debug(
-        f"[DEBUG] room_save - upsert_room completed for user_id={user_id} room_id={room_id}"
-    )
+    logger.debug("upsert_room 완료")
+    logger.debug(f"room_save - upserted room: user_id={user_id} room_id={room_id} title={title}")
+    logger.debug(f"room_save - upsert_room completed for user_id={user_id} room_id={room_id}")
 
     await websocket.send(
         json.dumps({"action": "room_save", "data": {"success": True, "room_id": room_id}})
     )
-    logger.debug("[DEBUG] room_save 응답 전송 완료")
+    logger.debug("room_save 응답 전송 완료")
 
 
 async def room_load(ctx: AppContext, websocket, data: dict):
@@ -124,9 +118,9 @@ async def room_load(ctx: AppContext, websocket, data: dict):
     # user_id로 방 조회
     db_row = await ctx.db_handler.get_room(room_id, user_id)
     logger.debug(
-        f"[DEBUG] room_load - get_room result for user_id={user_id} room_id={room_id}: {bool(db_row)}"
+        f"room_load - get_room result for user_id={user_id} room_id={room_id}: {bool(db_row)}"
     )
-    logger.debug(f"[DBG] room_load - db_row for user_id={user_id} room_id={room_id}: {db_row}")
+    logger.debug(f"room_load - db_row for user_id={user_id} room_id={room_id}: {db_row}")
     if not db_row:
         await websocket.send(
             json.dumps(
@@ -136,7 +130,8 @@ async def room_load(ctx: AppContext, websocket, data: dict):
         return
     try:
         ctx_obj = json.loads(db_row.get("context") or "{}")
-    except Exception:
+    except (json.JSONDecodeError, TypeError) as exc:
+        logger.debug("room_load - context JSON 파싱 실패, 빈 컨텍스트로 대체", exc_info=exc)
         ctx_obj = {}
 
     # ContextHandler에 자동 적용 (채팅방별 독립 설정)
@@ -148,9 +143,14 @@ async def room_load(ctx: AppContext, websocket, data: dict):
         _, sess = sm.get_or_create_session(ctx, websocket, user_id)
         rid, room = sm.get_room(ctx, sess, room_id)
         if ctx.db_handler:
-            rows = await ctx.db_handler.list_messages(room_id, user_id)
+            try:
+                rows = await ctx.db_handler.list_messages(room_id, user_id)
+            except sqlite3.Error as exc:
+                logger.debug("room_load - DB에서 메시지 조회 실패", exc_info=exc)
+                rows = []
+
             logger.debug(
-                f"[DEBUG] room_load - fetched {len(rows)} messages from DB for room={room_id} user_id={user_id}"
+                f"room_load - fetched {len(rows)} messages from DB for room={room_id} user_id={user_id}"
             )
             try:
                 room["history"].clear()
@@ -161,12 +161,11 @@ async def room_load(ctx: AppContext, websocket, data: dict):
                         room["history"].add_user_message(content)
                     else:
                         room["history"].add_assistant_message(content)
-            except Exception:
-                # 복원 실패 시 무시
-                pass
-    except Exception:
+            except (KeyError, AttributeError, TypeError) as exc:
+                logger.debug("room_load - 히스토리 복원 중 문제 발생", exc_info=exc)
+    except (sqlite3.Error, RuntimeError) as exc:
         # 세션 생성 또는 DB 오류 시 복원 시도만 하고 계속 진행
-        pass
+        logger.debug("room_load - 세션 생성 또는 DB 접근 중 오류", exc_info=exc)
 
     # 응답에 히스토리(있을 경우)를 포함시켜 클라이언트가 바로 렌더링
     history_rows = []
@@ -174,9 +173,10 @@ async def room_load(ctx: AppContext, websocket, data: dict):
         if ctx.db_handler:
             history_rows = await ctx.db_handler.list_messages(room_id, user_id)
             logger.debug(
-                f"[DEBUG] room_load - including {len(history_rows)} history rows in response for room={room_id} user_id={user_id}"
+                f"room_load - including {len(history_rows)} history rows in response for room={room_id} user_id={user_id}"
             )
-    except Exception:
+    except sqlite3.Error as exc:
+        logger.debug("room_load - 응답에 포함할 히스토리 조회 실패", exc_info=exc)
         history_rows = []
 
     await websocket.send(

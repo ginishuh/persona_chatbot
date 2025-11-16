@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import threading
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import jwt
@@ -105,12 +105,13 @@ def _issue_token(
     """
     if not JWT_SECRET:
         return None, None
-    now = datetime.utcnow()
+    # timezone-aware UTC timestamps
+    now = datetime.now(UTC)
     exp = now + timedelta(seconds=ttl_seconds)
     payload = {
         "sub": "persona_chat_user",
-        "iat": now,
-        "exp": exp,
+        "iat": int(now.timestamp()),
+        "exp": int(exp.timestamp()),
         "typ": typ,
     }
     if session_key:

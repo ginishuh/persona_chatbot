@@ -174,25 +174,25 @@ async def test_history_management(ws_server):
 
 
 @pytest.mark.asyncio
-async def test_room_management(ws_server):
-    """채팅방 생성/로드/삭제 테스트"""
+async def test_room_save_and_list(ws_server):
+    """채팅방 저장 후 목록에 반영되는지 확인"""
     async with websockets.connect(ws_server["url"]) as websocket:
-        await websocket.recv()  # 환영 메시지 스킵
+        await websocket.recv()
 
-        # 방 목록 조회 (초기 상태)
+        # 초기 목록
         await websocket.send(_with_token(ws_server["token"], {"action": "room_list"}))
         response = await websocket.recv()
         data = json.loads(response)
         assert data["data"]["success"] is True
         initial_count = len(data["data"]["rooms"])
 
-        # 방 저장
+        # 새 방 저장
         await websocket.send(
             _with_token(
                 ws_server["token"],
                 {
                     "action": "room_save",
-                    "data": {"room_id": "test-room-1", "room_name": "테스트 방"},
+                    "data": {"room_id": "test-room-2", "room_name": "테스트 방"},
                 },
             )
         )
@@ -200,15 +200,52 @@ async def test_room_management(ws_server):
         data = json.loads(response)
         assert data["data"]["success"] is True
 
-        # 방 목록 재조회
+        # 목록에 반영되었는지 확인
         await websocket.send(_with_token(ws_server["token"], {"action": "room_list"}))
         response = await websocket.recv()
         data = json.loads(response)
         assert len(data["data"]["rooms"]) == initial_count + 1
 
-        # 방 로드
+
+@pytest.mark.asyncio
+async def test_room_load_basic(ws_server):
+    """room_load가 정상적으로 성공하는지 확인"""
+    async with websockets.connect(ws_server["url"]) as websocket:
+        await websocket.recv()
+
+        # 새 방 저장 후 로드 호출
         await websocket.send(
-            _with_token(ws_server["token"], {"action": "room_load", "room_id": "test-room-1"})
+            _with_token(
+                ws_server["token"], {"action": "room_save", "data": {"room_id": "test-room-3"}}
+            )
+        )
+        await websocket.recv()
+
+        await websocket.send(
+            _with_token(ws_server["token"], {"action": "room_load", "room_id": "test-room-3"})
+        )
+        response = await websocket.recv()
+        data = json.loads(response)
+        assert data["data"]["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_room_delete(ws_server):
+    """채팅방 삭제가 동작하는지 확인"""
+    async with websockets.connect(ws_server["url"]) as websocket:
+        await websocket.recv()
+
+        # 방 저장
+        await websocket.send(
+            _with_token(
+                ws_server["token"], {"action": "room_save", "data": {"room_id": "test-room-4"}}
+            )
+        )
+        await websocket.recv()
+
+        # 삭제
+        await websocket.send(
+            _with_token(ws_server["token"], {"action": "room_delete", "room_id": "test-room-4"})
         )
         response = await websocket.recv()
         data = json.loads(response)
