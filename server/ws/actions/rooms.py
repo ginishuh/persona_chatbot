@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 
 from server.core import session_manager as sm
 from server.core.app_context import AppContext
+
+logger = logging.getLogger(__name__)
 
 
 async def room_list(ctx: AppContext, websocket, data: dict):
@@ -130,6 +133,9 @@ async def room_load(ctx: AppContext, websocket, data: dict):
         rid, room = sm.get_room(ctx, sess, room_id)
         if ctx.db_handler:
             rows = await ctx.db_handler.list_messages(room_id, user_id)
+            logger.info(
+                f"[DEBUG] room_load - fetched {len(rows)} messages from DB for room={room_id} user_id={user_id}"
+            )
             try:
                 room["history"].clear()
                 for m in rows:
@@ -151,6 +157,9 @@ async def room_load(ctx: AppContext, websocket, data: dict):
     try:
         if ctx.db_handler:
             history_rows = await ctx.db_handler.list_messages(room_id, user_id)
+            logger.info(
+                f"[DEBUG] room_load - including {len(history_rows)} history rows in response for room={room_id} user_id={user_id}"
+            )
     except Exception:
         history_rows = []
 
