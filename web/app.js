@@ -3243,15 +3243,25 @@ function bindChatEvents() {
                   /Mobi|Android|iPhone|iPad|iPod|Windows Phone|webOS/i.test(navigator.userAgent)
               );
 
-            if (!isTouchDevice) {
-                chatInput.addEventListener('keydown', (e) => {
-                    // IME 입력 중이 아닐 때만 Enter로 전송
+            // 터치(모바일) 디바이스에서는 Enter로 전송하지 않도록
+            // 캐치/캡처 단계에서 기본 동작을 막아 다른 핸들러에 의해서
+            // 전송되는 것을 방지합니다.
+            chatInput.addEventListener(
+                'keydown',
+                (e) => {
                     if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+                        if (isTouchDevice) {
+                            e.preventDefault();
+                            e.stopImmediatePropagation();
+                            return;
+                        }
+                        // 터치가 아닌 경우(데스크탑)만 Enter로 전송
                         e.preventDefault();
                         sendChatMessage();
                     }
-                });
-            }
+                },
+                { capture: true }
+            );
 
             chatInput.dataset.bound = '1';
         }

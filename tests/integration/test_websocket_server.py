@@ -217,6 +217,60 @@ async def test_room_management(ws_server):
         data = json.loads(response)
         assert data["data"]["success"] is True
 
+    @pytest.mark.asyncio
+    async def test_room_load_includes_history(ws_server):
+        """room_load 응답에 DB에 저장된 메시지가 포함되어 있는지 확인합니다."""
+        async with websockets.connect(ws_server["url"]) as websocket:
+            await websocket.recv()  # 환영 메시지 스킵
+
+            # 방 저장
+            await websocket.send(
+                _with_token(
+                    ws_server["token"],
+                    {
+                        "action": "room_save",
+                        "data": {"room_id": "test-room-history", "room_name": "Test"},
+                    },
+                )
+            )
+            await websocket.recv()
+
+            # DB에 메시지 저장 (직접 호출)
+            # 테스트 환경에서 DB 핸들러는 ws_server fixture의 websocket_server에 보관되어 있음
+            import importlib
+
+            from server import websocket_server as _ws_mod
+
+            websocket_server = importlib.reload(_ws_mod)
+            # 사용자 id 조회
+            user = await websocket_server.db_handler.get_user_by_username("ws_tester")
+            assert user is not None
+            user_id = user["user_id"]
+            # 메시지 저장 (사용자/AI)
+            await websocket_server.db_handler.save_message(
+                "test-room-history", "user", "Hello from user", user_id
+            )
+            await websocket_server.db_handler.save_message(
+                "test-room-history", "assistant", "Hello from AI", user_id
+            )
+
+            # room_load 호출
+            await websocket.send(
+                _with_token(
+                    ws_server["token"],
+                    {"action": "room_load", "data": {"room_id": "test-room-history"}},
+                )
+            )
+            response = await websocket.recv()
+            data = json.loads(response)
+            assert data["data"]["success"] is True
+            room = data["data"].get("room") or {}
+            assert isinstance(room.get("history"), list)
+            # 저장한 메시지들이 history에 포함된 것 확인
+            contents = [m.get("content") for m in room.get("history", [])]
+            assert "Hello from user" in contents
+            assert "Hello from AI" in contents
+
         # 방 삭제
         await websocket.send(
             _with_token(
