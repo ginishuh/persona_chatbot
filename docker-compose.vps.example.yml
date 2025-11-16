@@ -27,7 +27,6 @@ services:
       - GEMINI_PATH=${GEMINI_PATH:-gemini}
       - APP_BIND_HOST=${APP_BIND_HOST:-0.0.0.0}
       - APP_LOGIN_USERNAME=${APP_LOGIN_USERNAME:-}
-      # If you want to require login on VPS, set APP_LOGIN_PASSWORD
       - APP_LOGIN_PASSWORD=${APP_LOGIN_PASSWORD:-}
       - APP_JWT_SECRET=${APP_JWT_SECRET:-}
       - APP_JWT_TTL=${APP_JWT_TTL:-604800}
