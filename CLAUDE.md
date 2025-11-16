@@ -1,238 +1,186 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Persona Chat용 Claude Code 개발 지침입니다.
 
-## Project Overview
+## 프로젝트 개요
 
-Persona Chat is a web-based multi-character conversation system for interactive storytelling. It uses Claude Code CLI as the AI backend, WebSocket for real-time communication, and supports TRPG-style game master features with conversation history management.
+Persona Chat은 Claude Code CLI를 AI 백엔드로 사용하는 멀티캐릭터 대화 시스템입니다. WebSocket 실시간 통신과 TRPG 스타일의 게임 마스터 기능을 지원합니다.
 
-**Key Feature**: The chatbot runs in an isolated workspace (`chatbot_workspace/`) with its own CLAUDE.md that contains adult content guidelines and character performance instructions. This isolation prevents those instructions from affecting development work.
+**핵심**: 채팅봇은 `chatbot_workspace/` 격리 공간에서 실행되며 자체 CLAUDE.md(성인 콘텐츠 지침)를 가집니다.
 
-## Language Convention
+## 실행 방법
 
-**All documentation, commit messages, code comments, and user-facing communication should be written in Korean (한국어).**
-
-**Exceptions:**
-- Agent instruction files (`CLAUDE.md`, `agents.md`) should remain in English for compatibility
-- Code identifiers (variable names, function names, class names) should use English
-- Technical terms and API references can use English when appropriate
-
-This applies to:
-- README files and project documentation
-- Commit messages (except the Claude Code footer)
-- Code comments and docstrings
-- User interface text
-- Error messages and logs
-- Development notes and TODOs
-
-## Architecture
-
-### Core Communication Flow
-
-```
-Browser (WebSocket Client)
-  ↓
-WebSocket Server (port 8765)
-  ↓
-Handler Layer (context, history, claude)
-  ↓
-Claude Code CLI (subprocess, stream-json)
-  ↓
-System Prompt (context + history injected)
-```
-
-**Critical Design**: Each chat message spawns a NEW Claude Code process. Session continuity is achieved by injecting conversation history into the system prompt, not by maintaining a persistent process.
-
-### Directory Structure
-
-```
-persona_chatbot/
-├── server/
-│   ├── websocket_server.py          # Main server with action routing
-│   └── handlers/
-│       ├── claude_handler.py        # Claude Code subprocess management
-│       ├── context_handler.py       # System prompt builder
-│       ├── history_handler.py       # Sliding window conversation memory
-│       ├── file_handler.py          # File operations
-│       └── workspace_handler.py     # Persona data management
-├── web/                             # Static frontend (HTML/CSS/JS)
-├── chatbot_workspace/               # Isolated Claude Code workspace
-│   └── CLAUDE.md                    # Chatbot-specific instructions (adult mode, character acting)
-└── .claude/
-    └── CLAUDE.md                    # Development instructions (this file)
-```
-
-### Handler Architecture
-
-**ContextHandler** (`context_handler.py`)
-- Builds system prompts with world, situation, characters, and narrator settings
-- Supports three narrator modes: AI GM (active/moderate/passive), user GM, or no GM
-- Injects adult mode directives when enabled
-- Methods: `build_system_prompt(history_text)`, `set_world()`, `set_characters()`, etc.
-
-**HistoryHandler** (`history_handler.py`)
-- Maintains a sliding window for context; default is 30 turns via server config (`HistoryHandler(max_turns=30)`).
-- Converts the current window to text for system prompt injection.
-- Keeps a full transcript for narrative export.
-- Methods: `add_user_message()`, `add_assistant_message()`, `get_history_text()`, `get_narrative_markdown()`, `set_max_turns()`
-
-**ClaudeHandler** (`claude_handler.py`)
-- Spawns subprocess: `CLAUDE_PATH` (env) with `--print --verbose --output-format stream-json --setting-sources user,local`
-- **Working directory**: `chatbot_workspace/` (reads `chatbot_workspace/CLAUDE.md` only)
-- Streams JSON responses via stdout; reads stderr asynchronously to avoid blocking.
-- 120-second timeout per message.
-- The process exits per message after stdin is closed (stateless per call).
-
-### WebSocket API
-
-Server listens on `0.0.0.0:8765`, handles these actions:
-- `set_context` - Configure world, characters, narrator mode, adult mode
-- `get_context` - Retrieve current context
-- `chat` - Send message (returns `chat_stream` events + `chat_complete`)
-- `clear_history` - Reset conversation memory
-- `get_narrative` - Get markdown formatted conversation history
-- `list_files`, `read_file`, `write_file` - File operations
-
-### Frontend Message Parsing
-
-The frontend (`web/app.js`) parses Claude responses using regex:
-```javascript
-/^\[(.+?)\]:\s*(.*)$/  // Matches "[CharacterName]: dialogue"
-```
-
-Each character gets assigned a color class (`character-0` through `character-4`), and `[진행자]` gets special gold styling.
-
-## Running the Project
-
-### Development Server
+### Docker Compose (권장)
 
 ```bash
-# Start server (from project root)
-python3 server/websocket_server.py
+# 환경변수 설정
+export UID=$(id -u) GID=$(id -g)
+export CLAUDE_AUTH_DIR=$HOME/.claude
+export GEMINI_AUTH_DIR=$HOME/.gemini
+export FACTORY_AUTH_DIR=$HOME/.factory
+export APP_JWT_SECRET=$(openssl rand -hex 32)
+export APP_LOGIN_PASSWORD=your-admin-password
 
-# Or with venv
-./venv/bin/python server/websocket_server.py
+# 서버 시작
+docker-compose -f docker-compose.yml.example up -d
+
+# 서버 중지
+docker-compose -f docker-compose.yml.example down
 ```
 
-Servers start on:
-- HTTP: `http://localhost:9000` (static files from `web/`)
-- WebSocket: `ws://localhost:8765`
+서버 접속:
+- HTTP: `http://127.0.0.1:9000` (web/ 정적 파일)
+- WebSocket: `ws://127.0.0.1:8765`
 
-### Requirements
-
-- Python 3.8+
-- Claude Code CLI installed and authenticated (`claude auth login`)
-- Dependencies in `requirements.txt`: websockets 12.0, aiofiles 23.2.1
-
-### Kill Existing Server
+### 직접 실행 (개발용)
 
 ```bash
-pkill -f "python.*websocket_server.py"
-# Or
+# 서버 시작 (프로젝트 루트에서)
+python3 -m server.websocket_server
+
+# 또는 가상환경 사용
+./venv/bin/python -m server.websocket_server
+```
+
+### 서버 중지
+
+```bash
+pkill -f "python.*websocket_server"
+# 또는
 lsof -ti:8765 | xargs -r kill -9
 lsof -ti:9000 | xargs -r kill -9
 ```
 
-## Common Development Tasks
+## 아키텍처
 
-### Modifying System Prompt Generation
+### 핵심 구조
 
-Edit `server/handlers/context_handler.py` → `build_system_prompt()` method. This function concatenates:
-1. Narrator mode header (GM vs character-only mode)
-2. Adult mode directives (if enabled)
-3. World description
-4. Current situation
-5. User character
-6. Narrator settings (if enabled)
-7. Character descriptions
-8. **History text** (from HistoryHandler)
-9. Conversation rules
-
-### Adjusting History Window Size
-
-Edit `server/websocket_server.py` line 28:
-```python
-history_handler = HistoryHandler(max_turns=15)  # Change this number
+```
+브라우저 (WebSocket) → 서버 (8765) → 핸들러 → Claude Code CLI (subprocess)
 ```
 
-### Changing Claude Code Execution Path
+**중요**: 각 메시지마다 새 Claude Code 프로세스가 생성됩니다. 세션 연속성은 대화 기록을 시스템 프롬프트에 주입하여 유지합니다.
 
-Edit `server/handlers/claude_handler.py` → `__init__()`:
-```python
-def __init__(self, claude_path="/home/ginis/.nvm/versions/node/v22.17.1/bin/claude"):
+### 디렉토리
+
+```
+persona_chatbot/
+├── server/
+│   ├── websocket_server.py       # 메인 서버 + 라우팅
+│   ├── http/                     # HTTP 서버 (정적 파일)
+│   ├── ws/                       # WebSocket 액션 핸들러
+│   └── handlers/                 # 비즈니스 로직
+├── web/                          # 프론트엔드 (HTML/CSS/JS)
+├── data/                         # DB 및 영속성 데이터 (도커 볼륨)
+├── persona_data/                 # 프리셋/워크스페이스 공유 (도커 볼륨)
+├── chatbot_workspace/            # Claude Code 격리 작업공간
+│   └── CLAUDE.md                 # 채팅봇 전용 지침
+├── docker-compose.yml.example    # Docker Compose 설정 예제
+├── Dockerfile.full              # 전체 기능 포함 도커 이미지
+└── .claude/                      # 개발용 지침
 ```
 
-### Testing WebSocket Manually
+### 핵심 핸들러
 
-```javascript
-const ws = new WebSocket('ws://localhost:8765');
-ws.onopen = () => {
-  ws.send(JSON.stringify({
-    action: "chat",
-    prompt: "안녕?"
-  }));
-};
-ws.onmessage = (e) => console.log(JSON.parse(e.data));
+- **ClaudeHandler**: Claude Code subprocess 관리 (120초 타임아웃)
+- **HistoryHandler**: 슬라이딩 윈도우 대화 기록 (기본 30 턴)
+- **ContextHandler**: 시스템 프롬프트 빌더 (월드/캐릭터/진행자 설정)
+- **FileHandler**: 파일 입출력
+- **WorkspaceHandler**: 페르소나 데이터 관리
+
+### WebSocket API
+
+주요 액션들:
+- `set_context` - 월드/캐릭터/진행자 모드 설정
+- `get_context` - 현재 컨텍스트 조회
+- `chat` - 메시지 전송 (스트리밍 응답)
+- `clear_history` - 대화 기록 초기화
+- `get_narrative` - 대화 내보내기 (마크다운)
+- 파일 관련 액션들 (`list_files`, `read_file`, `write_file`)
+
+### 인증
+
+JWT 기반 인증 사용:
+- Access Token: 7일
+- Refresh Token: 30일
+- 환경변수: `APP_JWT_SECRET`, `APP_JWT_ALGORITHM`, `APP_ACCESS_TTL`, `APP_REFRESH_TTL`
+
+## 개발 작업
+
+### 빠른 수정
+
+- **히스토리 윈도우 크기**: `server/websocket_server.py`에서 `HistoryHandler(max_turns=N)`
+- **Claude Code 경로**: `server/handlers/claude_handler.py`의 `__init__()` 수정
+- **로깅 레벨**: `server/websocket_server.py`의 `logging.basicConfig(level=logging.DEBUG)`
+
+### 프론트엔드 파싱
+
+캐릭터 대화 형식: `[캐릭터명]: 대화 내용`
+
+`web/app.js`에서 정규식 `/^\[(.+?)\]:\s*(.*)$/`로 파싱하며, 각 캐릭터는 색상 클래스(`character-0`~`character-4`)를 할당받습니다. `[진행자]`는 특별한 금색 스타일링을 사용합니다.
+
+## 요구사항
+
+### Docker (권장)
+- Docker와 Docker Compose
+- Claude Code CLI 인증 정보: `$HOME/.claude/`
+- Gemini CLI 인증 정보: `$HOME/.gemini/` (선택)
+- Factory 인증 정보: `$HOME/.factory/` (Droid용, 선택)
+
+### 직접 실행
+- Python 3.8+
+- Claude Code CLI 설치 및 인증 (`claude auth login`)
+- 의존성 (`requirements.txt`): websockets 12.0, aiofiles 23.2.1, PyJWT 2.10.1, aiosqlite 0.19.0, bcrypt 4.1.2
+
+## Docker 주요 설정
+
+### 볼륨 마운트
+- `./data:/app/data` - DB 및 영속성 데이터
+- `./persona_data:/app/persona_data` - 프리셋/워크스페이스
+- `./chatbot_workspace:/app/chatbot_workspace` - 채팅봇 작업공간
+- 인증 디렉토리들 (`~/.claude`, `~/.gemini`, `~/.factory`)
+
+### 보안
+- 포트는 `127.0.0.1`에만 바인딩 (로컬 전용)
+- 운영 환경에서는 nginx 등 리버스 프록시 사용 권장
+- JWT Secret 필수 설정
+
+### 중요: 관리자 계정 생성
+
+**관리자 시드 생성은 반드시 컨테이너 안에서 실행**해야 합니다:
+
+```bash
+# 컨테이너 접속 후 관리자 계정 생성
+docker-compose -f docker-compose.yml.example exec persona-chatbot python3 -c "
+from server.handlers.db_handler import DBHandler
+import asyncio
+
+async def create_admin():
+    db = DBHandler('./data')
+    await db.initialize()
+    success = await db.create_admin_user('admin', 'your-password')
+    print('관리자 생성 성공' if success else '이미 존재함')
+
+asyncio.run(create_admin())
+"
 ```
 
-## Important Technical Constraints
+호스트에서 직접 실행하면 SQLite Lock 문제가 발생합니다.
 
-### Claude Code Process Lifecycle
+## 중요 제약사항
 
-**Problem**: Cannot maintain a persistent Claude Code subprocess across multiple messages because closing stdin terminates the process.
+### 워크스페이스 격리
 
-**Solution**: Start fresh process for each message, inject full conversation history into system prompt. This is handled automatically by:
-1. `HistoryHandler` accumulates messages
-2. `ContextHandler.build_system_prompt()` includes history text
-3. `ClaudeHandler` sends combined prompt to new process
+채팅봇은 `chatbot_workspace/`에서 실행되어 이 디렉토리의 `CLAUDE.md`만 읽습니다. 이는 개발 지침과 채팅봇 지침이 섞이는 것을 방지합니다. `chatbot_workspace/CLAUDE.md`는 사용자 요청이 없으면 수정하지 마세요.
 
-### Workspace Isolation
+### WebSocket API 버전
 
-The chatbot runs from `chatbot_workspace/` as its working directory. This ensures:
-- Chatbot reads `chatbot_workspace/CLAUDE.md` (contains adult content directives)
-- Development sessions read `.claude/CLAUDE.md` (this file, for code work)
-- No cross-contamination of instructions
+websockets v13+ API 사용: `async def websocket_handler(websocket)` (path 파라미터 없음)
 
-**Never modify** `chatbot_workspace/CLAUDE.md` during development work unless explicitly requested by user.
+### 프로세스 상태
 
-### WebSocket Handler Signature
-
-Uses websockets v13+ API:
-```python
-async def websocket_handler(websocket):  # No 'path' parameter
-```
-
-Older versions (v12 and below) required `async def websocket_handler(websocket, path)`.
-
-## Debugging
-
-### Enabling Verbose Logging
-
-Change logging level in `server/websocket_server.py`:
-```python
-logging.basicConfig(level=logging.DEBUG)  # Was INFO
-```
-
-### Claude Code stderr Output
-
-Check `claude_handler.py` line 99 for stderr logging. Increase verbosity or remove the try-except to see raw errors.
-
-### Character Color Assignment
-
-Characters are assigned colors by hashing their name modulo 5. See `web/app.js`:
-```javascript
-const colorClass = `character-${characterColorMap.size % 5}`;
-```
-
-## Project-Specific Conventions
-
-- All WebSocket messages are JSON with `{ "action": "...", "data": { ... } }`
-- Character dialogue format: `[CharacterName]: dialogue text`
-- Narrator uses special tag: `[진행자]: situation description`
-- History default: 30 turns (sliding window); adjustable at runtime via UI/API
-- Adult mode content guidelines are in `chatbot_workspace/CLAUDE.md` only
-- Server must be restarted after code changes (no hot reload)
+Claude Code 프로세스는 stdin을 닫으면 종료되므로 각 메시지마다 새 프로세스를 생성해야 합니다. 이는 핸들러에서 자동으로 관리됩니다.
 
 ---
 
-Note: Chatbot-specific creative/NSFW directives live in `chatbot_workspace/CLAUDE.md` and are intentionally isolated from this root developer guide.
+참고: 성인 콘텐츠/크리에이티브 지침은 `chatbot_workspace/CLAUDE.md`에 있으며 의도적으로 격리되어 있습니다.
