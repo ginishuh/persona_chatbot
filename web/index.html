@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Persona Chat - 멀티 캐릭터 대화</title>
     <meta name="theme-color" content="#252526">
+    <link rel="manifest" href="/manifest.json">
     <link rel="icon" href="/src/logo3.png?v=2" type="image/png" sizes="any">
     <link rel="apple-touch-icon" href="/src/logo3.png?v=2">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -592,5 +595,14 @@
     <div id="ariaLive" class="sr-only" aria-live="polite" role="status"></div>
 
     <script src="/app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js')
+                .then(function(reg) { console.log('ServiceWorker 등록됨:', reg); })
+                .catch(function(err) { console.warn('ServiceWorker 등록 실패:', err); });
+            });
+        }
+    </script>
 </body>
 </html>
