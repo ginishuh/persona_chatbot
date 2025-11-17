@@ -68,7 +68,10 @@ async def chat(ctx: AppContext, websocket, data: dict):
     room["history"].add_user_message(prompt)
     try:
         if ctx.db_handler:
-            await ctx.db_handler.upsert_room(rid, user_id, rid, None)
+            # 방이 없으면 최소 정보로 생성, 이미 있으면 기존 컨텍스트/제목 유지
+            existing_room = await ctx.db_handler.get_room(rid, user_id)
+            if existing_room is None:
+                await ctx.db_handler.upsert_room(rid, user_id, rid, None)
             await ctx.db_handler.save_message(rid, "user", prompt, user_id)
     except Exception:
         pass

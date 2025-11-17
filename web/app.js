@@ -997,7 +997,20 @@ function renderRoomsRightPanelList() {
     });
 }
 
-document.getElementById('roomSearch')?.addEventListener('input', renderRoomsRightPanelList);
+const roomSearchInput = document.getElementById('roomSearch');
+const roomSearchBtn = document.getElementById('roomSearchBtn');
+if (roomSearchInput) {
+    roomSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.isComposing) {
+            renderRoomsRightPanelList();
+        }
+    });
+}
+if (roomSearchBtn) {
+    roomSearchBtn.addEventListener('click', () => {
+        renderRoomsRightPanelList();
+    });
+}
 
 // ===== WebSocket 연결 =====
 

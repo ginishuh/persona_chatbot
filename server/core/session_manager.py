@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 def get_user_id_from_token(ctx: AppContext, data: dict | None) -> int | None:
     """JWT 토큰에서 user_id 추출
 
+    WebSocket 액션에서는 JWT만 검증하고 DB 조회는 생략합니다.
+
     Args:
         ctx: 애플리케이션 컨텍스트
         data: WebSocket 메시지 데이터 (token 필드 포함)
@@ -31,7 +33,6 @@ def get_user_id_from_token(ctx: AppContext, data: dict | None) -> int | None:
         return None
 
     try:
-        # JWT 검증 (ctx.auth 모듈 사용)
         from server.core.auth import verify_token as auth_verify_token
 
         payload, error = auth_verify_token(ctx, token, expected_type="access")
@@ -39,28 +40,11 @@ def get_user_id_from_token(ctx: AppContext, data: dict | None) -> int | None:
             return None
 
         user_id = payload.get("user_id")
-        if not (isinstance(user_id, int) and ctx and getattr(ctx, "db_handler", None)):
-            # user_id가 없거나 DB 핸들러가 없으면 인증 실패
+        if not isinstance(user_id, int):
             return None
-
-        # DB에 실제 사용자 존재 여부 확인 (동기 컨텍스트에서 안전하게 호출)
-        try:
-            loop = getattr(ctx, "loop", None)
-            if not loop:
-                # 이벤트 루프가 없으면 추가 확인 불가 -> 거부
-                return None
-            fut = asyncio.run_coroutine_threadsafe(ctx.db_handler.get_user_by_id(user_id), loop)
-            user_row = fut.result(timeout=3)
-            if not user_row:
-                logger.warning("Token user_id %s not found in DB", user_id)
-                return None
-        except Exception as e:
-            logger.warning("Error verifying user_id in DB: %s", e)
-            return None
-
         return user_id
     except Exception as e:
-        logger.warning(f"Failed to extract user_id from token: {e}")
+        logger.warning("Failed to extract user_id from token: %s", e)
         return None
 
 
