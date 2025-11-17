@@ -42,6 +42,7 @@ const adultConsent = document.getElementById('adultConsent');
 const narrativeSeparation = document.getElementById('narrativeSeparation');
 const narratorDrive = document.getElementById('narratorDrive');
 const outputLevel = document.getElementById('outputLevel');
+const storyPace = document.getElementById('storyPace');
 const forceChoices = document.getElementById('forceChoices');
 const choiceCount = document.getElementById('choiceCount');
 const saveContextBtn = document.getElementById('saveContextBtn');
@@ -1444,6 +1445,7 @@ function collectRoomConfig(roomId) {
             narrative_separation: !!narrativeSeparation.checked,
             narrator_drive: narratorDrive ? narratorDrive.value : 'guide',
             output_level: outputLevel ? outputLevel.value : 'normal',
+            pace: storyPace ? storyPace.value : 'normal',
             // 모델 및 세션 유지 설정을 방 컨텍스트에 포함
             model: (typeof modelSelect !== 'undefined' && modelSelect) ? modelSelect.value : '',
             session_retention: !!(typeof sessionRetentionToggle !== 'undefined' && sessionRetentionToggle && sessionRetentionToggle.checked),
@@ -2839,6 +2841,7 @@ saveContextBtn.addEventListener('click', () => {
         narrative_separation: narrativeSeparation.checked,
         narrator_drive: narratorDrive ? narratorDrive.value : undefined,
         output_level: outputLevel ? outputLevel.value : undefined,
+        pace: storyPace ? storyPace.value : undefined,
         characters: characters,
         choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
         choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
@@ -2894,6 +2897,7 @@ if (applyCharactersBtn) {
             narrative_separation: narrativeSeparation.checked,
             narrator_drive: narratorDrive ? narratorDrive.value : undefined,
             output_level: outputLevel ? outputLevel.value : undefined,
+            pace: storyPace ? storyPace.value : undefined,
             characters: characters,
             choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
             choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
@@ -2955,6 +2959,7 @@ function loadContext(context) {
     narrativeSeparation.checked = context.narrative_separation || false;
     if (narratorDrive) narratorDrive.value = context.narrator_drive || 'guide';
     if (outputLevel) outputLevel.value = context.output_level || 'normal';
+    if (storyPace) storyPace.value = context.pace || 'normal';
     if (adultConsent) adultConsent.checked = false; // 세션 보관값은 서버 측, UI는 기본 해제
     if (forceChoices) forceChoices.checked = (context.choice_policy || 'off') === 'require';
     if (choiceCount) choiceCount.value = String(context.choice_count || 3);
@@ -4150,6 +4155,7 @@ function savePreset() {
         // 확장 저장: AI/출력/주도권/선택지/유저프로필
         ai_provider: aiProvider ? aiProvider.value : 'claude',
         output_level: outputLevel ? outputLevel.value : 'normal',
+        pace: storyPace ? storyPace.value : 'normal',
         narrator_drive: narratorDrive ? narratorDrive.value : 'guide',
         choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
         choice_count: choiceCount ? (parseInt(choiceCount.value, 10) || 3) : 3,
@@ -4190,6 +4196,7 @@ function applyPreset(preset) {
     narrativeSeparation.checked = preset.narrative_separation || false;
     if (aiProvider && preset.ai_provider) aiProvider.value = preset.ai_provider;
     if (outputLevel && preset.output_level) outputLevel.value = preset.output_level;
+    if (storyPace && preset.pace) storyPace.value = preset.pace;
     if (narratorDrive && preset.narrator_drive) narratorDrive.value = preset.narrator_drive;
     if (forceChoices) forceChoices.checked = (preset.choice_policy || 'off') === 'require';
     if (choiceCount && (preset.choice_count !== undefined)) choiceCount.value = String(preset.choice_count);
@@ -4271,7 +4278,23 @@ function renderHistorySnapshot(history) {
         }
         history.forEach(msg => {
             const role = msg.role === 'user' ? 'user' : 'assistant';
-            addChatMessage(role, msg.content || '');
+            const content = msg.content || '';
+            if (role === 'assistant') {
+                // 히스토리에서도 멀티 캐릭터 응답을 다시 파싱하여 말풍선 분리
+                const parsed = parseMultiCharacterResponse(content);
+                if (parsed.length > 0) {
+                    parsed.forEach(p => {
+                        const el = addCharacterMessage(p.character, p.text);
+                        // 히스토리로부터 로드된 메시지는 영구 고정
+                        el.dataset.permanent = 'true';
+                    });
+                    return;
+                }
+                const el = addChatMessage('assistant', content);
+                el.dataset.permanent = 'true';
+            } else {
+                addChatMessage('user', content);
+            }
         });
         // 서사 패널도 최신으로 갱신
         sendMessage({ action: 'get_narrative' });

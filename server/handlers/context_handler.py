@@ -16,6 +16,9 @@ class ContextHandler:
             "ai_provider": "claude",  # AI 제공자: claude, droid
             # 출력량/주도권 제어(프롬프트 가이드용)
             "output_level": "normal",  # less | normal | more
+            # 전개 속도(사건 밀도) 제어
+            # slow | normal | fast
+            "pace": "normal",
             "narrator_drive": "guide",  # describe | guide | direct
             "choice_policy": "off",  # off | require
             "choice_count": 3,
@@ -80,6 +83,19 @@ class ContextHandler:
             level = "normal"
         self.current_context["output_level"] = level
 
+    def set_pace(self, pace: str | None):
+        """전개 속도(사건 밀도) 설정.
+
+        허용값: "slow" | "normal" | "fast". 그 외는 normal로 처리.
+        """
+        try:
+            pace = (pace or "").strip().lower()
+        except Exception:
+            pace = ""
+        if pace not in {"slow", "normal", "fast"}:
+            pace = "normal"
+        self.current_context["pace"] = pace
+
     def set_narrator_drive(self, mode):
         """진행자(내러레이터)의 주도권 강도 설정.
 
@@ -136,6 +152,7 @@ class ContextHandler:
         adult_level = self.current_context.get("adult_level", "explicit")
         narrative_separation = self.current_context.get("narrative_separation", False)
         output_level = self.current_context.get("output_level", "normal")
+        pace = self.current_context.get("pace", "normal")
         narrator_drive = self.current_context.get("narrator_drive", "guide")
         choice_policy = self.current_context.get("choice_policy", "off")
         choice_count = int(self.current_context.get("choice_count", 3) or 3)
@@ -325,6 +342,31 @@ class ContextHandler:
 - Maintain balance between narration and dialogue.
 """
 
+        # 전개 속도(사건 밀도) 가이드
+        if pace == "slow":
+            prompt += """
+=== Story Pacing ===
+- Progress the story slowly with high scene density.
+- Focus on the current situation, emotions, and micro actions in detail.
+- Avoid skipping time or jumping multiple events in a single turn.
+- Prefer: one small event or beat per turn, with rich reactions.
+"""
+        elif pace == "fast":
+            prompt += """
+=== Story Pacing ===
+- Progress the story quickly with high event density.
+- In each turn, push the plot forward with clear new developments.
+- Freely skip trivial steps and allow time/scene jumps when natural.
+- Prefer: multiple meaningful events or strong twists per turn.
+"""
+        else:  # normal
+            prompt += """
+=== Story Pacing ===
+- Maintain a moderate story progression speed.
+- Balance between detailed moments and plot advancement.
+- Allow occasional time/scene jumps, but do not rush through key scenes.
+"""
+
         if user_is_narrator:
             prompt += """3. Write each dialogue in "[Character Name]: content" format
 4. When user describes situations, characters should react to those situations
@@ -408,6 +450,8 @@ Response Example:
             self.set_ai_provider(context_dict["ai_provider"])
         if "output_level" in context_dict:
             self.set_output_level(context_dict["output_level"])
+        if "pace" in context_dict:
+            self.set_pace(context_dict["pace"])
         if "narrator_drive" in context_dict:
             self.set_narrator_drive(context_dict["narrator_drive"])
         if "choice_policy" in context_dict:

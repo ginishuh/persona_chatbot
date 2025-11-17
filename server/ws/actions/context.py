@@ -42,6 +42,7 @@ async def set_context(ctx: AppContext, websocket, data: dict[str, Any]):
     narrative_separation = data.get("narrative_separation", False)
     ai_provider = data.get("ai_provider", "claude")
     output_level = data.get("output_level")
+    pace = data.get("pace")
     narrator_drive = data.get("narrator_drive")
     choice_policy = data.get("choice_policy")
     choice_count = data.get("choice_count")
@@ -57,6 +58,8 @@ async def set_context(ctx: AppContext, websocket, data: dict[str, Any]):
     ch.set_characters(characters)
     if output_level is not None:
         ch.set_output_level(output_level)
+    if pace is not None:
+        ch.set_pace(pace)
     if narrator_drive is not None:
         ch.set_narrator_drive(narrator_drive)
     if choice_policy is not None:
@@ -96,6 +99,7 @@ async def set_context(ctx: AppContext, websocket, data: dict[str, Any]):
             "adult_level",
             "narrative_separation",
             "output_level",
+            "pace",
             "narrator_drive",
             "narrator_enabled",
             "narrator_mode",
