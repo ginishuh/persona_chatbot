@@ -12,10 +12,6 @@ import {
 } from '../core/constants.js';
 
 import {
-    authToken,
-    authTokenExpiresAt,
-    refreshToken,
-    refreshTokenExpiresAt,
     setAuthTokenState,
     setRefreshTokenState,
     setRefreshRetryCount,
