@@ -1,3 +1,8 @@
+// ===== ES6 모듈 import =====
+import { openModal, closeModal, toggleModal, isModalOpen } from './modules/ui/modals.js';
+import { showScreen, hideScreen } from './modules/ui/screens.js';
+import { parsePathname, navigate, initRouter } from './modules/routing/router.js';
+
 // WebSocket 연결
 let ws = null;
 let appConfig = {
@@ -734,27 +739,7 @@ function renderBackupScreenView() {
 }
 
 // ===== 전용 화면 컨테이너 토글 =====
-function showScreen(html) {
-    const root = document.getElementById('screenRoot');
-    const main = document.querySelector('.main-content');
-    if (root && main) {
-        root.innerHTML = html || '';
-        root.classList.add('active');
-        root.classList.remove('hidden');
-        main.classList.add('hidden');
-    }
-}
-
-function hideScreen() {
-    const root = document.getElementById('screenRoot');
-    const main = document.querySelector('.main-content');
-    if (root && main) {
-        root.classList.remove('active');
-        root.classList.add('hidden');
-        root.innerHTML = '';
-        main.classList.remove('hidden');
-    }
-}
+// showScreen(), hideScreen()은 modules/ui/screens.js에서 import됨
 
 // Rooms 화면
 function renderRoomsScreen() {
