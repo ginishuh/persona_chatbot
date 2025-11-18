@@ -5,7 +5,11 @@ const ASSETS_TO_CACHE = [
   '/app.js',
   '/style.css',
   '/manifest.json',
-  '/src/logo3.png'
+  '/src/logo3.png',
+  // ES 모듈 파일들
+  '/modules/ui/modals.js',
+  '/modules/ui/screens.js',
+  '/modules/routing/router.js'
 ];
 
 self.addEventListener('install', (event) => {
@@ -44,16 +48,20 @@ self.addEventListener('fetch', (event) => {
       if (cached) {
         // Also update cache in background
         fetch(req).then((res) => {
-          if (res && res.ok) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone()));
+          if (res && res.ok && res.type !== 'opaque') {
+            // Clone before any async operation to avoid "already used" error
+            const cloned = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, cloned));
           }
         }).catch(() => {});
         return cached;
       }
       return fetch(req).then((res) => {
         // save static responses
-        if (res && res.ok) {
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone()));
+        if (res && res.ok && res.type !== 'opaque') {
+          // Clone immediately before any async operation
+          const cloned = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, cloned));
         }
         return res;
       }).catch(() => {

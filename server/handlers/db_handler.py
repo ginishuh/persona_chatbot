@@ -359,6 +359,9 @@ class DBHandler:
         """v3 → v4: user_id 기반 재설계 (기존 데이터 삭제)."""
         assert self._conn is not None
 
+        # 외래 키 제약 조건 비활성화 (테이블 삭제 시 오류 방지)
+        await self._conn.execute("PRAGMA foreign_keys = OFF")
+
         # 기존 테이블 모두 삭제
         await self._conn.execute("DROP TABLE IF EXISTS messages")
         await self._conn.execute("DROP TABLE IF EXISTS rooms")
@@ -411,6 +414,9 @@ class DBHandler:
             CREATE INDEX idx_tok_room ON token_usage(room_id);
             """
         )
+
+        # 외래 키 제약 조건 다시 활성화
+        await self._conn.execute("PRAGMA foreign_keys = ON")
 
         await self._conn.commit()
 

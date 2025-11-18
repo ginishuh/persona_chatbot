@@ -27,7 +27,7 @@ Issue #20의 계획에 따라 단일 파일을 23개의 ES6 모듈로 분리하�
 - 순수 함수 유틸리티
 - **Export:** `isTouchDevice()`, `escapeHtml()`, `slugify()`
 
-### ✅ Phase 2: WebSocket 및 인증 (기본 구조 완료)
+### ✅ Phase 2: WebSocket 및 인증 (완료)
 
 #### `websocket/connection.js`
 - WebSocket 연결 관리
@@ -39,6 +39,23 @@ Issue #20의 계획에 따라 단일 파일을 23개의 ES6 모듈로 분리하�
 - **Export:** `setAuthToken()`, `clearAuthToken()`, `login()`, `register()`, `logout()`
 - **의존성:** `core/state.js`, `core/constants.js`
 
+### ✅ Phase 3: 라우팅 및 화면 관리 (완료)
+
+#### `routing/router.js`
+- History API 기반 SPA 라우팅
+- **Export:** `parsePathname()`, `rememberPendingRoute()`, `resumePendingRoute()`, `renderCurrentScreenFrom()`, `navigate()`, `initRouter()`
+- **의존성:** `core/state.js`, `websocket/connection.js`
+
+#### `ui/screens.js`
+- 전용 화면 컨테이너 관리
+- **Export:** `showScreen()`, `hideScreen()`
+- **의존성:** 없음 (DOM만 사용)
+
+#### `ui/modals.js`
+- 모달 관리 공통 유틸리티
+- **Export:** `openModal()`, `closeModal()`, `toggleModal()`, `isModalOpen()`, `closeAllModals()`
+- **의존성:** 없음 (DOM만 사용)
+
 ## 모듈 구조
 
 ```
@@ -47,20 +64,23 @@ web/modules/
 │   ├── constants.js    ✅ 완료
 │   └── state.js        ✅ 완료
 ├── auth/
-│   └── auth.js         ✅ 기본 구조 완료
+│   └── auth.js         ✅ 완료
 ├── websocket/
-│   └── connection.js   ✅ 기본 구조 완료
+│   └── connection.js   ✅ 완료
+├── routing/
+│   └── router.js       ✅ 완료 (Phase 3)
+├── ui/
+│   ├── screens.js      ✅ 완료 (Phase 3)
+│   └── modals.js       ✅ 완료 (Phase 3)
 ├── utils/
 │   └── utils.js        ✅ 완료
-├── routing/            ⏳ 예정
-├── rooms/              ⏳ 예정
-├── chat/               ⏳ 예정
-├── context/            ⏳ 예정
-├── settings/           ⏳ 예정
-├── files/              ⏳ 예정
-├── admin/              ⏳ 예정
-├── export/             ⏳ 예정
-└── ui/                 ⏳ 예정
+├── rooms/              ⏳ 예정 (Phase 4)
+├── chat/               ⏳ 예정 (Phase 4)
+├── context/            ⏳ 예정 (Phase 5)
+├── settings/           ⏳ 예정 (Phase 5)
+├── files/              ⏳ 예정 (Phase 5)
+├── admin/              ⏳ 예정 (Phase 6)
+└── export/             ⏳ 예정 (Phase 6)
 ```
 
 ## 사용 예시

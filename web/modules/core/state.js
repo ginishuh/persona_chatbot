@@ -105,9 +105,17 @@ export function setAutoLoginRequested(requested) {
 }
 
 // ===== 세션 및 채팅방 상태 =====
+// window 객체와 동기화 (인라인 이벤트 핸들러 호환을 위해)
 export let sessionKey = '';
-export let rooms = [];
-export let currentRoom = null;
+
+// rooms와 currentRoom은 window 객체를 직접 참조 (app.js와 동기화)
+if (typeof window !== 'undefined') {
+    if (!window.rooms) window.rooms = [];
+    if (window.currentRoom === undefined) window.currentRoom = null;
+}
+
+export let rooms = typeof window !== 'undefined' ? window.rooms : [];
+export let currentRoom = typeof window !== 'undefined' ? window.currentRoom : null;
 export let pendingRoutePath = null;
 
 export function setSessionKey(key) {
@@ -116,10 +124,16 @@ export function setSessionKey(key) {
 
 export function setRooms(newRooms) {
     rooms = newRooms;
+    if (typeof window !== 'undefined') {
+        window.rooms = newRooms;
+    }
 }
 
 export function setCurrentRoom(room) {
     currentRoom = room;
+    if (typeof window !== 'undefined') {
+        window.currentRoom = room;
+    }
 }
 
 export function setPendingRoutePath(path) {
