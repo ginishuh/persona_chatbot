@@ -3,8 +3,15 @@
  * @module routing/router
  */
 
-import { appConfig, isAuthenticated, pendingRoutePath, setPendingRoutePath, currentRoom, setCurrentRoom } from '../core/state.js';
-import { sendMessage } from '../websocket/connection.js';
+import { setPendingRoutePath, setCurrentRoom } from '../core/state.js';
+
+// 상태를 app.js의 실제 값에서 읽도록 window 참조 사용
+// app.js가 이미 isAuthenticated, appConfig를 관리하고 있으며,
+// core/state.js와 동기화되지 않으므로 window를 통해 직접 접근
+const getAppConfig = () => window.__appConfig || {};
+const getIsAuthenticated = () => window.__isAuthenticated || false;
+const getPendingRoutePath = () => window.__pendingRoutePath || null;
+const getCurrentRoom = () => window.currentRoom;
 
 /**
  * 라우트 테이블
@@ -38,7 +45,9 @@ export function parsePathname(pathname) {
  * @param {string} pathname
  */
 export function rememberPendingRoute(pathname) {
-    setPendingRoutePath(pathname || '/');
+    const path = pathname || '/';
+    setPendingRoutePath(path);
+    window.__pendingRoutePath = path;
 }
 
 /**
@@ -46,14 +55,15 @@ export function rememberPendingRoute(pathname) {
  * @param {Function} renderFn - renderCurrentScreenFrom 함수
  */
 export function resumePendingRoute(renderFn) {
-    if (!pendingRoutePath) return;
-    if (appConfig.login_required && !isAuthenticated) {
+    const pendingPath = getPendingRoutePath();
+    if (!pendingPath) return;
+    if (getAppConfig().login_required && !getIsAuthenticated()) {
         return;
     }
-    const target = pendingRoutePath;
     setPendingRoutePath(null);
+    window.__pendingRoutePath = null;
     try {
-        renderFn(target);
+        renderFn(pendingPath);
     } catch (_) {}
 }
 
@@ -85,11 +95,12 @@ export function renderCurrentScreenFrom(pathname, handlers = {}) {
         refreshRoomViews = () => {},
         enableFocusTrap = () => {},
         openMobilePanel = () => {},
-        focusMainAfterRoute = () => {}
+        focusMainAfterRoute = () => {},
+        sendMessage = () => {}
     } = handlers;
 
     // 인증 필요 시 로그인 모달 표시
-    if (appConfig.login_required && !isAuthenticated) {
+    if (getAppConfig().login_required && !getIsAuthenticated()) {
         rememberPendingRoute(pathname);
         showLoginModal();
         hideScreen();
@@ -111,12 +122,12 @@ export function renderCurrentScreenFrom(pathname, handlers = {}) {
     // 방 상세
     if (view === 'room-detail' && params[0]) {
         const rid = decodeURIComponent(params[0]);
-        if (currentRoom !== rid) {
+        if (getCurrentRoom() !== rid) {
             setCurrentRoom(rid);
             persistRooms();
             renderRoomsUI();
-            sendMessage({ action: 'room_load', room_id: currentRoom });
-            sendMessage({ action: 'reset_sessions', room_id: currentRoom });
+            sendMessage({ action: 'room_load', room_id: getCurrentRoom() });
+            sendMessage({ action: 'reset_sessions', room_id: getCurrentRoom() });
             refreshRoomViews();
         }
         focusMainAfterRoute();
@@ -126,11 +137,11 @@ export function renderCurrentScreenFrom(pathname, handlers = {}) {
     // 방 설정
     if (view === 'room-settings' && params[0]) {
         const rid = decodeURIComponent(params[0]);
-        if (currentRoom !== rid) {
+        if (getCurrentRoom() !== rid) {
             setCurrentRoom(rid);
             persistRooms();
             renderRoomsUI();
-            sendMessage({ action: 'room_load', room_id: currentRoom });
+            sendMessage({ action: 'room_load', room_id: getCurrentRoom() });
         }
         const modal = document.getElementById('settingsModal');
         if (modal) {
@@ -145,7 +156,7 @@ export function renderCurrentScreenFrom(pathname, handlers = {}) {
     // 방 히스토리
     if (view === 'room-history' && params[0]) {
         const rid = decodeURIComponent(params[0]);
-        if (currentRoom !== rid) {
+        if (getCurrentRoom() !== rid) {
             setCurrentRoom(rid);
             persistRooms();
             renderRoomsUI();

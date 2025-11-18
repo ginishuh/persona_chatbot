@@ -1,7 +1,7 @@
 // ===== ES6 모듈 import =====
 import { openModal, closeModal, toggleModal, isModalOpen } from './modules/ui/modals.js';
 import { showScreen, hideScreen } from './modules/ui/screens.js';
-import { parsePathname, navigate, initRouter, renderCurrentScreenFrom as routerRenderCurrentScreenFrom, rememberPendingRoute, resumePendingRoute } from './modules/routing/router.js';
+import { parsePathname, navigate as routerNavigate, initRouter, renderCurrentScreenFrom as routerRenderCurrentScreenFrom, rememberPendingRoute, resumePendingRoute as routerResumePendingRoute } from './modules/routing/router.js';
 
 // WebSocket 연결
 let ws = null;
@@ -11,6 +11,8 @@ let appConfig = {
     login_required: true,
     show_token_usage: true
 };
+// router.js가 접근할 수 있도록 window에도 바인딩
+window.__appConfig = appConfig;
 
 // DOM 요소
 const statusIndicator = document.getElementById('statusIndicator');
@@ -142,7 +144,15 @@ const roomNameConfirmBtn = document.getElementById('roomNameConfirmBtn');
 let currentAssistantMessage = null;
 let characterColors = {}; // 캐릭터별 색상 매핑
 let authRequired = false;
-let isAuthenticated = false;
+let setIsAuthenticatedState(false);
+// router.js가 접근할 수 있도록 window에도 바인딩
+window.__isAuthenticated = isAuthenticated;
+
+// isAuthenticated 업데이트 helper 함수
+function setIsAuthenticatedState(value) {
+    isAuthenticated = value;
+    window.__isAuthenticated = value;
+}
 let isReconnecting = false; // 의도적인 재연결 여부
 let currentProvider = 'claude'; // 최근 전송에 사용한 프로바이더
 let participants = []; // 현재 대화 참여자 목록
@@ -172,6 +182,8 @@ let userRole = 'user'; // 사용자 역할 ('user' | 'admin')
 window.rooms = [];
 window.currentRoom = null;
 let pendingRoutePath = null; // 로그인 이후 복원할 경로
+// router.js가 접근할 수 있도록 window에도 바인딩
+window.__pendingRoutePath = pendingRoutePath;
 let autoLoginRequested = false; // 비로그인 환경 자동 로그인 시도 여부
 const RETRY_ACTIONS = new Set([
     'set_context', 'chat',
@@ -282,19 +294,22 @@ const routingHandlers = {
     refreshRoomViews,
     enableFocusTrap,
     openMobilePanel,
-    focusMainAfterRoute
+    focusMainAfterRoute,
+    sendMessage  // router.js가 room_load/reset_sessions/get_context를 보내기 위해 필요
 };
 
-// renderCurrentScreenFrom과 navigate의 wrapper 함수
-// 인라인 이벤트 핸들러에서 사용할 수 있도록 handlers를 자동 주입
+// renderCurrentScreenFrom, navigate, resumePendingRoute의 wrapper 함수
+// 인라인 이벤트 핸들러와 기존 코드에서 사용할 수 있도록 handlers를 자동 주입
 function renderCurrentScreenFrom(pathname) {
     routerRenderCurrentScreenFrom(pathname, routingHandlers);
 }
 
-// navigate도 wrapper로 감싸서 handlers를 자동 전달
-const navigateOriginal = navigate;
 function navigate(path) {
-    navigateOriginal(path, routingHandlers);
+    routerNavigate(path, routingHandlers);
+}
+
+function resumePendingRoute() {
+    routerResumePendingRoute(() => renderCurrentScreenFrom(pendingRoutePath));
 }
 
 // ===== 접근성(A11y) 보완 =====
@@ -931,6 +946,7 @@ async function loadAppConfig() {
             ...appConfig,
             ...config
         };
+        window.__appConfig = appConfig;
     } catch (error) {
         log('앱 설정을 불러오지 못해 기본값을 사용합니다.', 'error');
     }
@@ -975,7 +991,7 @@ function connect() {
         authRequired = false;
         // 의도적인 재연결(로그인 후 등)이 아닐 때만 인증 상태 초기화
         if (!isReconnecting) {
-            isAuthenticated = false;
+            setIsAuthenticatedState(false);
         }
         isReconnecting = false; // 플래그 초기화
         autoLoginRequested = false;
@@ -1713,7 +1729,7 @@ async function submitLogin() {
                 localStorage.removeItem(LOGIN_SAVED_PW_KEY);
             }
 
-            isAuthenticated = true;
+            setIsAuthenticatedState(true);
             hideLoginModal();
             log(`${username}님 로그인 성공`, 'success');
 
@@ -1779,17 +1795,17 @@ function handleMessage(msg) {
             if (requiresLogin) {
                 authRequired = true;
                 if (authToken) {
-                    isAuthenticated = true;
+                    setIsAuthenticatedState(true);
                     hideLoginModal();
                     resumePendingRoute();
                     initializeAppData();
                 } else {
-                    isAuthenticated = false;
+                    setIsAuthenticatedState(false);
                     showLoginModal();
                 }
             } else {
                 authRequired = false;
-                isAuthenticated = true;
+                setIsAuthenticatedState(true);
                 hideLoginModal();
                 resumePendingRoute();
                 initializeAppData();
@@ -1799,7 +1815,7 @@ function handleMessage(msg) {
 
         case 'auth_required':
             authRequired = true;
-            isAuthenticated = false;
+            setIsAuthenticatedState(false);
             if (appConfig.login_required) {
                 rememberPendingRoute(location.pathname);
             }
@@ -1822,7 +1838,7 @@ function handleMessage(msg) {
         case 'login':
             if (data.success) {
                 authRequired = false;
-                isAuthenticated = true;
+                setIsAuthenticatedState(true);
                 hideLoginModal();
                 refreshRetryCount = 0;
                 if (data.token) {
@@ -3259,7 +3275,7 @@ function handleLogout() {
     setRefreshToken('', '');
     localStorage.removeItem(USER_ROLE_KEY);
     userRole = 'user';
-    isAuthenticated = false;
+    setIsAuthenticatedState(false);
     adminBtn.style.display = 'none';
     moreAdminBtn.style.display = 'none';
     loginBtn.style.display = 'block';
@@ -4478,7 +4494,7 @@ window.addEventListener('load', async () => {
     if (savedToken && savedExp && new Date(savedExp) > new Date()) {
         authToken = savedToken;
         authTokenExpiresAt = savedExp;
-        isAuthenticated = true;
+        setIsAuthenticatedState(true);
         userRole = localStorage.getItem(USER_ROLE_KEY) || 'user';
         loginBtn.style.display = 'none';
         moreLoginBtn.style.display = 'none';
