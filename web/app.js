@@ -168,8 +168,10 @@ let refreshInProgress = false;
 let lastRequest = null; // 재전송용 마지막 사용자 액션
 let sessionKey = '';
 let userRole = 'user'; // 사용자 역할 ('user' | 'admin')
-let rooms = []; // 초기에는 빈 배열 (사용자가 명시적으로 생성해야 함)
-let currentRoom = null; // 초기에는 채팅방 없음 (ChatGPT/Claude.ai 스타일)
+// ES 모듈로 전환: 인라인 이벤트 핸들러 호환을 위해 window에 직접 선언
+// (let으로 선언하면 모듈 스코프에 격리되어 onclick에서 접근 불가)
+window.rooms = [];
+window.currentRoom = null;
 let pendingRoutePath = null; // 로그인 이후 복원할 경로
 let autoLoginRequested = false; // 비로그인 환경 자동 로그인 시도 여부
 const RETRY_ACTIONS = new Set([
@@ -322,12 +324,12 @@ function renderCurrentScreenFrom(pathname) {
 
     if (view === 'room-detail' && params[0]) {
         const rid = decodeURIComponent(params[0]);
-        if (currentRoom !== rid) {
-            currentRoom = rid;
+        if (window.currentRoom !== rid) {
+            window.currentRoom = rid;
             persistRooms();
             renderRoomsUI();
-            sendMessage({ action: 'room_load', room_id: currentRoom });
-            sendMessage({ action: 'reset_sessions', room_id: currentRoom });
+            sendMessage({ action: 'room_load', room_id: window.currentRoom });
+            sendMessage({ action: 'reset_sessions', room_id: window.currentRoom });
             refreshRoomViews();
         }
         focusMainAfterRoute();
@@ -336,11 +338,11 @@ function renderCurrentScreenFrom(pathname) {
 
     if (view === 'room-settings' && params[0]) {
         const rid = decodeURIComponent(params[0]);
-        if (currentRoom !== rid) {
-            currentRoom = rid;
+        if (window.currentRoom !== rid) {
+            window.currentRoom = rid;
             persistRooms();
             renderRoomsUI();
-            sendMessage({ action: 'room_load', room_id: currentRoom });
+            sendMessage({ action: 'room_load', room_id: window.currentRoom });
         }
         const modal = document.getElementById('settingsModal');
         if (modal) { modal.classList.remove('hidden'); enableFocusTrap(modal); }
@@ -351,8 +353,8 @@ function renderCurrentScreenFrom(pathname) {
 
     if (view === 'room-history' && params[0]) {
         const rid = decodeURIComponent(params[0]);
-        if (currentRoom !== rid) {
-            currentRoom = rid;
+        if (window.currentRoom !== rid) {
+            window.currentRoom = rid;
             persistRooms();
             renderRoomsUI();
             refreshRoomViews();
@@ -529,18 +531,18 @@ function buildExportUrl() {
     const params = new URLSearchParams();
     params.set('scope', scope);
     if (scope === 'single') {
-        if (!currentRoom) {
+        if (!window.currentRoom) {
             alert('내보낼 채팅방을 선택해주세요.');
             return null;
         }
-        params.set('room_id', currentRoom);
+        params.set('room_id', window.currentRoom);
     }
     if (scope === 'selected') {
         const sel = Array.from(document.querySelectorAll('#bkRoomsWrap input[type="checkbox"]:checked')).map(x => x.value);
         if (sel.length) {
             params.set('room_ids', sel.join(','));
-        } else if (currentRoom) {
-            params.set('room_ids', currentRoom);
+        } else if (window.currentRoom) {
+            params.set('room_ids', window.currentRoom);
         } else {
             alert('내보낼 채팅방을 선택해주세요.');
             return null;
@@ -563,7 +565,7 @@ function populateBackupRooms() {
     const wrap = document.getElementById('bkRoomsWrap');
     if (!wrap) return;
     wrap.innerHTML = '';
-    const items = Array.isArray(rooms) ? rooms : [];
+    const items = Array.isArray(window.rooms) ? window.rooms : [];
     if (!items.length) { wrap.innerHTML = '<p class="hint">저장된 방이 없습니다.</p>'; return; }
     items.forEach(r => {
         const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
@@ -573,7 +575,7 @@ function populateBackupRooms() {
         row.className = 'checkbox-label';
         row.innerHTML = `<input type="checkbox" value="${rid}" id="${id}"> <span>${title}</span>`;
         wrap.appendChild(row);
-        if (rid === currentRoom) {
+        if (rid === window.currentRoom) {
             row.querySelector('input').checked = true;
         }
     });
@@ -629,18 +631,18 @@ function buildExportUrlFrom(prefix) {
     const params = new URLSearchParams();
     params.set('scope', scope);
     if (scope === 'single') {
-        if (!currentRoom) {
+        if (!window.currentRoom) {
             alert('내보낼 채팅방을 선택해주세요.');
             return null;
         }
-        params.set('room_id', currentRoom);
+        params.set('room_id', window.currentRoom);
     }
     if (scope === 'selected') {
         const sel = Array.from(document.querySelectorAll('#sbkRoomsWrap input[type="checkbox"]:checked')).map(x => x.value);
         if (sel.length) {
             params.set('room_ids', sel.join(','));
-        } else if (currentRoom) {
-            params.set('room_ids', currentRoom);
+        } else if (window.currentRoom) {
+            params.set('room_ids', window.currentRoom);
         } else {
             alert('내보낼 채팅방을 선택해주세요.');
             return null;
@@ -663,7 +665,7 @@ function populateBackupRoomsScreen() {
     const wrap = document.getElementById('sbkRoomsWrap');
     if (!wrap) return;
     wrap.innerHTML = '';
-    const items = Array.isArray(rooms) ? rooms : [];
+    const items = Array.isArray(window.rooms) ? window.rooms : [];
     items.forEach(r => {
         const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
         const title = (typeof r === 'object' && r.title) ? r.title : rid;
@@ -672,7 +674,7 @@ function populateBackupRoomsScreen() {
         row.className = 'checkbox-label';
         row.innerHTML = `<input type="checkbox" value="${rid}" id="${id}"> <span>${title}</span>`;
         wrap.appendChild(row);
-        if (rid === currentRoom) row.querySelector('input').checked = true;
+        if (rid === window.currentRoom) row.querySelector('input').checked = true;
     });
 }
 
@@ -713,7 +715,7 @@ function renderBackupScreenView() {
         </div>
       </div>
       <div class="context-section" style="display:flex; gap:0.5rem;">
-        <button class="btn" onclick="navigate(currentRoom ? '/rooms/${encodeURIComponent(currentRoom)}' : '/')">← 돌아가기</button>
+        <button class="btn" onclick="navigate(window.currentRoom ? '/rooms/${encodeURIComponent(window.currentRoom)}' : '/')">← 돌아가기</button>
         <button id="sbkDownloadBtn" class="btn btn-primary">⬇️ 다운로드</button>
       </div>
     </section>`;
@@ -744,7 +746,7 @@ function renderBackupScreenView() {
 
 // Rooms 화면
 function renderRoomsScreen() {
-    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+    const items = (Array.isArray(window.rooms) ? window.rooms : []).map(r => {
         const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
         const title = (typeof r === 'object' && r.title) ? r.title : rid;
         return { rid, title };
@@ -757,8 +759,8 @@ function renderRoomsScreen() {
         <h1 id="roomsScreenTitle">채팅방</h1>
         <div style="max-width:720px; margin-top:0.5rem;">${cards || '<div class="empty">채팅방이 없습니다.</div>'}</div>
         <div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
-          <button class="btn" onclick="navigate(currentRoom ? '/rooms/${encodeURIComponent(currentRoom)}' : '/')">← 돌아가기</button>
-          <button class="btn btn-primary" onclick="(function(){ const name=prompt('새 채팅방 이름','room_'+Math.random().toString(36).slice(2,6)); if(!name) return; const r=sanitizeRoomName(name); if(!rooms.find(x => (typeof x==='string'?x:x.room_id)===r)) rooms.push(r); currentRoom=r; persistRooms(); renderRoomsUI(); const cfg=collectRoomConfig(r); sendMessage({action:'room_save', room_id:r, config:cfg}); setTimeout(()=>sendMessage({action:'room_list'}),300); navigate('/rooms/'+encodeURIComponent(r)); })()">+ 새 채팅방</button>
+          <button class="btn" onclick="navigate(window.currentRoom ? '/rooms/${encodeURIComponent(window.currentRoom)}' : '/')">← 돌아가기</button>
+          <button class="btn btn-primary" onclick="(function(){ const name=prompt('새 채팅방 이름','room_'+Math.random().toString(36).slice(2,6)); if(!name) return; const r=sanitizeRoomName(name); if(!window.rooms.find(x => (typeof x==='string'?x:x.room_id)===r)) window.rooms.push(r); window.currentRoom=r; persistRooms(); renderRoomsUI(); const cfg=collectRoomConfig(r); sendMessage({action:'room_save', room_id:r, config:cfg}); setTimeout(()=>sendMessage({action:'room_list'}),300); navigate('/rooms/'+encodeURIComponent(r)); })()">+ 새 채팅방</button>
         </div>
       </section>`;
     showScreen(html);
@@ -846,7 +848,7 @@ function populateRoomsModal() {
     const q = (document.getElementById('rmSearch')?.value || '').trim().toLowerCase();
     if (!wrap) return;
     wrap.innerHTML = '';
-    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+    const items = (Array.isArray(window.rooms) ? window.rooms : []).map(r => {
         const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
         const title = (typeof r === 'object' && r.title) ? r.title : rid;
         return { rid, title };
@@ -880,9 +882,9 @@ function populateRoomsModal() {
             // DB 삭제 후 목록 재동기화
             setTimeout(() => sendMessage({ action: 'room_list' }), 300);
             // 로컬 상태는 즉시 업데이트 (UX)
-            rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
-            if (currentRoom === it.rid) {
-                currentRoom = rooms.length > 0 ? (typeof rooms[0] === 'string' ? rooms[0] : rooms[0].room_id) : null;
+            window.rooms = window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
+            if (window.currentRoom === it.rid) {
+                window.currentRoom = window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null;
             }
             persistRooms();
             populateRoomsModal();
@@ -934,7 +936,7 @@ function renderRoomsRightPanelList() {
     if (!list) return;
     const q = (search?.value || '').trim().toLowerCase();
     list.innerHTML = '';
-    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+    const items = (Array.isArray(window.rooms) ? window.rooms : []).map(r => {
         const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
         const title = (typeof r === 'object' && r.title) ? r.title : rid;
         return { rid, title };
@@ -967,9 +969,9 @@ function renderRoomsRightPanelList() {
             // DB 삭제 후 목록 재동기화
             setTimeout(() => sendMessage({ action: 'room_list' }), 300);
             // 로컬 상태는 즉시 업데이트 (UX)
-            rooms = rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
-            if (currentRoom === it.rid) {
-                currentRoom = rooms.length > 0 ? (typeof rooms[0] === 'string' ? rooms[0] : rooms[0].room_id) : null;
+            window.rooms = window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
+            if (window.currentRoom === it.rid) {
+                window.currentRoom = window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null;
             }
             persistRooms();
             renderRoomsUI();
@@ -1031,10 +1033,10 @@ function connect() {
             sessionKey = localStorage.getItem(SESSION_KEY_KEY) || '';
             const savedRooms = JSON.parse(localStorage.getItem(ROOMS_KEY) || '[]');
             if (Array.isArray(savedRooms) && savedRooms.length) {
-                rooms = savedRooms;
+                window.rooms = savedRooms;
             }
             const savedCurrent = localStorage.getItem(CURRENT_ROOM_KEY);
-            if (savedCurrent) currentRoom = savedCurrent;
+            if (savedCurrent) window.currentRoom = savedCurrent;
             renderRoomsUI();
         } catch (_) {}
         // 초기 라우트 반영
@@ -1176,8 +1178,8 @@ function sendMessage(payload, options = {}) {
         'chat', 'get_history_snapshot', 'clear_history', 'get_history_settings', 'set_history_limit', 'get_narrative'
     ]);
     if (ACTIONS_WITH_ROOM.has(String(payload.action))) {
-        if (currentRoom) {
-            message.room_id = currentRoom;
+        if (window.currentRoom) {
+            message.room_id = window.currentRoom;
         }
         // currentRoom이 없으면 room_id를 설정하지 않음 (서버가 처리)
     }
@@ -1212,8 +1214,8 @@ function sanitizeRoomName(name) {
 
 function persistRooms() {
     try {
-        localStorage.setItem(ROOMS_KEY, JSON.stringify(rooms));
-        localStorage.setItem(CURRENT_ROOM_KEY, currentRoom);
+        localStorage.setItem(ROOMS_KEY, JSON.stringify(window.rooms));
+        localStorage.setItem(CURRENT_ROOM_KEY, window.currentRoom);
     } catch (_) {}
 }
 
@@ -1229,7 +1231,7 @@ function renderRoomsUI() {
     emptyOpt.disabled = true;
     roomSelect.appendChild(emptyOpt);
 
-    (rooms || []).forEach(r => {
+    (window.rooms || []).forEach(r => {
         const roomId = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
         const title = (typeof r === 'object' && r.title) ? r.title : roomId;
         const opt = document.createElement('option');
@@ -1238,20 +1240,20 @@ function renderRoomsUI() {
         roomSelect.appendChild(opt);
     });
 
-    const hasCurrent = currentRoom && (rooms || []).some(x => (typeof x === 'string' ? x : x.room_id) === currentRoom);
-    if (!hasCurrent && rooms && rooms.length > 0) {
+    const hasCurrent = window.currentRoom && (window.rooms || []).some(x => (typeof x === 'string' ? x : x.room_id) === window.currentRoom);
+    if (!hasCurrent && window.rooms && window.rooms.length > 0) {
         // 방이 있지만 currentRoom이 없거나 유효하지 않으면 첫 번째 방 선택
-        const firstRoom = rooms[0];
+        const firstRoom = window.rooms[0];
         const extractedId = typeof firstRoom === 'string' ? firstRoom : (firstRoom.room_id || null);
         if (extractedId) {
-            currentRoom = extractedId;
+            window.currentRoom = extractedId;
         }
-        // room_id가 없으면 currentRoom을 null로 유지
+        // room_id가 없으면 window.currentRoom을 null로 유지
     }
 
-    roomSelect.value = currentRoom || '';
-    if (currentRoom) {
-        announce(`채팅방 전환: ${currentRoom}`);
+    roomSelect.value = window.currentRoom || '';
+    if (window.currentRoom) {
+        announce(`채팅방 전환: ${window.currentRoom}`);
     }
 
     // 채팅 입력 상태 업데이트
@@ -1261,7 +1263,7 @@ function renderRoomsUI() {
 function updateChatInputState() {
     refreshChatRefs(); // DOM 참조 갱신
 
-    if (!currentRoom) {
+    if (!window.currentRoom) {
         // 채팅방 미선택 - 입력 비활성화
         if (chatInput) {
             chatInput.disabled = true;
@@ -1314,17 +1316,17 @@ if (roomSelect) {
             // 빈 옵션 선택됨 - 무시
             return;
         }
-        currentRoom = selectedValue;
+        window.currentRoom = selectedValue;
         persistRooms();
         // 방 설정 로드 시도
-        sendMessage({ action: 'room_load', room_id: currentRoom });
+        sendMessage({ action: 'room_load', room_id: window.currentRoom });
         // 방 전환 시 해당 방의 프로바이더 세션 초기화(신규 프롬프트 적용)
-        sendMessage({ action: 'reset_sessions', room_id: currentRoom });
+        sendMessage({ action: 'reset_sessions', room_id: window.currentRoom });
         // 서사/히스토리 뷰 갱신
         refreshRoomViews();
         updateChatInputState(); // 입력 상태 업데이트
-        log(`채팅방 전환: ${currentRoom}`, 'info');
-        announce(`채팅방 전환: ${currentRoom}`);
+        log(`채팅방 전환: ${window.currentRoom}`, 'info');
+        announce(`채팅방 전환: ${window.currentRoom}`);
     });
 }
 if (roomAddBtn) {
@@ -1345,8 +1347,8 @@ if (roomNameConfirmBtn) {
             return;
         }
         const r = sanitizeRoomName(name);
-        if (!rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) rooms.push(r);
-        currentRoom = r;
+        if (!window.rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) window.rooms.push(r);
+        window.currentRoom = r;
         persistRooms();
         renderRoomsUI();
         // 현재 설정으로 방 저장
@@ -1389,12 +1391,12 @@ if (roomNameInput) {
 // roomDelBtn 제거됨 - 각 채팅방 옆에 개별 삭제 버튼으로 대체
 if (roomSaveBtn) {
     roomSaveBtn.addEventListener('click', () => {
-        if (!currentRoom) {
+        if (!window.currentRoom) {
             alert('저장할 채팅방을 선택해주세요.');
             return;
         }
-        const config = collectRoomConfig(currentRoom);
-        sendMessage({ action: 'room_save', room_id: currentRoom, config });
+        const config = collectRoomConfig(window.currentRoom);
+        sendMessage({ action: 'room_save', room_id: window.currentRoom, config });
         setTimeout(() => { sendMessage({ action: 'room_list' }); renderRoomsRightPanelList(); }, 300);
         log('채팅방 설정 저장 완료', 'success');
     });
@@ -2084,8 +2086,8 @@ function handleMessage(msg) {
 
         case 'room_list':
             if (data.success) {
-                rooms = data.rooms || [];
-                try { localStorage.setItem(ROOMS_KEY, JSON.stringify(rooms)); } catch (_) {}
+                window.rooms = data.rooms || [];
+                try { localStorage.setItem(ROOMS_KEY, JSON.stringify(window.rooms)); } catch (_) {}
                 renderRoomsUI();
                 renderRoomsRightPanelList();
             } else {
@@ -2786,7 +2788,7 @@ function collectCharacterFromItem(item) {
 
 // 컨텍스트 저장
 saveContextBtn.addEventListener('click', () => {
-    if (!currentRoom) {
+    if (!window.currentRoom) {
         alert('설정을 저장할 채팅방을 선택해주세요.');
         return;
     }
@@ -2813,7 +2815,7 @@ saveContextBtn.addEventListener('click', () => {
 
     sendMessage({
         action: 'set_context',
-        room_id: currentRoom,  // 채팅방별 독립 설정
+        room_id: window.currentRoom,  // 채팅방별 독립 설정
         world: worldInput.value.trim(),
         situation: situationInput.value.trim(),
         user_character: userCharacterData,
@@ -2834,8 +2836,8 @@ saveContextBtn.addEventListener('click', () => {
     });
     // 방 설정도 함께 저장(room.json)
     try {
-        const config = collectRoomConfig(currentRoom);
-        sendMessage({ action: 'room_save', room_id: currentRoom, config });
+        const config = collectRoomConfig(window.currentRoom);
+        sendMessage({ action: 'room_save', room_id: window.currentRoom, config });
     } catch (_) {}
     // 설정 적용 시 설정 모달 닫기
     try {
@@ -3112,7 +3114,7 @@ saveNarrativeBtn.addEventListener('click', () => {
     }
 
     const defaultName = `서사_${new Date().toISOString().slice(0, 10)}`;
-    const filename = prompt('채팅방(서사) 이름을 입력하세요:', currentRoom || defaultName) || currentRoom || defaultName;
+    const filename = prompt('채팅방(서사) 이름을 입력하세요:', window.currentRoom || defaultName) || window.currentRoom || defaultName;
     if (!filename) return;
 
     const exists = (typeof latestStories !== 'undefined') && latestStories.some(f => f.name === filename || f.filename === filename || f.filename === `${filename}.md`);
@@ -3128,12 +3130,12 @@ saveNarrativeBtn.addEventListener('click', () => {
         use_server: true,
         append: append
     });
-    currentRoom = filename;
-    try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
+    window.currentRoom = filename;
+    try { localStorage.setItem(CURRENT_ROOM_KEY, window.currentRoom); } catch (_) {}
     // 서사 저장과 동시에 방 설정도 저장
     try {
-        const config = collectRoomConfig(currentRoom);
-        sendMessage({ action: 'room_save', room_id: currentRoom, config });
+        const config = collectRoomConfig(window.currentRoom);
+        sendMessage({ action: 'room_save', room_id: window.currentRoom, config });
     } catch (_) {}
 });
 
@@ -4584,3 +4586,31 @@ window.addEventListener('load', async () => {
 });
 // 서사(=채팅방) 선택 시 방 전환 처리
 // stories UI는 비활성화 상태이므로 관련 이벤트 없음
+
+// ============================================================================
+// ES 모듈 글로벌 바인딩
+// ============================================================================
+// app.js를 ES 모듈로 전환하면서 모든 함수가 모듈 스코프로 이동했습니다.
+// 템플릿의 인라인 이벤트 핸들러(onclick 등)는 전역(window) 스코프에서 함수를 찾기 때문에,
+// 필요한 함수들을 명시적으로 window 객체에 바인딩합니다.
+
+// 라우팅 함수
+window.navigate = navigate;
+
+// 채팅방 관리 함수
+window.sendMessage = sendMessage;
+window.persistRooms = persistRooms;
+window.renderRoomsUI = renderRoomsUI;
+window.sanitizeRoomName = sanitizeRoomName;
+window.downloadRoomMd = downloadRoomMd;
+window.collectRoomConfig = collectRoomConfig;
+
+// 채팅방 상태 변수는 이미 window에 직접 선언됨 (173-174줄)
+
+// UI 모듈에서 임포트한 함수들도 노출
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.toggleModal = toggleModal;
+window.isModalOpen = isModalOpen;
+window.showScreen = showScreen;
+window.hideScreen = hideScreen;
