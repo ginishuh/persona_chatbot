@@ -113,8 +113,6 @@ class DBHandler:
             # 구버전 DB: v4로 마이그레이션 (기존 데이터 버림)
             await self._maybe_backup_legacy_db()
             await self._migrate_to_v4()
-            # v4 마이그레이션 후 v3의 승인 컬럼 추가 (users 테이블에만)
-            await self._migrate_to_v3()
             current_version = 4
 
         # 버전 업데이트
