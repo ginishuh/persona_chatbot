@@ -1,7 +1,8 @@
 // ===== ES6 모듈 import =====
 import { openModal, closeModal, toggleModal, isModalOpen } from './modules/ui/modals.js';
 import { showScreen, hideScreen } from './modules/ui/screens.js';
-import { parsePathname, navigate, initRouter } from './modules/routing/router.js';
+// 라우팅은 아직 통합 안 됨 (기존 함수 사용 중)
+// import { parsePathname, navigate, initRouter } from './modules/routing/router.js';
 
 // WebSocket 연결
 let ws = null;
