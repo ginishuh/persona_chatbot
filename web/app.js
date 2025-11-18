@@ -1,8 +1,7 @@
 // ===== ES6 모듈 import =====
 import { openModal, closeModal, toggleModal, isModalOpen } from './modules/ui/modals.js';
 import { showScreen, hideScreen } from './modules/ui/screens.js';
-// 라우팅은 아직 통합 안 됨 (기존 함수 사용 중)
-// import { parsePathname, navigate, initRouter } from './modules/routing/router.js';
+import { parsePathname, navigate, initRouter, renderCurrentScreenFrom as routerRenderCurrentScreenFrom, rememberPendingRoute, resumePendingRoute } from './modules/routing/router.js';
 
 // WebSocket 연결
 let ws = null;
@@ -271,114 +270,32 @@ function setRefreshToken(token, expiresAt) {
 
 // ===== History API Router (스켈레톤) =====
 // 간단한 경로 → 화면 매핑. 현재 단계에서는 기존 화면 구조를 유지하면서 URL만 관리합니다.
-const routeTable = [
-    // 루트 경로는 매핑하지 않음 - ChatGPT 스타일 환영 화면만 표시
-    { pattern: /^\/rooms\/([^\/]+)$/, view: 'room-detail' },
-    { pattern: /^\/rooms\/([^\/]+)\/settings$/, view: 'room-settings' },
-    { pattern: /^\/rooms\/([^\/]+)\/history$/, view: 'room-history' },
-    { pattern: /^\/backup$/, view: 'backup' },
-];
+// 라우팅 함수들은 router.js 모듈에서 가져옴
+// handlers 객체 - router.js의 함수들에 전달할 의존성
+const routingHandlers = {
+    showLoginModal,
+    hideScreen,
+    openRoomsModal,
+    openBackupModal,
+    persistRooms,
+    renderRoomsUI,
+    refreshRoomViews,
+    enableFocusTrap,
+    openMobilePanel,
+    focusMainAfterRoute
+};
 
-function parsePathname(pathname) {
-    for (const r of routeTable) {
-        const m = pathname.match(r.pattern);
-        if (m) {
-            return { view: r.view, params: m.slice(1) };
-        }
-    }
-    return { view: null, params: [] }; // 매치되지 않으면 아무 모달도 열지 않음
-}
-
-function rememberPendingRoute(pathname) {
-    pendingRoutePath = pathname || '/';
-}
-
-function resumePendingRoute() {
-    if (!pendingRoutePath) return;
-    if (appConfig.login_required && !isAuthenticated) {
-        return;
-    }
-    const target = pendingRoutePath;
-    pendingRoutePath = null;
-    try {
-        renderCurrentScreenFrom(target);
-    } catch (_) {}
-}
-
+// renderCurrentScreenFrom과 navigate의 wrapper 함수
+// 인라인 이벤트 핸들러에서 사용할 수 있도록 handlers를 자동 주입
 function renderCurrentScreenFrom(pathname) {
-    if (appConfig.login_required && !isAuthenticated) {
-        rememberPendingRoute(pathname);
-        showLoginModal();
-        hideScreen();
-        return;
-    }
-    const { view, params } = parsePathname(pathname);
-    // 3열 메인 레이아웃 유지: 전용 화면 숨기고(main-content 표시), 라우트에 맞게 모달/패널만 제어
-    hideScreen();
-
-    if (view === 'room-list') {
-        openRoomsModal();
-        focusMainAfterRoute();
-        return;
-    }
-
-    if (view === 'room-detail' && params[0]) {
-        const rid = decodeURIComponent(params[0]);
-        if (window.currentRoom !== rid) {
-            window.currentRoom = rid;
-            persistRooms();
-            renderRoomsUI();
-            sendMessage({ action: 'room_load', room_id: window.currentRoom });
-            sendMessage({ action: 'reset_sessions', room_id: window.currentRoom });
-            refreshRoomViews();
-        }
-        focusMainAfterRoute();
-        return;
-    }
-
-    if (view === 'room-settings' && params[0]) {
-        const rid = decodeURIComponent(params[0]);
-        if (window.currentRoom !== rid) {
-            window.currentRoom = rid;
-            persistRooms();
-            renderRoomsUI();
-            sendMessage({ action: 'room_load', room_id: window.currentRoom });
-        }
-        const modal = document.getElementById('settingsModal');
-        if (modal) { modal.classList.remove('hidden'); enableFocusTrap(modal); }
-        // 최신 컨텍스트 불러와 반영
-        sendMessage({ action: 'get_context' });
-        return;
-    }
-
-    if (view === 'room-history' && params[0]) {
-        const rid = decodeURIComponent(params[0]);
-        if (window.currentRoom !== rid) {
-            window.currentRoom = rid;
-            persistRooms();
-            renderRoomsUI();
-            refreshRoomViews();
-        }
-        // 모바일에선 우측 패널 열기
-        try { openMobilePanel('right'); } catch (_) {}
-        focusMainAfterRoute();
-        return;
-    }
-
-    if (view === 'backup') {
-        openBackupModal();
-        return;
-    }
-
-    focusMainAfterRoute();
+    routerRenderCurrentScreenFrom(pathname, routingHandlers);
 }
 
+// navigate도 wrapper로 감싸서 handlers를 자동 전달
+const navigateOriginal = navigate;
 function navigate(path) {
-    window.history.pushState({ path }, '', path);
-    renderCurrentScreenFrom(location.pathname);
+    navigateOriginal(path, routingHandlers);
 }
-
-window.addEventListener('popstate', () => renderCurrentScreenFrom(location.pathname));
 
 // ===== 접근성(A11y) 보완 =====
 function focusMainAfterRoute() {
@@ -4579,6 +4496,9 @@ window.addEventListener('load', async () => {
         adminBtn.style.display = 'none';
         moreAdminBtn.style.display = 'none';
     }
+
+    // 라우터 초기화 (popstate 이벤트 리스너 등록)
+    initRouter(routingHandlers);
 
     connect();
     // 연결 전이라도 라우트 화면을 먼저 표시(데이터는 연결 후 갱신)
