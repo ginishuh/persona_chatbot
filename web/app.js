@@ -144,7 +144,7 @@ const roomNameConfirmBtn = document.getElementById('roomNameConfirmBtn');
 let currentAssistantMessage = null;
 let characterColors = {}; // 캐릭터별 색상 매핑
 let authRequired = false;
-let setIsAuthenticatedState(false);
+let isAuthenticated = false;
 // router.js가 접근할 수 있도록 window에도 바인딩
 window.__isAuthenticated = isAuthenticated;
 
@@ -309,7 +309,7 @@ function navigate(path) {
 }
 
 function resumePendingRoute() {
-    routerResumePendingRoute(() => renderCurrentScreenFrom(pendingRoutePath));
+    routerResumePendingRoute(renderCurrentScreenFrom);
 }
 
 // ===== 접근성(A11y) 보완 =====
