@@ -3,7 +3,25 @@
  * @module websocket/connection
  */
 
-import { appConfig, ws, setWs, sessionKey, setSessionKey, setRooms, currentRoom, setCurrentRoom } from '../core/state.js';
+import {
+    appConfig,
+    ws,
+    setWs,
+    sessionKey,
+    setSessionKey,
+    setRooms,
+    currentRoom,
+    setCurrentRoom,
+    authToken,
+    setLastRequest,
+    setAuthRequired,
+    setIsAuthenticated,
+    setIsReconnecting,
+    setAutoLoginRequested,
+    isReconnecting,
+    setTokenRefreshTimeout,
+    tokenRefreshTimeout
+} from '../core/state.js';
 import { SESSION_KEY_KEY, ROOMS_KEY, CURRENT_ROOM_KEY, RETRY_ACTIONS } from '../core/constants.js';
 
 /**
@@ -94,6 +112,25 @@ export function connect(callbacks = {}) {
         updateStatus('disconnected', '연결 끊김');
         log('연결이 끊어졌습니다. 5초 후 재연결...', 'error');
 
+        // 인증 및 재연결 상태 리셋
+        setAuthRequired(false);
+
+        // 의도적인 재연결(로그인 후 등)이 아닐 때만 인증 상태 초기화
+        if (!isReconnecting) {
+            setIsAuthenticated(false);
+        }
+
+        // 재연결 플래그 초기화
+        setIsReconnecting(false);
+        setAutoLoginRequested(false);
+
+        // 토큰 갱신 타이머 취소
+        if (tokenRefreshTimeout) {
+            clearTimeout(tokenRefreshTimeout);
+            setTokenRefreshTimeout(null);
+        }
+
+        // 콜백 실행 (로그인 모달 숨김 등 UI 처리)
         if (onDisconnected) onDisconnected();
 
         setTimeout(() => connect(callbacks), 5000);
@@ -104,6 +141,8 @@ export function connect(callbacks = {}) {
  * 메시지 전송
  * @param {object} payload
  * @param {object} options
+ * @param {boolean} options.skipToken - 토큰 주입 건너뛰기
+ * @param {boolean} options.skipRetry - 재시도 대상에서 제외
  */
 export function sendMessage(payload, options = {}) {
     // ws는 state에서 가져옴
@@ -116,13 +155,17 @@ export function sendMessage(payload, options = {}) {
 
     const message = { ...payload };
 
-    // 토큰 추가는 auth 모듈에서 처리하도록 분리 필요
-    // 현재는 임시로 전역 상태 사용
+    // 인증 토큰 주입 (options.skipToken이 true가 아닌 경우)
+    if (!options.skipToken && authToken) {
+        message.token = authToken;
+    }
 
+    // 세션 키 추가
     if (sessionKey) {
         message.session_key = sessionKey;
     }
 
+    // 방 ID가 필요한 액션들
     const ACTIONS_WITH_ROOM = new Set([
         'chat', 'get_history_snapshot', 'clear_history',
         'get_history_settings', 'set_history_limit', 'get_narrative'
@@ -132,6 +175,11 @@ export function sendMessage(payload, options = {}) {
         if (currentRoom) {
             message.room_id = currentRoom;
         }
+    }
+
+    // 재시도 대상 액션인 경우 lastRequest에 저장
+    if (!options.skipRetry && RETRY_ACTIONS.has(payload.action)) {
+        setLastRequest(message);
     }
 
     currentWs.send(JSON.stringify(message));

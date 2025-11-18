@@ -31,6 +31,7 @@
 - **Code/Comments/Commits**: Korean (한국어)
 - **Identifiers (variables/functions/API)**: English for interoperability
 - **User-facing documentation**: Korean (README.md, etc.)
+- **Team communication (issues/PRs/reviews/chats)**: default to Korean for day-to-day collaboration unless a document specifically requires English
 - **Exception - Base Documents**: English only
   - `docs/agents_base_en.md` (this file - SSOT)
   - `CLAUDE.md` (development guidelines - English)

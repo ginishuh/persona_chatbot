@@ -24,6 +24,8 @@ export function isTouchDevice() {
  * @returns {string}
  */
 export function escapeHtml(text) {
+    // undefined/null 안전 처리
+    const safe = text ?? '';
     const map = {
         '&': '&amp;',
         '<': '&lt;',
@@ -31,7 +33,7 @@ export function escapeHtml(text) {
         '"': '&quot;',
         "'": '&#039;'
     };
-    return text.replace(/[&<>"']/g, m => map[m]);
+    return safe.replace(/[&<>"']/g, m => map[m]);
 }
 
 /**
@@ -40,10 +42,15 @@ export function escapeHtml(text) {
  * @returns {string}
  */
 export function slugify(str) {
-    return str
+    // undefined/null/빈 문자열 안전 처리 및 기본값 제공
+    const safe = (str || '').trim();
+    if (!safe) {
+        return 'character'; // 기본값
+    }
+
+    return safe
         .toLowerCase()
-        .trim()
         .replace(/[^\w\s-]/g, '')
         .replace(/[\s_-]+/g, '-')
-        .replace(/^-+|-+$/g, '');
+        .replace(/^-+|-+$/g, '') || 'character'; // 변환 후에도 빈 문자열이면 기본값
 }
