@@ -13,11 +13,11 @@ let backupModal = null;
 const DEFAULT_INCLUDE = ['messages', 'context'];
 
 function getActiveRoomId() {
-    return currentRoom || window.currentRoom || '';
+    return currentRoom || '';
 }
 
 function listRoomMeta() {
-    const source = Array.isArray(rooms) ? rooms : (Array.isArray(window.rooms) ? window.rooms : []);
+    const source = Array.isArray(rooms) ? rooms : [];
     return source.map((entry) => {
         if (typeof entry === 'string') {
             return { id: entry, title: entry };
@@ -200,8 +200,8 @@ export function renderBackupScreenView() {
           <label class="checkbox-label"><input type="radio" name="sbkFormat" id="sbkFmtNdjson"> <span>Stream(NDJSON)</span></label>
         </div>
       </div>
-      <div class="context-section" style="display:flex; gap:0.5rem;">
-        <button class="btn" onclick="navigate(window.currentRoom ? '/rooms/${encodeURIComponent(getActiveRoomId())}' : '/')">← 돌아가기</button>
+    <div class="context-section" style="display:flex; gap:0.5rem;">
+        <button class="btn" id="sbkBackBtn">← 돌아가기</button>
         <button id="sbkDownloadBtn" class="btn btn-primary">⬇️ 다운로드</button>
       </div>
     </section>`;
@@ -211,6 +211,13 @@ export function renderBackupScreenView() {
         const url = buildExportUrlFrom('sbk');
         if (!url) return;
         try { window.open(url, '_blank'); } catch (_) { location.href = url; }
+    });
+
+    // 뒤로가기 버튼: inline onclick 제거 후 이벤트 리스너로 바인딩
+    document.getElementById('sbkBackBtn')?.addEventListener('click', () => {
+        const tgt = getActiveRoomId();
+        if (tgt) navigate(`/rooms/${encodeURIComponent(tgt)}`);
+        else navigate('/');
     });
 
     ['sbkScopeSingle', 'sbkScopeSelected', 'sbkScopeFull'].forEach((id) => {
