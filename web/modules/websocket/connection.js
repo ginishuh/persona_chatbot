@@ -150,7 +150,7 @@ export function sendMessage(payload, options = {}) {
 
     if (!currentWs || currentWs.readyState !== WebSocket.OPEN) {
         console.error('WebSocket 연결이 끊어졌습니다');
-        return;
+        return false;
     }
 
     const message = { ...payload };
@@ -183,4 +183,5 @@ export function sendMessage(payload, options = {}) {
     }
 
     currentWs.send(JSON.stringify(message));
+    return true;
 }

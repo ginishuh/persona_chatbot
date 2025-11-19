@@ -5,6 +5,7 @@ import { navigate } from '../routing/router.js';
 import { showScreen } from '../ui/screens.js';
 import { updateChatInputState } from '../chat/chat.js';
 import { renderParticipantsLeftPanel, renderParticipantsManagerList } from '../chat/characters.js';
+import { ROOMS_KEY, CURRENT_ROOM_KEY } from '../core/constants.js';
 
 // DOM Elements
 let roomSelect = null;
@@ -33,9 +34,6 @@ let adultConsent = null;
 let forceChoices = null;
 let choiceCount = null;
 let narratorSettings = null;
-
-const ROOMS_KEY = 'persona_chatbot_rooms';
-const CURRENT_ROOM_KEY = 'persona_chatbot_current_room';
 
 export function refreshRoomRefs() {
     roomSelect = document.getElementById('roomSelect');
@@ -280,7 +278,19 @@ export function collectRoomConfig(roomId) {
             situation: situationInput ? situationInput.value.trim() : '',
             user_character: userCharacterData,
             narrator_enabled: narratorEnabled ? !!narratorEnabled.checked : false,
-            // ... other fields if needed, but this seems to be what was in app.js snippet
+            narrator_mode: narratorMode ? narratorMode.value : 'moderate',
+            narrator_description: narratorDescription ? narratorDescription.value.trim() : '',
+            user_is_narrator: userIsNarrator ? !!userIsNarrator.checked : false,
+            ai_provider: aiProvider ? aiProvider.value : 'claude',
+            model: modelSelect ? modelSelect.value : '',
+            session_retention: sessionRetentionToggle ? !!sessionRetentionToggle.checked : false,
+            adult_level: adultLevel ? adultLevel.value : 'explicit',
+            narrative_separation: narrativeSeparation ? !!narrativeSeparation.checked : false,
+            narrator_drive: narratorDrive ? narratorDrive.value : 'guide',
+            output_level: outputLevel ? outputLevel.value : 'normal',
+            pace: storyPace ? storyPace.value : 'normal',
+            choice_policy: forceChoices && forceChoices.checked ? 'require' : 'off',
+            choice_count: choiceCount ? parseInt(choiceCount.value, 10) : 3
         }
     };
 }

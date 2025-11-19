@@ -139,7 +139,7 @@ export function getCharacterColor(characterName) {
 // ===== 방 상태 =====
 export let rooms = [];
 export let currentRoom = null;
-// ...existing code...
+export let sessionKey = '';
 export let pendingRoutePath = null;
 
 export function setSessionKey(key) {
