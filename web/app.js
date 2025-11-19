@@ -35,6 +35,23 @@ import {
     refreshInProgress, setRefreshInProgress
 } from './modules/core/state.js';
 import {
+    setPendingFileList,
+    consumePendingFileList,
+    setPendingTemplateSelect,
+    consumePendingTemplateSelect,
+    setPendingLoadType,
+    getPendingLoadType,
+    clearPendingLoadType,
+    setPendingTemplateItem,
+    consumePendingTemplateItem,
+    setPendingTemplateModal,
+    isPendingTemplateModal,
+    setPendingAddFromTemplate,
+    isPendingAddFromTemplate,
+    clearPendingTemplateModal,
+    clearPendingAddFromTemplate
+} from './modules/files/pending.js';
+import {
     refreshChatRefs, addChatMessage, addCharacterMessage,
     sendChatMessage, handleChatStream, handleChatComplete,
     bindChatEvents, updateChatInputState,
@@ -1860,14 +1877,14 @@ if (moreAdminBtn) {
 
 // 파일 목록 응답 처리
 function handleFileList(data) {
-    if (window.pendingFileListSelect) {
-        updateFileList(window.pendingFileListSelect, data.files);
-        window.pendingFileListSelect = null;
-        window.pendingFileListType = null;
-    } else if (window.pendingTemplateSelect) {
-        // 캐릭터 템플릿 목록 업데이트
-        updateTemplateList(window.pendingTemplateSelect, data.files);
-        window.pendingTemplateSelect = null;
+    const pfl = consumePendingFileList();
+    if (pfl.select) {
+        updateFileList(pfl.select, data.files);
+    } else {
+        const pts = consumePendingTemplateSelect();
+        if (pts) {
+            updateTemplateList(pts, data.files);
+        }
     }
 }
 
@@ -1891,8 +1908,7 @@ function updateTemplateList(selectElement, files) {
 // 파일 목록 로드
 async function loadFileList(fileType, selectElement) {
     // 응답 처리를 위해 fileType을 저장
-    window.pendingFileListType = fileType;
-    window.pendingFileListSelect = selectElement;
+    setPendingFileList(selectElement, fileType);
     sendMessage({ action: 'list_workspace_files', file_type: fileType });
 }
 
@@ -1920,13 +1936,14 @@ function handleFileLoad(data) {
     const filename = data.filename;
 
     // 파일 타입에 따라 적절한 곳에 로드
-    if (window.pendingLoadType === 'world') {
+    const pLoadType = getPendingLoadType();
+    if (pLoadType === 'world') {
         worldInput.value = content;
         worldSelect.value = filename.replace('.md', '');
-    } else if (window.pendingLoadType === 'situation') {
+    } else if (pLoadType === 'situation') {
         situationInput.value = content;
         situationSelect.value = filename.replace('.md', '');
-    } else if (window.pendingLoadType === 'my_character') {
+    } else if (pLoadType === 'my_character') {
         // 메타 파싱(이름/성별/나이)
         try {
             const nameEl = document.getElementById('userCharacterName');
@@ -1950,11 +1967,11 @@ function handleFileLoad(data) {
             userCharacterInput.value = content;
         }
         myCharacterSelect.value = filename.replace('.md', '');
-    } else if (window.pendingLoadType === 'char_template') {
+    } else if (pLoadType === 'char_template') {
         // 템플릿(JSON) 로드 → 모달 또는 캐릭터 아이템에 반영
         try {
             const obj = JSON.parse(content || '{}');
-            if (window.pendingAddFromTemplate) {
+            if (isPendingAddFromTemplate()) {
                 const name = obj.name || '';
                 const gender = obj.gender || '';
                 const age = (obj.age !== undefined && obj.age !== null) ? String(obj.age) : '';
@@ -1968,7 +1985,7 @@ function handleFileLoad(data) {
             participants.push({ name, gender, age, description: desc });
             renderParticipantsLeftPanel();
             renderParticipantsManagerList();
-            } else if (window.pendingTemplateModal) {
+            } else if (isPendingTemplateModal()) {
                 const ceName = document.getElementById('ceName');
                 const ceGender = document.getElementById('ceGender');
                 const ceAge = document.getElementById('ceAge');
@@ -1987,23 +2004,26 @@ function handleFileLoad(data) {
                 ceBoundaries.value = obj.boundaries || '';
                 ceExamples.value = Array.isArray(obj.examples) ? obj.examples.join('\n') : '';
                 ceTags.value = Array.isArray(obj.tags) ? obj.tags.join(', ') : '';
-            } else if (window.pendingTemplateItem) {
-                const nameInput = window.pendingTemplateItem.querySelector('.character-name-input');
-                const genderSelect = window.pendingTemplateItem.querySelector('.character-gender-input');
-                const ageInput = window.pendingTemplateItem.querySelector('.character-age-input');
-                const descInput = window.pendingTemplateItem.querySelector('.character-description-input');
-                if (obj.name) nameInput.value = obj.name;
-                if (obj.gender !== undefined) genderSelect.value = obj.gender;
-                if (obj.age !== undefined) ageInput.value = obj.age;
-                if (obj.description !== undefined) descInput.value = obj.description;
-                else if (obj.summary !== undefined) descInput.value = obj.summary;
+            } else {
+                const pendingItem = consumePendingTemplateItem();
+                if (pendingItem) {
+                    const nameInput = pendingItem.querySelector('.character-name-input');
+                    const genderSelect = pendingItem.querySelector('.character-gender-input');
+                    const ageInput = pendingItem.querySelector('.character-age-input');
+                    const descInput = pendingItem.querySelector('.character-description-input');
+                    if (obj.name) nameInput.value = obj.name;
+                    if (obj.gender !== undefined) genderSelect.value = obj.gender;
+                    if (obj.age !== undefined) ageInput.value = obj.age;
+                    if (obj.description !== undefined) descInput.value = obj.description;
+                    else if (obj.summary !== undefined) descInput.value = obj.summary;
+                }
             }
         } catch (e) {
             log('템플릿 JSON 파싱 실패', 'error');
         }
-        window.pendingTemplateItem = null;
-        window.pendingTemplateModal = false;
-        window.pendingAddFromTemplate = false;
+        clearPendingTemplateModal();
+        clearPendingAddFromTemplate();
+        clearPendingLoadType();
     } else if (window.pendingLoadType === 'my_profile') {
         try {
             const obj = JSON.parse(content || '{}');
@@ -2043,7 +2063,7 @@ async function saveFile(fileType, selectElement, contentGetter) {
 
 // 파일 로드
 function loadFile(fileType, filename) {
-    window.pendingLoadType = fileType;
+    setPendingLoadType(fileType);
     sendMessage({
         action: 'load_workspace_file',
         file_type: fileType,
@@ -2157,7 +2177,7 @@ if (saveProfileJsonBtn) {
 
 if (loadProfileJsonBtn) {
     loadProfileJsonBtn.addEventListener('click', () => {
-        window.pendingLoadType = 'my_profile';
+        setPendingLoadType('my_profile');
         sendMessage({
             action: 'load_workspace_file',
             file_type: 'my_profile',
@@ -2267,8 +2287,8 @@ document.getElementById('ceSaveTemplateBtn')?.addEventListener('click', saveChar
 document.getElementById('ceTemplateSelect')?.addEventListener('change', (e) => {
     const sel = e.target;
     if (sel.value) {
-        window.pendingLoadType = 'char_template';
-        window.pendingTemplateModal = true;
+        setPendingLoadType('char_template');
+        setPendingTemplateModal(true);
         sendMessage({ action: 'load_workspace_file', file_type: 'char_template', filename: sel.value });
     }
 });

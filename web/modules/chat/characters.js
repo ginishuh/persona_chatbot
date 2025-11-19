@@ -7,6 +7,7 @@ import { participants, setParticipants, getCharacterColor } from '../core/state.
 import { sendMessage } from '../websocket/connection.js';
 import { slugify } from '../utils/utils.js';
 import { openModal, closeModal, enableFocusTrap, disableFocusTrap } from '../ui/modals.js';
+import { setPendingTemplateSelect } from '../files/pending.js';
 
 // DOM 요소 참조 (initCharacters에서 설정)
 let charactersListEl = null;
@@ -181,7 +182,7 @@ export function addCharacterInput(name = '', gender = '', description = '', age 
  */
 export function loadCharTemplateList(selectElement) {
     sendMessage({ action: 'list_workspace_files', file_type: 'char_template' });
-    window.pendingTemplateSelect = selectElement;
+    setPendingTemplateSelect(selectElement);
 }
 
 /**
