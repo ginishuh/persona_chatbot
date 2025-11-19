@@ -6,7 +6,8 @@ import {
     rememberPendingRoute,
     resumePendingRoute as routerResumePendingRoute,
     renderCurrentScreenFrom as routerRenderCurrentScreenFrom,
-    navigate as routerNavigate
+    navigate as routerNavigate,
+    initRouter as routerInitRouter
 } from './modules/routing/router.js';
 import { showScreen, hideScreen } from './modules/ui/screens.js';
 import { connect as connectWebSocket, sendMessage } from './modules/websocket/connection.js';
@@ -14,6 +15,7 @@ import {
     ws, appConfig, setAppConfig,
     authRequired, setAuthRequired, isAuthenticated, setIsAuthenticated,
     authToken, setAuthTokenState,
+    refreshToken, refreshTokenExpiresAt, setRefreshTokenState,
     rooms, currentRoom, setRooms, setCurrentRoom,
     participants, setParticipants,
     userRole, setUserRole,
@@ -67,15 +69,39 @@ const historyUnlimitedToggle = document.getElementById('historyUnlimitedToggle')
 const worldSelect = document.getElementById('worldSelect');
 const saveWorldBtn = document.getElementById('saveWorldBtn');
 const deleteWorldBtn = document.getElementById('deleteWorldBtn');
+const worldInput = document.getElementById('worldInput');
 const situationSelect = document.getElementById('situationSelect');
 const saveSituationBtn = document.getElementById('saveSituationBtn');
 const deleteSituationBtn = document.getElementById('deleteSituationBtn');
+const situationInput = document.getElementById('situationInput');
 const myCharacterSelect = document.getElementById('myCharacterSelect');
 const saveMyCharacterBtn = document.getElementById('saveMyCharacterBtn');
 const deleteMyCharacterBtn = document.getElementById('deleteMyCharacterBtn');
 const userCharacterAgeInput = document.getElementById('userCharacterAge');
+const userCharacterInput = document.getElementById('userCharacterInput');
 const loadProfileJsonBtn = document.getElementById('loadProfileJsonBtn');
 const saveProfileJsonBtn = document.getElementById('saveProfileJsonBtn');
+
+// 채팅/세션 제어 요소
+const chatMessages = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const sendChatBtn = document.getElementById('sendChatBtn');
+const aiProvider = document.getElementById('aiProvider');
+const modelSelect = document.getElementById('modelSelect');
+const narratorEnabled = document.getElementById('narratorEnabled');
+const narratorMode = document.getElementById('narratorMode');
+const narratorDescription = document.getElementById('narratorDescription');
+const userIsNarrator = document.getElementById('userIsNarrator');
+const narratorDrive = document.getElementById('narratorDrive');
+const forceChoices = document.getElementById('forceChoices');
+const choiceCount = document.getElementById('choiceCount');
+const adultLevel = document.getElementById('adultLevel');
+const narrativeSeparation = document.getElementById('narrativeSeparation');
+const narratorSettings = document.getElementById('narratorSettings');
+const outputLevel = document.getElementById('outputLevel');
+const storyPace = document.getElementById('storyPace');
+const adultConsent = document.getElementById('adultConsent');
+const sessionRetentionToggle = document.getElementById('sessionRetentionToggle');
 
 // 프리셋 관리 요소
 const presetSelect = document.getElementById('presetSelect');
@@ -191,6 +217,10 @@ function navigate(path) {
 
 function resumePendingRoute() {
     routerResumePendingRoute(renderCurrentScreenFrom);
+}
+
+function initRouter(handlers) {
+    routerInitRouter(handlers);
 }
 
 // ===== 접근성(A11y) 보완 =====
@@ -695,9 +725,9 @@ function populateRoomsModal() {
             // DB 삭제 후 목록 재동기화
             setTimeout(() => sendMessage({ action: 'room_list' }), 300);
             // 로컬 상태는 즉시 업데이트 (UX)
-            window.rooms = window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
+            setRooms(window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid));
             if (window.currentRoom === it.rid) {
-                window.currentRoom = window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null;
+                setCurrentRoom(window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null);
             }
             persistRooms();
             populateRoomsModal();
@@ -782,9 +812,9 @@ function renderRoomsRightPanelList() {
             // DB 삭제 후 목록 재동기화
             setTimeout(() => sendMessage({ action: 'room_list' }), 300);
             // 로컬 상태는 즉시 업데이트 (UX)
-            window.rooms = window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
+            setRooms(window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid));
             if (window.currentRoom === it.rid) {
-                window.currentRoom = window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null;
+                setCurrentRoom(window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null);
             }
             persistRooms();
             renderRoomsUI();
@@ -823,10 +853,7 @@ async function loadAppConfig() {
             throw new Error(`status ${response.status}`);
         }
         const config = await response.json();
-        appConfig = {
-            ...appConfig,
-            ...config
-        };
+        setAppConfig(config);
         window.__appConfig = appConfig;
     } catch (error) {
         log('앱 설정을 불러오지 못해 기본값을 사용합니다.', 'error');
@@ -853,8 +880,8 @@ function connect() {
             // 초기 라우트 반영
             try { renderCurrentScreenFrom(location.pathname); } catch (_) {}
         },
-        onMessage: (event) => {
-            handleMessage(JSON.parse(event.data));
+        onMessage: (message) => {
+            handleMessage(message);
         },
         onDisconnected: () => {
             updateStatus('disconnected', '연결 끊김');
@@ -987,7 +1014,7 @@ if (roomSelect) {
             // 빈 옵션 선택됨 - 무시
             return;
         }
-        window.currentRoom = selectedValue;
+        setCurrentRoom(selectedValue);
         persistRooms();
         // 방 설정 로드 시도
         sendMessage({ action: 'room_load', room_id: window.currentRoom });
@@ -1019,7 +1046,7 @@ if (roomNameConfirmBtn) {
         }
         const r = sanitizeRoomName(name);
         if (!window.rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) window.rooms.push(r);
-        window.currentRoom = r;
+        setCurrentRoom(r);
         persistRooms();
         renderRoomsUI();
         // 현재 설정으로 방 저장
@@ -1388,18 +1415,16 @@ async function submitLogin() {
 
         if (response.ok && data.success) {
             // JWT 토큰 저장
-            authToken = data.access_token;
-            authTokenExpiresAt = data.access_exp;
-            refreshToken = data.refresh_token;
-            refreshTokenExpiresAt = data.refresh_exp;
+            setAuthTokenState(data.access_token, data.access_exp);
+            setRefreshTokenState(data.refresh_token, data.refresh_exp);
 
-            localStorage.setItem(AUTH_TOKEN_KEY, authToken);
-            localStorage.setItem(AUTH_EXP_KEY, authTokenExpiresAt);
-            localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-            localStorage.setItem(REFRESH_EXP_KEY, refreshTokenExpiresAt);
+            localStorage.setItem(AUTH_TOKEN_KEY, data.access_token);
+            localStorage.setItem(AUTH_EXP_KEY, data.access_exp);
+            localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
+            localStorage.setItem(REFRESH_EXP_KEY, data.refresh_exp);
 
             // 사용자 역할 저장
-            userRole = data.role || 'user';
+            setUserRole(data.role || 'user');
             localStorage.setItem(USER_ROLE_KEY, userRole);
 
             // 관리자 버튼 표시/숨김
@@ -1423,7 +1448,7 @@ async function submitLogin() {
                 localStorage.removeItem(LOGIN_SAVED_PW_KEY);
             }
 
-            setIsAuthenticatedState(true);
+            setIsAuthenticated(true);
             hideLoginModal();
             log(`${username}님 로그인 성공`, 'success');
 
@@ -1440,7 +1465,7 @@ async function submitLogin() {
 
             // WebSocket 재연결 (토큰 포함)
             if (ws && ws.readyState === WebSocket.OPEN) {
-                isReconnecting = true; // 의도적인 재연결 표시
+                setIsReconnecting(true); // 의도적인 재연결 표시
                 ws.close();
             }
             connect();
@@ -1487,19 +1512,19 @@ function handleMessage(msg) {
             const requiresLogin = Boolean(data && data.login_required);
             appConfig.login_required = requiresLogin;
             if (requiresLogin) {
-                authRequired = true;
+                setAuthRequired(true);
                 if (authToken) {
-                    setIsAuthenticatedState(true);
+                    setIsAuthenticated(true);
                     hideLoginModal();
                     resumePendingRoute();
                     initializeAppData();
                 } else {
-                    setIsAuthenticatedState(false);
+                    setIsAuthenticated(false);
                     showLoginModal();
                 }
             } else {
-                authRequired = false;
-                setIsAuthenticatedState(true);
+                setAuthRequired(false);
+                setIsAuthenticated(true);
                 hideLoginModal();
                 resumePendingRoute();
                 initializeAppData();
@@ -1508,14 +1533,14 @@ function handleMessage(msg) {
         }
 
         case 'auth_required':
-            authRequired = true;
-            setIsAuthenticatedState(false);
+            setAuthRequired(true);
+            setIsAuthenticated(false);
             if (appConfig.login_required) {
                 rememberPendingRoute(location.pathname);
             }
             // refresh 토큰으로 자동 갱신 시도
             if (!refreshInProgress && refreshToken) {
-                refreshInProgress = true;
+                setRefreshInProgress(true);
                 sendMessage({ action: 'token_refresh', refresh_token: refreshToken }, { skipToken: true, skipRetry: true });
                 log('토큰 갱신 시도 중...', 'info');
             } else {
@@ -1531,10 +1556,10 @@ function handleMessage(msg) {
 
         case 'login':
             if (data.success) {
-                authRequired = false;
-                setIsAuthenticatedState(true);
+                setAuthRequired(false);
+                setIsAuthenticated(true);
                 hideLoginModal();
-                refreshRetryCount = 0;
+                setRefreshRetryCount(0);
                 if (data.token) {
                     setAuthToken(data.token, data.expires_at);
                 }
@@ -1542,8 +1567,8 @@ function handleMessage(msg) {
                     setRefreshToken(data.refresh_token, data.refresh_expires_at);
                 }
                 if (data.session_key) {
-                    sessionKey = data.session_key;
-                    try { localStorage.setItem(SESSION_KEY_KEY, sessionKey); } catch (_) {}
+                    setSessionKey(data.session_key);
+                    try { localStorage.setItem(SESSION_KEY_KEY, data.session_key); } catch (_) {}
                 }
                 const handshakeOnly = !appConfig.login_required && !data.token && !data.refresh_token;
                 log(handshakeOnly ? '세션 키 동기화 완료' : '로그인 성공', 'success');
@@ -1572,7 +1597,7 @@ function handleMessage(msg) {
                 if (lastRequest) {
                     const payload = { ...lastRequest };
                     sendMessage(payload, { skipRetry: true });
-                    lastRequest = null;
+                    setLastRequest(null);
                 }
                 if (appConfig.login_required || data.token || data.refresh_token) {
                     initializeAppData();
@@ -1589,7 +1614,7 @@ function handleMessage(msg) {
             break;
 
         case 'token_refresh':
-            refreshInProgress = false;
+            setRefreshInProgress(false);
             if (data.success) {
                 if (data.token) setAuthToken(data.token, data.expires_at);
                 if (data.refresh_token) setRefreshToken(data.refresh_token, data.refresh_expires_at);
@@ -1597,7 +1622,7 @@ function handleMessage(msg) {
                 if (lastRequest) {
                     const payload = { ...lastRequest };
                     sendMessage(payload, { skipRetry: true });
-                    lastRequest = null;
+                    setLastRequest(null);
                 } else {
                     initializeAppData();
                 }
@@ -1713,7 +1738,7 @@ function handleMessage(msg) {
 
         case 'room_list':
             if (data.success) {
-                window.rooms = data.rooms || [];
+                setRooms(data.rooms || []);
                 try { localStorage.setItem(ROOMS_KEY, JSON.stringify(window.rooms)); } catch (_) {}
                 renderRoomsUI();
                 renderRoomsRightPanelList();
@@ -2172,7 +2197,7 @@ function handleLogout() {
     setRefreshToken('', '');
     localStorage.removeItem(USER_ROLE_KEY);
     userRole = 'user';
-    setIsAuthenticatedState(false);
+    setIsAuthenticated(false);
     adminBtn.style.display = 'none';
     moreAdminBtn.style.display = 'none';
     loginBtn.style.display = 'block';
@@ -2858,7 +2883,7 @@ function applyPreset(preset) {
     userCharacterInput.value = preset.user_character || '';
 
     // 참여자 초기화 및 로드
-    participants = Array.isArray(preset.characters) ? [...preset.characters] : [];
+    setParticipants(Array.isArray(preset.characters) ? [...preset.characters] : []);
     renderParticipantsLeftPanel();
     renderParticipantsManagerList();
 
@@ -3248,10 +3273,9 @@ window.addEventListener('load', async () => {
     const savedToken = localStorage.getItem(AUTH_TOKEN_KEY);
     const savedExp = localStorage.getItem(AUTH_EXP_KEY);
     if (savedToken && savedExp && new Date(savedExp) > new Date()) {
-        authToken = savedToken;
-        authTokenExpiresAt = savedExp;
-        setIsAuthenticatedState(true);
-        userRole = localStorage.getItem(USER_ROLE_KEY) || 'user';
+        setAuthTokenState(savedToken, savedExp);
+        setIsAuthenticated(true);
+        setUserRole(localStorage.getItem(USER_ROLE_KEY) || 'user');
         loginBtn.style.display = 'none';
         moreLoginBtn.style.display = 'none';
         logoutBtn.style.display = 'block';

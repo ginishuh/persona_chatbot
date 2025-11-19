@@ -15,6 +15,8 @@ import json
 import logging
 import os
 import re
+import urllib.parse
+import urllib.request
 from argparse import ArgumentParser
 
 try:
@@ -95,18 +97,40 @@ async def run(
 
         # 로그인 수행 (비밀번호가 설정되어 있다면 필요)
         if password:
-            login_req = {
-                "action": "login",
-                "username": username,
-                "password": password,
-            }
-            await ws.send(json.dumps(login_req))
-            login_res = json.loads(await ws.recv())
-            if login_res.get("action") != "login" or not login_res.get("data", {}).get("success"):
-                logger.error(f"로그인 실패: {login_res}")
+            # HTTP 로그인 시도
+            http_port = env.get("HTTP_PORT", "9000")
+            # uri에서 host 추출 (ws://localhost:8765 -> localhost)
+            parsed_uri = urllib.parse.urlparse(uri)
+            host = parsed_uri.hostname or "localhost"
+            login_url = f"http://{host}:{http_port}/api/login"
+
+            try:
+                req_body = json.dumps({"username": username, "password": password}).encode("utf-8")
+                req = urllib.request.Request(
+                    login_url,
+                    data=req_body,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req) as res:
+                    if res.status == 200:
+                        res_body = json.loads(res.read().decode("utf-8"))
+                        if res_body.get("success"):
+                            access_token = res_body.get("access_token") or res_body.get("token")
+                            if not access_token:
+                                logger.error("로그인 응답에 access_token 이 없습니다")
+                                return 2
+                            token = access_token
+                            logger.info("HTTP 로그인 성공, 토큰 발급 완료")
+                        else:
+                            logger.error(f"로그인 실패 (API 응답): {res_body}")
+                            return 2
+                    else:
+                        logger.error(f"로그인 실패 (HTTP {res.status})")
+                        return 2
+            except Exception as e:
+                logger.error(f"로그인 요청 중 오류 발생: {e}")
                 return 2
-            token = login_res["data"].get("token")
-            logger.info("로그인 성공, 토큰 발급 완료")
 
         # 컨텍스트 설정 (필드 상위 배치)
         set_ctx = {
