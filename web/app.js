@@ -2526,29 +2526,23 @@ window.addEventListener('load', async () => {
 // stories UI는 비활성화 상태이므로 관련 이벤트 없음
 
 // ============================================================================
-// ES 모듈 글로벌 바인딩
+// ES 모듈: 핵심 API를 모듈로 export
 // ============================================================================
-// app.js를 ES 모듈로 전환하면서 모든 함수가 모듈 스코프로 이동했습니다.
-// 템플릿의 인라인 이벤트 핸들러(onclick 등)는 전역(window) 스코프에서 함수를 찾기 때문에,
-// 필요한 함수들을 명시적으로 window 객체에 바인딩합니다.
+// app.js의 내부 함수들을 모듈화된 방식으로 외부에서 사용할 수 있도록 내보냅니다.
+// 전역 할당(window.*)은 `web/modules/main.js`에서 중앙 관리하도록 이전했습니다.
 
-// 라우팅 함수
-window.navigate = navigate;
-
-// 채팅방 관리 함수
-window.sendMessage = sendMessage;
-window.persistRooms = persistRooms;
-window.renderRoomsUI = renderRoomsUI;
-window.sanitizeRoomName = sanitizeRoomName;
-window.downloadRoomMd = downloadRoomMd;
-window.collectRoomConfig = collectRoomConfig;
-
-// 채팅방 상태 변수는 이미 window에 직접 선언됨 (173-174줄)
-
-// UI 모듈에서 임포트한 함수들도 노출
-window.openModal = openModal;
-window.closeModal = closeModal;
-window.toggleModal = toggleModal;
-window.isModalOpen = isModalOpen;
-window.showScreen = showScreen;
-window.hideScreen = hideScreen;
+export {
+    navigate,
+    sendMessage,
+    persistRooms,
+    renderRoomsUI,
+    sanitizeRoomName,
+    downloadRoomMd,
+    collectRoomConfig,
+    openModal,
+    closeModal,
+    toggleModal,
+    isModalOpen,
+    showScreen,
+    hideScreen
+};

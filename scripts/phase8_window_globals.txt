@@ -1,0 +1,50 @@
+# Phase8 - 전역(window) 할당 목록
+# 생성일: 2025-11-19
+# 용도: `web/app.js` 및 `web/modules/`에서 `window.<name> =` 으로 할당된 전역 심볼 목록입니다.
+# 이 파일은 모듈화(전역 제거) 우선순위 결정 및 PR 체크리스트로 사용하세요.
+
+## 요약
+- `web/app.js`에서 전역 할당 약 38개(주요 핸들러/유틸/상태)가 발견되었습니다.
+- `web/modules/`에서도 일부 전역 노출이 있습니다(상호 연동용). 전체 의존성상 전역 제거가 단계적으로 필요합니다.
+
+## 전역 심볼 목록 (자동 수집된 항목, 중복 제거)
+- __appConfig            (web/app.js, web/modules/routing/router.js)
+- __isAuthenticated     (web/modules/core/state.js)
+- __pendingRoutePath     (web/modules/routing/router.js)
+- __lastSettingsTrigger  (web/app.js)
+- __lastEditorTrigger    (web/app.js, modules/chat/characters.js)
+- rooms                  (web/modules/core/state.js, web/app.js)
+- currentRoom            (web/modules/core/state.js, web/app.js)
+- pendingFileListSelect  (web/app.js)
+- pendingFileListType    (web/app.js)
+- pendingTemplateSelect  (web/app.js, modules/chat/characters.js)
+- pendingTemplateItem    (web/app.js)
+- pendingTemplateModal   (web/app.js)
+- pendingAddFromTemplate (web/app.js)
+- pendingLoadType        (web/app.js)
+
+## 전역으로 노출된 함수/유틸 (window.<name> = ...)
+- navigate
+- sendMessage
+- persistRooms
+- renderRoomsUI
+- sanitizeRoomName
+- downloadRoomMd
+- collectRoomConfig
+- openModal
+- closeModal
+- toggleModal
+- isModalOpen
+- showScreen
+- hideScreen
+
+## 주의 / 권장 순서
+1. 목록을 검토해 '핵심 API'(예: `sendMessage`, `navigate`, `persistRooms`)를 우선 모듈 export로 이동하세요.
+2. 각 전역에 대해(이 파일 목록의 항목) 호출자 추적 → small PR 단위로 대체합니다.
+3. 안전을 위해 `modules/main.js`를 통해 단계별로 전역을 제거하고 통합 테스트/스모크를 실행하세요.
+
+## 다음 작업 제안
+- (권장) 제가 이 목록을 기반으로 `scripts/phase8_window_globals.json` 형태의 구조화된 파일을 생성하고, 상위 N개(예: 10개)를 우선 추출하는 샘플 PR을 만들어 드립니다.
+- 또는 원하시면 지금 바로 특정 심볼(이름)을 지목해 샘플 리팩터를 진행하겠습니다.
+
+-- 끝 --
