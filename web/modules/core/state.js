@@ -104,18 +104,42 @@ export function setAutoLoginRequested(requested) {
     autoLoginRequested = requested;
 }
 
-// ===== 세션 및 채팅방 상태 =====
-// window 객체와 동기화 (인라인 이벤트 핸들러 호환을 위해)
-export let sessionKey = '';
+// ===== 채팅 및 캐릭터 상태 =====
+export let participants = [];
+export let characterColors = {};
 
-// rooms와 currentRoom은 window 객체를 직접 참조 (app.js와 동기화)
-if (typeof window !== 'undefined') {
-    if (!window.rooms) window.rooms = [];
-    if (window.currentRoom === undefined) window.currentRoom = null;
+export function setParticipants(newParticipants) {
+    participants = Array.isArray(newParticipants) ? newParticipants : [];
 }
 
-export let rooms = typeof window !== 'undefined' ? window.rooms : [];
-export let currentRoom = typeof window !== 'undefined' ? window.currentRoom : null;
+export function setCharacterColors(colors) {
+    characterColors = colors || {};
+}
+
+export function getCharacterColor(characterName) {
+    if (!characterColors[characterName]) {
+        const colors = [
+            'character-0',
+            'character-1',
+            'character-2',
+            'character-3',
+            'character-4',
+            'character-5',
+            'character-6',
+            'character-7',
+            'character-8',
+            'character-9'
+        ];
+        const index = Object.keys(characterColors).length % colors.length;
+        characterColors[characterName] = colors[index];
+    }
+    return characterColors[characterName];
+}
+
+// ===== 방 상태 =====
+export let rooms = [];
+export let currentRoom = null;
+// ...existing code...
 export let pendingRoutePath = null;
 
 export function setSessionKey(key) {
@@ -138,37 +162,6 @@ export function setCurrentRoom(room) {
 
 export function setPendingRoutePath(path) {
     pendingRoutePath = path;
-}
-
-// ===== 채팅 상태 =====
-export let currentAssistantMessage = null;
-export let characterColors = {};
-export let currentProvider = 'claude';
-export let participants = [];
-export let pendingConsentResend = false;
-
-export function setCurrentAssistantMessage(message) {
-    currentAssistantMessage = message;
-}
-
-export function setCharacterColor(character, color) {
-    characterColors[character] = color;
-}
-
-export function getCharacterColors() {
-    return characterColors;
-}
-
-export function setCurrentProvider(provider) {
-    currentProvider = provider;
-}
-
-export function setParticipants(newParticipants) {
-    participants = newParticipants;
-}
-
-export function setPendingConsentResend(resend) {
-    pendingConsentResend = resend;
 }
 
 // ===== 히스토리 상태 =====
