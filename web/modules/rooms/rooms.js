@@ -228,6 +228,21 @@ export function populateRoomsModal() {
     });
 }
 
+export function openRoomsModal() {
+    const modal = document.getElementById('roomsModal');
+    if (!modal) return;
+    populateRoomsModal();
+    modal.classList.remove('hidden');
+    enableFocusTrap(modal);
+}
+
+export function closeRoomsModal() {
+    const modal = document.getElementById('roomsModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    disableFocusTrap(modal);
+}
+
 export function renderRoomsRightPanelList() {
     if (!roomList) refreshRoomRefs();
     if (!roomList) return;

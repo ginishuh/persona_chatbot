@@ -59,7 +59,7 @@ import {
 } from './modules/chat/chat.js';
 import {
     refreshRoomRefs, renderRoomsUI, renderRoomsRightPanelList, renderRoomsScreen,
-    loadContext, collectRoomConfig, bindRoomEvents, populateRoomsModal,
+    loadContext, collectRoomConfig, bindRoomEvents, populateRoomsModal, openRoomsModal, closeRoomsModal,
     persistRooms, sanitizeRoomName
 } from './modules/rooms/rooms.js';
 import {
@@ -210,7 +210,7 @@ const LOGIN_ADULT_KEY = 'persona_login_adult';
 const routingHandlers = {
     showLoginModal,
     hideScreen,
-    openRoomsModal,
+    openRoomsModal: openRoomsModalWrapper,
     openBackupModal,
     renderBackupScreenView,
     persistRooms,
@@ -221,6 +221,14 @@ const routingHandlers = {
     focusMainAfterRoute,
     sendMessage  // router.js가 room_load/reset_sessions/get_context를 보내기 위해 필요
 };
+
+function openRoomsModalWrapper() {
+    if (appConfig.login_required && !isAuthenticated) {
+        showLoginModal();
+        return;
+    }
+    openRoomsModal();
+}
 
 // renderCurrentScreenFrom, navigate, resumePendingRoute의 wrapper 함수
 // 인라인 이벤트 핸들러와 기존 코드에서 사용할 수 있도록 handlers를 자동 주입
