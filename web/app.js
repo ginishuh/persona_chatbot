@@ -348,26 +348,7 @@ function renderHistorySnapshotScreen(history) {
 
 
 // ===== 방 목록(Home) 모달 =====
-// `populateRoomsModal` moved to `web/modules/rooms/rooms.js`
-
-function openRoomsModal() {
-    if (appConfig.login_required && !isAuthenticated) {
-        showLoginModal();
-        return;
-    }
-    const modal = document.getElementById('roomsModal');
-    if (!modal) return;
-    populateRoomsModal();
-    modal.classList.remove('hidden');
-    enableFocusTrap(modal);
-}
-
-function closeRoomsModal() {
-    const modal = document.getElementById('roomsModal');
-    if (!modal) return;
-    modal.classList.add('hidden');
-    disableFocusTrap(modal);
-}
+// `populateRoomsModal`, `openRoomsModal`, `closeRoomsModal` are implemented in `web/modules/rooms/rooms.js`
 
 document.getElementById('rmCloseBtn')?.addEventListener('click', closeRoomsModal);
 document.querySelector('#roomsModal .settings-modal-overlay')?.addEventListener('click', closeRoomsModal);
