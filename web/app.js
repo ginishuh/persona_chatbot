@@ -14,6 +14,7 @@ import { initA11y, enableFocusTrap, disableFocusTrap, announce, focusMainAfterRo
 import { log, updateStatus, updateModelOptions } from './modules/ui/status.js';
 import { initMobileUI, openMobilePanel, closeMoreMenu } from './modules/ui/mobile.js';
 import { setLastSettingsTrigger, focusLastSettingsTrigger } from './modules/ui/last_focus.js';
+import { setLastEditorTrigger, focusLastEditorTrigger } from './modules/ui/last_focus.js';
 import { initExportModule, openBackupModal, renderBackupScreenView, downloadRoomMd } from './modules/export/export.js';
 import { initAdminPanel, openAdminModal, closeAdminModal } from './modules/admin/admin.js';
 import { connect, sendMessage, loadAppConfig } from './modules/websocket/connection.js';
@@ -70,7 +71,7 @@ import {
 } from './modules/core/constants.js';
 
 // router.js가 접근할 수 있도록 window에도 바인딩
-window.__appConfig = appConfig;
+// `appConfig` is exported from modules/core/state and centrally bound in `web/modules/main.js`.
 
 // 컨텍스트 패널 요소 (Modules에서 관리하지 않는 나머지)
 const contextContent = document.getElementById('contextContent');
@@ -2044,7 +2045,7 @@ function openCharacterEditor(characterDiv) {
     // 템플릿 목록 갱신
     loadCharTemplateList(document.getElementById('ceTemplateSelect'));
 
-    try { window.__lastEditorTrigger = document.activeElement; } catch (_) {}
+    try { setLastEditorTrigger(document.activeElement); } catch (_) {}
     modal.classList.remove('hidden');
     enableFocusTrap(modal);
 }
@@ -2054,7 +2055,7 @@ function closeCharacterEditor() {
     modal.classList.add('hidden');
     disableFocusTrap(modal);
     currentEditingCharacterItem = null;
-    try { window.__lastEditorTrigger?.focus?.(); } catch (_) {}
+    try { focusLastEditorTrigger(); } catch (_) {}
 }
 
 function applyCharacterEditorToItem() {

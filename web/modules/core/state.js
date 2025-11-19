@@ -81,18 +81,13 @@ export function setAuthRequired(required) {
 
 export function setIsAuthenticated(authenticated) {
     isAuthenticated = authenticated;
-    if (typeof window !== 'undefined') {
-        window.__isAuthenticated = authenticated;
-    }
 }
 
 export function setUserRole(role) {
     userRole = role;
 }
 
-if (typeof window !== 'undefined') {
-    window.__isAuthenticated = isAuthenticated;
-}
+// Note: do not write authentication state to `window` here; use module exports instead.
 
 // ===== 재연결 및 요청 상태 =====
 export let isReconnecting = false;
