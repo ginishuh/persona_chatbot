@@ -13,7 +13,7 @@ import { showScreen, hideScreen } from './modules/ui/screens.js';
 import { initA11y, enableFocusTrap, disableFocusTrap, announce, focusMainAfterRoute } from './modules/ui/a11y.js';
 import { log, updateStatus, updateModelOptions } from './modules/ui/status.js';
 import { initMobileUI, openMobilePanel, closeMoreMenu } from './modules/ui/mobile.js';
-import { initExportModule, openBackupModal, renderBackupScreenView } from './modules/export/export.js';
+import { initExportModule, openBackupModal, renderBackupScreenView, downloadRoomMd } from './modules/export/export.js';
 import { initAdminPanel, openAdminModal, closeAdminModal } from './modules/admin/admin.js';
 import { connect, sendMessage, loadAppConfig } from './modules/websocket/connection.js';
 import {
@@ -385,17 +385,7 @@ function renderHistorySnapshotScreen(history) {
     }).join('');
 }
 
-function downloadRoomMd(rid) {
-    const params = new URLSearchParams({ room_id: rid });
-    if (appConfig.login_required && authToken) {
-        params.set('token', authToken);
-    } else if (sessionKey) {
-        // 비로그인 모드: session_key를 쿼리 파라미터로 전달
-        params.set('session_key', sessionKey);
-    }
-    const url = `/api/export/md?${params.toString()}`;
-    try { window.open(url, '_blank'); } catch (_) { location.href = url; }
-}
+
 
 // ===== 방 목록(Home) 모달 =====
 function populateRoomsModal() {
@@ -2595,7 +2585,6 @@ export {
     persistRooms,
     renderRoomsUI,
     sanitizeRoomName,
-    downloadRoomMd,
     collectRoomConfig,
     // UI 모달/스크린은 `web/modules/ui/*`로 분리되었으므로 더 이상 여기서 export하지 않습니다.
 };

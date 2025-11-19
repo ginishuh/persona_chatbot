@@ -230,3 +230,18 @@ export function renderBackupScreenView() {
         });
     });
 }
+
+/**
+ * 특정 채팅방의 마크다운을 다운로드하도록 외부에서 호출 가능한 헬퍼
+ * @param {string} rid 채팅방 ID
+ */
+export function downloadRoomMd(rid) {
+    const params = new URLSearchParams({ room_id: rid });
+    if (appConfig.login_required && authToken) {
+        params.set('token', authToken);
+    } else if (sessionKey) {
+        params.set('session_key', sessionKey);
+    }
+    const url = `/api/export/md?${params.toString()}`;
+    try { window.open(url, '_blank'); } catch (_) { location.href = url; }
+}
