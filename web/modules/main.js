@@ -12,7 +12,6 @@ import {
     persistRooms,
     renderRoomsUI,
     sanitizeRoomName,
-    downloadRoomMd,
     collectRoomConfig
 } from '../app.js';
 // UI helpers는 직접 모듈에서 import
