@@ -31,12 +31,8 @@ try {
 	window.sanitizeRoomName = sanitizeRoomName;
 	window.downloadRoomMd = downloadRoomMd;
 	window.collectRoomConfig = collectRoomConfig;
-	window.openModal = openModal;
-	window.closeModal = closeModal;
-	window.toggleModal = toggleModal;
-	window.isModalOpen = isModalOpen;
-	window.showScreen = showScreen;
-	window.hideScreen = hideScreen;
+	// UI 모달/스크린은 모듈로 직접 import 하도록 변경했습니다.
+	// (기존에는 전역에 노출했지만, Batch2에서 전역 제거 작업을 진행합니다.)
 } catch (e) {
 	// 안전: 브라우저 환경이 아닐 경우 조용히 실패
 	console.debug('[modules/main] global assignment skipped', e?.message || e);
