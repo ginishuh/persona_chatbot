@@ -81,10 +81,17 @@ export function setAuthRequired(required) {
 
 export function setIsAuthenticated(authenticated) {
     isAuthenticated = authenticated;
+    if (typeof window !== 'undefined') {
+        window.__isAuthenticated = authenticated;
+    }
 }
 
 export function setUserRole(role) {
     userRole = role;
+}
+
+if (typeof window !== 'undefined') {
+    window.__isAuthenticated = isAuthenticated;
 }
 
 // ===== 재연결 및 요청 상태 =====

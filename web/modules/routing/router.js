@@ -19,6 +19,7 @@ const getCurrentRoom = () => window.currentRoom;
  */
 const routeTable = [
     // 루트 경로는 매핑하지 않음 - ChatGPT 스타일 환영 화면만 표시
+    { pattern: /^\/rooms$/, view: 'room-list' },
     { pattern: /^\/rooms\/([^\/]+)$/, view: 'room-detail' },
     { pattern: /^\/rooms\/([^\/]+)\/settings$/, view: 'room-settings' },
     { pattern: /^\/rooms\/([^\/]+)\/history$/, view: 'room-history' },
@@ -77,6 +78,7 @@ export function resumePendingRoute(renderFn) {
  * @param {Function} handlers.hideScreen
  * @param {Function} handlers.openRoomsModal
  * @param {Function} handlers.openBackupModal
+ * @param {Function} handlers.renderBackupScreenView
  * @param {Function} handlers.persistRooms
  * @param {Function} handlers.renderRoomsUI
  * @param {Function} handlers.refreshRoomViews
@@ -90,6 +92,7 @@ export function renderCurrentScreenFrom(pathname, handlers = {}) {
         hideScreen = () => {},
         openRoomsModal = () => {},
         openBackupModal = () => {},
+        renderBackupScreenView = () => {},
         persistRooms = () => {},
         renderRoomsUI = () => {},
         refreshRoomViews = () => {},
@@ -170,7 +173,8 @@ export function renderCurrentScreenFrom(pathname, handlers = {}) {
 
     // 백업
     if (view === 'backup') {
-        openBackupModal();
+        renderBackupScreenView();
+        focusMainAfterRoute();
         return;
     }
 
