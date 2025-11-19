@@ -18,19 +18,7 @@ import {
 import { openModal, closeModal, toggleModal, isModalOpen } from './ui/modals.js';
 import { showScreen, hideScreen } from './ui/screens.js';
 
-// 중앙에서 한 곳에만 전역을 할당하도록 하여 `web/app.js`의 전역 노출을 줄입니다.
-try {
-	window.navigate = navigate;
-	window.sendMessage = sendMessage;
-	window.persistRooms = persistRooms;
-	window.renderRoomsUI = renderRoomsUI;
-	window.sanitizeRoomName = sanitizeRoomName;
-	window.collectRoomConfig = collectRoomConfig;
-	// UI 모달/스크린은 모듈로 직접 import 하도록 변경했습니다.
-	// (기존에는 전역에 노출했지만, Batch2에서 전역 제거 작업을 진행합니다.)
-} catch (e) {
-	// 안전: 브라우저 환경이 아닐 경우 조용히 실패
-	console.debug('[modules/main] global assignment skipped', e?.message || e);
-}
-
-console.debug('[modules/main] loaded');
+// 기존에 `window.*`로 노출하던 함수들은 이제 ES 모듈을 통해 직접 임포트해서 사용하세요.
+// 예: `import { navigate } from \'/modules/routing/router.js\'` 또는 필요한 모듈에서 직접 가져옵니다.
+// 레거시 호환용 전역 바인딩은 제거했습니다.
+console.debug('[modules/main] loaded (no global bindings)');
