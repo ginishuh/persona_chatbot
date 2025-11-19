@@ -2572,10 +2572,5 @@ export {
     sanitizeRoomName,
     downloadRoomMd,
     collectRoomConfig,
-    openModal,
-    closeModal,
-    toggleModal,
-    isModalOpen,
-    showScreen,
-    hideScreen
+    // UI 모달/스크린은 `web/modules/ui/*`로 분리되었으므로 더 이상 여기서 export하지 않습니다.
 };

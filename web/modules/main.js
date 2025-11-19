@@ -9,18 +9,15 @@ import '../app.js';
 import {
 	navigate,
 	sendMessage,
-	persistRooms,
-	renderRoomsUI,
-	sanitizeRoomName,
-	downloadRoomMd,
-	collectRoomConfig,
-	openModal,
-	closeModal,
-	toggleModal,
-	isModalOpen,
-	showScreen,
-	hideScreen
+    persistRooms,
+    renderRoomsUI,
+    sanitizeRoomName,
+    downloadRoomMd,
+    collectRoomConfig
 } from '../app.js';
+// UI helpers는 직접 모듈에서 import
+import { openModal, closeModal, toggleModal, isModalOpen } from './ui/modals.js';
+import { showScreen, hideScreen } from './ui/screens.js';
 
 // 중앙에서 한 곳에만 전역을 할당하도록 하여 `web/app.js`의 전역 노출을 줄입니다.
 try {
