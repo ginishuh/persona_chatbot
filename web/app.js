@@ -13,7 +13,9 @@ import { showScreen, hideScreen } from './modules/ui/screens.js';
 import { initA11y, enableFocusTrap, disableFocusTrap, announce, focusMainAfterRoute } from './modules/ui/a11y.js';
 import { log, updateStatus, updateModelOptions } from './modules/ui/status.js';
 import { initMobileUI, openMobilePanel, closeMoreMenu } from './modules/ui/mobile.js';
-import { initExportModule, openBackupModal, renderBackupScreenView } from './modules/export/export.js';
+import { setLastSettingsTrigger, focusLastSettingsTrigger } from './modules/ui/last_focus.js';
+import { setLastEditorTrigger, focusLastEditorTrigger } from './modules/ui/last_focus.js';
+import { initExportModule, openBackupModal, renderBackupScreenView, downloadRoomMd } from './modules/export/export.js';
 import { initAdminPanel, openAdminModal, closeAdminModal } from './modules/admin/admin.js';
 import { connect, sendMessage, loadAppConfig } from './modules/websocket/connection.js';
 import {
@@ -35,14 +37,31 @@ import {
     refreshInProgress, setRefreshInProgress
 } from './modules/core/state.js';
 import {
+    setPendingFileList,
+    consumePendingFileList,
+    setPendingTemplateSelect,
+    consumePendingTemplateSelect,
+    setPendingLoadType,
+    getPendingLoadType,
+    clearPendingLoadType,
+    setPendingTemplateItem,
+    consumePendingTemplateItem,
+    setPendingTemplateModal,
+    isPendingTemplateModal,
+    setPendingAddFromTemplate,
+    isPendingAddFromTemplate,
+    clearPendingTemplateModal,
+    clearPendingAddFromTemplate
+} from './modules/files/pending.js';
+import {
     refreshChatRefs, addChatMessage, addCharacterMessage,
     sendChatMessage, handleChatStream, handleChatComplete,
     bindChatEvents, updateChatInputState,
     updateTokenDisplay
 } from './modules/chat/chat.js';
 import {
-    refreshRoomRefs, renderRoomsUI, renderRoomsRightPanelList,
-    loadContext, collectRoomConfig, bindRoomEvents,
+    refreshRoomRefs, renderRoomsUI, renderRoomsRightPanelList, renderRoomsScreen,
+    loadContext, collectRoomConfig, bindRoomEvents, populateRoomsModal, openRoomsModal, closeRoomsModal,
     persistRooms, sanitizeRoomName
 } from './modules/rooms/rooms.js';
 import {
@@ -52,7 +71,7 @@ import {
 } from './modules/core/constants.js';
 
 // router.js가 접근할 수 있도록 window에도 바인딩
-window.__appConfig = appConfig;
+// `appConfig` is exported from modules/core/state and centrally bound in `web/modules/main.js`.
 
 // 컨텍스트 패널 요소 (Modules에서 관리하지 않는 나머지)
 const contextContent = document.getElementById('contextContent');
@@ -193,7 +212,7 @@ const LOGIN_ADULT_KEY = 'persona_login_adult';
 const routingHandlers = {
     showLoginModal,
     hideScreen,
-    openRoomsModal,
+    openRoomsModal: openRoomsModalWrapper,
     openBackupModal,
     renderBackupScreenView,
     persistRooms,
@@ -204,6 +223,14 @@ const routingHandlers = {
     focusMainAfterRoute,
     sendMessage  // router.js가 room_load/reset_sessions/get_context를 보내기 위해 필요
 };
+
+function openRoomsModalWrapper() {
+    if (appConfig.login_required && !isAuthenticated) {
+        showLoginModal();
+        return;
+    }
+    openRoomsModal();
+}
 
 // renderCurrentScreenFrom, navigate, resumePendingRoute의 wrapper 함수
 // 인라인 이벤트 핸들러와 기존 코드에서 사용할 수 있도록 handlers를 자동 주입
@@ -248,53 +275,7 @@ document.addEventListener('keydown', (e) => {
 // showScreen(), hideScreen()은 modules/ui/screens.js에서 import됨
 
 // Rooms 화면
-function renderRoomsScreen() {
-    const items = (Array.isArray(window.rooms) ? window.rooms : []).map(r => {
-        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
-        const title = (typeof r === 'object' && r.title) ? r.title : rid;
-        return { rid, title };
-    });
-        const cards = items.map(it => `
-            <button class="btn room-card" style="width:100%; text-align:left; margin-bottom:8px;" data-rid="${encodeURIComponent(it.rid)}">${it.title}</button>
-        `).join('');
-    const html = `
-      <section aria-labelledby="roomsScreenTitle">
-        <h1 id="roomsScreenTitle">채팅방</h1>
-        <div style="max-width:720px; margin-top:0.5rem;">${cards || '<div class="empty">채팅방이 없습니다.</div>'}</div>
-                <div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
-                    <button class="btn" id="roomsBackBtn">← 돌아가기</button>
-                    <button class="btn btn-primary" id="roomsNewBtn">+ 새 채팅방</button>
-                </div>
-      </section>`;
-    showScreen(html);
-        // bind room card clicks
-        document.querySelectorAll('.room-card').forEach(btn => {
-                btn.addEventListener('click', () => {
-                        const rid = decodeURIComponent(btn.getAttribute('data-rid') || '');
-                        navigate(`/rooms/${encodeURIComponent(rid)}`);
-                });
-        });
-        // back button
-        document.getElementById('roomsBackBtn')?.addEventListener('click', () => {
-                try { navigate(window.currentRoom ? `/rooms/${encodeURIComponent(window.currentRoom)}` : '/'); } catch (_) { navigate('/'); }
-        });
-        // new room button (same behavior as inline prompt before)
-        document.getElementById('roomsNewBtn')?.addEventListener('click', () => {
-                const name = prompt('새 채팅방 이름','room_'+Math.random().toString(36).slice(2,6));
-                if(!name) return;
-                const r = sanitizeRoomName(name);
-                if(!window.rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) window.rooms.push(r);
-                window.currentRoom = r;
-                persistRooms();
-                renderRoomsUI();
-                try {
-                        const cfg = collectRoomConfig(r);
-                        sendMessage({ action: 'room_save', room_id: r, config: cfg });
-                        setTimeout(() => sendMessage({ action: 'room_list' }), 300);
-                } catch (_) {}
-                navigate(`/rooms/${encodeURIComponent(r)}`);
-        });
-}
+// `renderRoomsScreen` moved to `web/modules/rooms/rooms.js`
 
 // Chat 전용 화면
 function renderRoomScreenView(roomId) {
@@ -366,93 +347,10 @@ function renderHistorySnapshotScreen(history) {
     }).join('');
 }
 
-function downloadRoomMd(rid) {
-    const params = new URLSearchParams({ room_id: rid });
-    if (appConfig.login_required && authToken) {
-        params.set('token', authToken);
-    } else if (sessionKey) {
-        // 비로그인 모드: session_key를 쿼리 파라미터로 전달
-        params.set('session_key', sessionKey);
-    }
-    const url = `/api/export/md?${params.toString()}`;
-    try { window.open(url, '_blank'); } catch (_) { location.href = url; }
-}
+
 
 // ===== 방 목록(Home) 모달 =====
-function populateRoomsModal() {
-    const wrap = document.getElementById('rmList');
-    const q = (document.getElementById('rmSearch')?.value || '').trim().toLowerCase();
-    if (!wrap) return;
-    wrap.innerHTML = '';
-    const items = (Array.isArray(window.rooms) ? window.rooms : []).map(r => {
-        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
-        const title = (typeof r === 'object' && r.title) ? r.title : rid;
-        return { rid, title };
-    }).filter(x => !q || x.title.toLowerCase().includes(q) || x.rid.toLowerCase().includes(q));
-    if (!items.length) {
-        wrap.innerHTML = '<div class="empty">채팅방이 없습니다.</div>';
-        return;
-    }
-    items.forEach(it => {
-        const container = document.createElement('div');
-        container.style = 'display:flex; gap:0.25rem; margin-bottom:6px; align-items:stretch;';
-
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-sm';
-        btn.style = 'flex:1; text-align:left;';
-        btn.textContent = it.title;
-        btn.addEventListener('click', () => {
-            closeRoomsModal();
-            navigate(`/rooms/${encodeURIComponent(it.rid)}`);
-        });
-
-        const delBtn = document.createElement('button');
-        delBtn.className = 'btn btn-sm btn-remove';
-        delBtn.textContent = '🗑️';
-        delBtn.title = '삭제';
-        delBtn.style = 'padding: 0.25rem 0.5rem;';
-        delBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (!confirm(`채팅방 '${it.title}' 을(를) 삭제하시겠습니까?`)) return;
-            sendMessage({ action: 'room_delete', room_id: it.rid });
-            // DB 삭제 후 목록 재동기화
-            setTimeout(() => sendMessage({ action: 'room_list' }), 300);
-            // 로컬 상태는 즉시 업데이트 (UX)
-            setRooms(window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid));
-            if (window.currentRoom === it.rid) {
-                setCurrentRoom(window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null);
-            }
-            persistRooms();
-            populateRoomsModal();
-            renderRoomsUI();
-            renderRoomsRightPanelList();
-            log('채팅방 삭제 완료', 'success');
-        });
-
-        container.appendChild(btn);
-        container.appendChild(delBtn);
-        wrap.appendChild(container);
-    });
-}
-
-function openRoomsModal() {
-    if (appConfig.login_required && !isAuthenticated) {
-        showLoginModal();
-        return;
-    }
-    const modal = document.getElementById('roomsModal');
-    if (!modal) return;
-    populateRoomsModal();
-    modal.classList.remove('hidden');
-    enableFocusTrap(modal);
-}
-
-function closeRoomsModal() {
-    const modal = document.getElementById('roomsModal');
-    if (!modal) return;
-    modal.classList.add('hidden');
-    disableFocusTrap(modal);
-}
+// `populateRoomsModal`, `openRoomsModal`, `closeRoomsModal` are implemented in `web/modules/rooms/rooms.js`
 
 document.getElementById('rmCloseBtn')?.addEventListener('click', closeRoomsModal);
 document.querySelector('#roomsModal .settings-modal-overlay')?.addEventListener('click', closeRoomsModal);
@@ -465,62 +363,7 @@ document.getElementById('rmNewBtn')?.addEventListener('click', () => {
     closeRoomsModal(); // 기존 모달 닫기
 });
 
-// ===== 3열 우측 패널: 방 목록 렌더 =====
-function renderRoomsRightPanelList() {
-    const list = document.getElementById('roomList');
-    const search = document.getElementById('roomSearch');
-    if (!list) return;
-    const q = (search?.value || '').trim().toLowerCase();
-    list.innerHTML = '';
-    const items = (Array.isArray(window.rooms) ? window.rooms : []).map(r => {
-        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
-        const title = (typeof r === 'object' && r.title) ? r.title : rid;
-        return { rid, title };
-    }).filter(x => !q || x.title.toLowerCase().includes(q) || x.rid.toLowerCase().includes(q));
-    if (!items.length) {
-        list.innerHTML = '<div class="empty">저장된 채팅방이 없습니다.</div>';
-        return;
-    }
-    items.forEach(it => {
-        const container = document.createElement('div');
-        container.style = 'display:flex; gap:0.25rem; margin-bottom:4px; align-items:stretch;';
-
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-sm';
-        btn.style = 'flex:1; text-align:left;';
-        btn.textContent = it.title;
-        btn.addEventListener('click', () => {
-            navigate(`/rooms/${encodeURIComponent(it.rid)}`);
-        });
-
-        const delBtn = document.createElement('button');
-        delBtn.className = 'btn btn-sm btn-remove';
-        delBtn.textContent = '🗑️';
-        delBtn.title = '삭제';
-        delBtn.style = 'padding: 0.25rem 0.5rem;';
-        delBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (!confirm(`채팅방 '${it.title}' 을(를) 삭제하시겠습니까?`)) return;
-            sendMessage({ action: 'room_delete', room_id: it.rid });
-            // DB 삭제 후 목록 재동기화
-            setTimeout(() => sendMessage({ action: 'room_list' }), 300);
-            // 로컬 상태는 즉시 업데이트 (UX)
-            setRooms(window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid));
-            if (window.currentRoom === it.rid) {
-                setCurrentRoom(window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null);
-            }
-            persistRooms();
-            renderRoomsUI();
-            renderRoomsRightPanelList();
-            refreshRoomViews();
-            log('채팅방 삭제 완료', 'success');
-        });
-
-        container.appendChild(btn);
-        container.appendChild(delBtn);
-        list.appendChild(container);
-    });
-}
+// `renderRoomsRightPanelList` implementation moved to `web/modules/rooms/rooms.js`
 
 const roomSearchInput = document.getElementById('roomSearch');
 const roomSearchBtn = document.getElementById('roomSearchBtn');
@@ -624,14 +467,14 @@ if (roomSelect) {
         setCurrentRoom(selectedValue);
         persistRooms();
         // 방 설정 로드 시도
-        sendMessage({ action: 'room_load', room_id: window.currentRoom });
+        sendMessage({ action: 'room_load', room_id: currentRoom });
         // 방 전환 시 해당 방의 프로바이더 세션 초기화(신규 프롬프트 적용)
-        sendMessage({ action: 'reset_sessions', room_id: window.currentRoom });
+        sendMessage({ action: 'reset_sessions', room_id: currentRoom });
         // 서사/히스토리 뷰 갱신
         refreshRoomViews();
         updateChatInputState(); // 입력 상태 업데이트
-        log(`채팅방 전환: ${window.currentRoom}`, 'info');
-        announce(`채팅방 전환: ${window.currentRoom}`);
+        log(`채팅방 전환: ${currentRoom}`, 'info');
+        announce(`채팅방 전환: ${currentRoom}`);
     });
 }
 if (roomAddBtn) {
@@ -644,7 +487,7 @@ if (roomAddBtn) {
 }
 
 // 채팅방 이름 모달 - 확인 버튼
-if (roomNameConfirmBtn) {
+    if (roomNameConfirmBtn) {
     roomNameConfirmBtn.addEventListener('click', () => {
         const name = roomNameInput.value.trim();
         if (!name) {
@@ -652,7 +495,9 @@ if (roomNameConfirmBtn) {
             return;
         }
         const r = sanitizeRoomName(name);
-        if (!window.rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) window.rooms.push(r);
+        if (!(Array.isArray(rooms) ? rooms : []).find(x => (typeof x === 'string' ? x : x.room_id) === r)) {
+            setRooms([...(Array.isArray(rooms) ? rooms : []), r]);
+        }
         setCurrentRoom(r);
         persistRooms();
         renderRoomsUI();
@@ -694,14 +539,14 @@ if (roomNameInput) {
     });
 }
 // roomDelBtn 제거됨 - 각 채팅방 옆에 개별 삭제 버튼으로 대체
-if (roomSaveBtn) {
+    if (roomSaveBtn) {
     roomSaveBtn.addEventListener('click', () => {
-        if (!window.currentRoom) {
+        if (!currentRoom) {
             alert('저장할 채팅방을 선택해주세요.');
             return;
         }
-        const config = collectRoomConfig(window.currentRoom);
-        sendMessage({ action: 'room_save', room_id: window.currentRoom, config });
+        const config = collectRoomConfig(currentRoom);
+        sendMessage({ action: 'room_save', room_id: currentRoom, config });
         setTimeout(() => { sendMessage({ action: 'room_list' }); renderRoomsRightPanelList(); }, 300);
         log('채팅방 설정 저장 완료', 'success');
     });
@@ -833,6 +678,7 @@ function scheduleTokenRefresh() {
     }, delay);
 }
 
+// SCOPE-GUARD (Issue #20): KEEP IN APP.JS — do NOT extract this function in this PR.
 function attemptTokenRefresh() {
     if (!authToken || !authTokenExpiresAt) {
         return;
@@ -879,6 +725,7 @@ function mapAuthError(code) {
     }
 }
 
+// SCOPE-GUARD (Issue #20): KEEP IN APP.JS — do NOT extract this function in this PR.
 function showLoginModal() {
     if (!loginModal) return;
     loginModal.classList.remove('hidden');
@@ -1346,7 +1193,7 @@ function handleMessage(msg) {
         case 'room_list':
             if (data.success) {
                 setRooms(data.rooms || []);
-                try { localStorage.setItem(ROOMS_KEY, JSON.stringify(window.rooms)); } catch (_) {}
+                try { localStorage.setItem(ROOMS_KEY, JSON.stringify(rooms)); } catch (_) {}
                 renderRoomsUI();
                 renderRoomsRightPanelList();
             } else {
@@ -1534,7 +1381,7 @@ addCharacterBtn.addEventListener('click', () => {
 
 // 컨텍스트 저장
 saveContextBtn.addEventListener('click', () => {
-    if (!window.currentRoom) {
+    if (!currentRoom) {
         alert('설정을 저장할 채팅방을 선택해주세요.');
         return;
     }
@@ -1561,7 +1408,7 @@ saveContextBtn.addEventListener('click', () => {
 
     sendMessage({
         action: 'set_context',
-        room_id: window.currentRoom,  // 채팅방별 독립 설정
+        room_id: currentRoom,  // 채팅방별 독립 설정
         world: worldInput.value.trim(),
         situation: situationInput.value.trim(),
         user_character: userCharacterData,
@@ -1581,9 +1428,9 @@ saveContextBtn.addEventListener('click', () => {
         choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
     });
     // 방 설정도 함께 저장(room.json)
-    try {
-        const config = collectRoomConfig(window.currentRoom);
-        sendMessage({ action: 'room_save', room_id: window.currentRoom, config });
+        try {
+        const config = collectRoomConfig(currentRoom);
+        sendMessage({ action: 'room_save', room_id: currentRoom, config });
     } catch (_) {}
     // 설정 적용 시 설정 모달 닫기
     try {
@@ -1717,7 +1564,7 @@ saveNarrativeBtn.addEventListener('click', () => {
     }
 
     const defaultName = `서사_${new Date().toISOString().slice(0, 10)}`;
-    const filename = prompt('채팅방(서사) 이름을 입력하세요:', window.currentRoom || defaultName) || window.currentRoom || defaultName;
+    const filename = prompt('채팅방(서사) 이름을 입력하세요:', currentRoom || defaultName) || currentRoom || defaultName;
     if (!filename) return;
 
     const exists = (typeof latestStories !== 'undefined') && latestStories.some(f => f.name === filename || f.filename === filename || f.filename === `${filename}.md`);
@@ -1733,12 +1580,12 @@ saveNarrativeBtn.addEventListener('click', () => {
         use_server: true,
         append: append
     });
-    window.currentRoom = filename;
-    try { localStorage.setItem(CURRENT_ROOM_KEY, window.currentRoom); } catch (_) {}
+    setCurrentRoom(filename);
+    try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
     // 서사 저장과 동시에 방 설정도 저장
     try {
-        const config = collectRoomConfig(window.currentRoom);
-        sendMessage({ action: 'room_save', room_id: window.currentRoom, config });
+        const config = collectRoomConfig(currentRoom);
+        sendMessage({ action: 'room_save', room_id: currentRoom, config });
     } catch (_) {}
 });
 
@@ -1761,7 +1608,7 @@ const settingsModalOverlay = document.querySelector('.settings-modal-overlay');
 // 설정 모달 열기
 if (settingsBtn) {
     settingsBtn.addEventListener('click', () => {
-        try { window.__lastSettingsTrigger = document.activeElement; } catch (_) {}
+        try { setLastSettingsTrigger(document.activeElement); } catch (_) {}
         settingsModal.classList.remove('hidden');
         enableFocusTrap(settingsModal);
     });
@@ -1772,7 +1619,7 @@ if (closeSettingsBtn) {
     closeSettingsBtn.addEventListener('click', () => {
         settingsModal.classList.add('hidden');
         disableFocusTrap(settingsModal);
-        try { window.__lastSettingsTrigger?.focus?.(); } catch (_) {}
+        focusLastSettingsTrigger();
     });
 }
 
@@ -1781,7 +1628,7 @@ if (settingsModalOverlay) {
     settingsModalOverlay.addEventListener('click', () => {
         settingsModal.classList.add('hidden');
         disableFocusTrap(settingsModal);
-        try { window.__lastSettingsTrigger?.focus?.(); } catch (_) {}
+        focusLastSettingsTrigger();
     });
 }
 
@@ -1855,14 +1702,14 @@ if (moreAdminBtn) {
 
 // 파일 목록 응답 처리
 function handleFileList(data) {
-    if (window.pendingFileListSelect) {
-        updateFileList(window.pendingFileListSelect, data.files);
-        window.pendingFileListSelect = null;
-        window.pendingFileListType = null;
-    } else if (window.pendingTemplateSelect) {
-        // 캐릭터 템플릿 목록 업데이트
-        updateTemplateList(window.pendingTemplateSelect, data.files);
-        window.pendingTemplateSelect = null;
+    const pfl = consumePendingFileList();
+    if (pfl.select) {
+        updateFileList(pfl.select, data.files);
+    } else {
+        const pts = consumePendingTemplateSelect();
+        if (pts) {
+            updateTemplateList(pts, data.files);
+        }
     }
 }
 
@@ -1886,8 +1733,7 @@ function updateTemplateList(selectElement, files) {
 // 파일 목록 로드
 async function loadFileList(fileType, selectElement) {
     // 응답 처리를 위해 fileType을 저장
-    window.pendingFileListType = fileType;
-    window.pendingFileListSelect = selectElement;
+    setPendingFileList(selectElement, fileType);
     sendMessage({ action: 'list_workspace_files', file_type: fileType });
 }
 
@@ -1915,13 +1761,14 @@ function handleFileLoad(data) {
     const filename = data.filename;
 
     // 파일 타입에 따라 적절한 곳에 로드
-    if (window.pendingLoadType === 'world') {
+    const pLoadType = getPendingLoadType();
+    if (pLoadType === 'world') {
         worldInput.value = content;
         worldSelect.value = filename.replace('.md', '');
-    } else if (window.pendingLoadType === 'situation') {
+    } else if (pLoadType === 'situation') {
         situationInput.value = content;
         situationSelect.value = filename.replace('.md', '');
-    } else if (window.pendingLoadType === 'my_character') {
+    } else if (pLoadType === 'my_character') {
         // 메타 파싱(이름/성별/나이)
         try {
             const nameEl = document.getElementById('userCharacterName');
@@ -1945,11 +1792,11 @@ function handleFileLoad(data) {
             userCharacterInput.value = content;
         }
         myCharacterSelect.value = filename.replace('.md', '');
-    } else if (window.pendingLoadType === 'char_template') {
+    } else if (pLoadType === 'char_template') {
         // 템플릿(JSON) 로드 → 모달 또는 캐릭터 아이템에 반영
         try {
             const obj = JSON.parse(content || '{}');
-            if (window.pendingAddFromTemplate) {
+            if (isPendingAddFromTemplate()) {
                 const name = obj.name || '';
                 const gender = obj.gender || '';
                 const age = (obj.age !== undefined && obj.age !== null) ? String(obj.age) : '';
@@ -1963,7 +1810,7 @@ function handleFileLoad(data) {
             participants.push({ name, gender, age, description: desc });
             renderParticipantsLeftPanel();
             renderParticipantsManagerList();
-            } else if (window.pendingTemplateModal) {
+            } else if (isPendingTemplateModal()) {
                 const ceName = document.getElementById('ceName');
                 const ceGender = document.getElementById('ceGender');
                 const ceAge = document.getElementById('ceAge');
@@ -1982,24 +1829,27 @@ function handleFileLoad(data) {
                 ceBoundaries.value = obj.boundaries || '';
                 ceExamples.value = Array.isArray(obj.examples) ? obj.examples.join('\n') : '';
                 ceTags.value = Array.isArray(obj.tags) ? obj.tags.join(', ') : '';
-            } else if (window.pendingTemplateItem) {
-                const nameInput = window.pendingTemplateItem.querySelector('.character-name-input');
-                const genderSelect = window.pendingTemplateItem.querySelector('.character-gender-input');
-                const ageInput = window.pendingTemplateItem.querySelector('.character-age-input');
-                const descInput = window.pendingTemplateItem.querySelector('.character-description-input');
-                if (obj.name) nameInput.value = obj.name;
-                if (obj.gender !== undefined) genderSelect.value = obj.gender;
-                if (obj.age !== undefined) ageInput.value = obj.age;
-                if (obj.description !== undefined) descInput.value = obj.description;
-                else if (obj.summary !== undefined) descInput.value = obj.summary;
+            } else {
+                const pendingItem = consumePendingTemplateItem();
+                if (pendingItem) {
+                    const nameInput = pendingItem.querySelector('.character-name-input');
+                    const genderSelect = pendingItem.querySelector('.character-gender-input');
+                    const ageInput = pendingItem.querySelector('.character-age-input');
+                    const descInput = pendingItem.querySelector('.character-description-input');
+                    if (obj.name) nameInput.value = obj.name;
+                    if (obj.gender !== undefined) genderSelect.value = obj.gender;
+                    if (obj.age !== undefined) ageInput.value = obj.age;
+                    if (obj.description !== undefined) descInput.value = obj.description;
+                    else if (obj.summary !== undefined) descInput.value = obj.summary;
+                }
             }
         } catch (e) {
             log('템플릿 JSON 파싱 실패', 'error');
         }
-        window.pendingTemplateItem = null;
-        window.pendingTemplateModal = false;
-        window.pendingAddFromTemplate = false;
-    } else if (window.pendingLoadType === 'my_profile') {
+        clearPendingTemplateModal();
+        clearPendingAddFromTemplate();
+        clearPendingLoadType();
+    } else if (getPendingLoadType() === 'my_profile') {
         try {
             const obj = JSON.parse(content || '{}');
             if (loginModal) { /* noop */ }
@@ -2014,9 +1864,12 @@ function handleFileLoad(data) {
         } catch (e) {
             log('내 프로필 JSON 파싱 실패', 'error');
         }
+        clearPendingLoadType();
     }
 }
 
+// SCOPE-GUARD (Issue #20): KEEP file save/load logic in `app.js` for now.
+// Do NOT extract saveFile/savePreset into separate modules in this PR; treat as future work.
 // 파일 저장
 async function saveFile(fileType, selectElement, contentGetter) {
     const filename = prompt(`파일 이름을 입력하세요 (${fileType}):`);
@@ -2038,7 +1891,7 @@ async function saveFile(fileType, selectElement, contentGetter) {
 
 // 파일 로드
 function loadFile(fileType, filename) {
-    window.pendingLoadType = fileType;
+    setPendingLoadType(fileType);
     sendMessage({
         action: 'load_workspace_file',
         file_type: fileType,
@@ -2152,7 +2005,7 @@ if (saveProfileJsonBtn) {
 
 if (loadProfileJsonBtn) {
     loadProfileJsonBtn.addEventListener('click', () => {
-        window.pendingLoadType = 'my_profile';
+        setPendingLoadType('my_profile');
         sendMessage({
             action: 'load_workspace_file',
             file_type: 'my_profile',
@@ -2196,7 +2049,7 @@ function openCharacterEditor(characterDiv) {
     // 템플릿 목록 갱신
     loadCharTemplateList(document.getElementById('ceTemplateSelect'));
 
-    try { window.__lastEditorTrigger = document.activeElement; } catch (_) {}
+    try { setLastEditorTrigger(document.activeElement); } catch (_) {}
     modal.classList.remove('hidden');
     enableFocusTrap(modal);
 }
@@ -2206,7 +2059,7 @@ function closeCharacterEditor() {
     modal.classList.add('hidden');
     disableFocusTrap(modal);
     currentEditingCharacterItem = null;
-    try { window.__lastEditorTrigger?.focus?.(); } catch (_) {}
+    try { focusLastEditorTrigger(); } catch (_) {}
 }
 
 function applyCharacterEditorToItem() {
@@ -2262,8 +2115,8 @@ document.getElementById('ceSaveTemplateBtn')?.addEventListener('click', saveChar
 document.getElementById('ceTemplateSelect')?.addEventListener('change', (e) => {
     const sel = e.target;
     if (sel.value) {
-        window.pendingLoadType = 'char_template';
-        window.pendingTemplateModal = true;
+        setPendingLoadType('char_template');
+        setPendingTemplateModal(true);
         sendMessage({ action: 'load_workspace_file', file_type: 'char_template', filename: sel.value });
     }
 });
@@ -2319,6 +2172,7 @@ function updatePresetList(files) {
 }
 
 // 현재 설정을 프리셋으로 저장
+// SCOPE-GUARD (Issue #20): KEEP file/preset management in `app.js` for now.
 function savePreset() {
     const filename = prompt('프리셋 이름을 입력하세요:');
     if (!filename) return;
@@ -2501,7 +2355,8 @@ injectStoryBtn?.addEventListener('click', () => alert('스토리 주입 기능�
 window.addEventListener('load', async () => {
     await loadAppConfig();
     setAppConfig(appConfig);
-    window.__appConfig = appConfig;
+    // Note: `appConfig` is provided by `web/modules/core/state.js` and imported where needed.
+    // SCOPE-GUARD (Issue #20): do NOT create or rely on page-level globals for appConfig.
     initA11y();
     initExportModule();
     initAdminPanel({
@@ -2564,18 +2419,4 @@ window.addEventListener('load', async () => {
 // app.js의 내부 함수들을 모듈화된 방식으로 외부에서 사용할 수 있도록 내보냅니다.
 // 전역 할당(window.*)은 `web/modules/main.js`에서 중앙 관리하도록 이전했습니다.
 
-export {
-    navigate,
-    sendMessage,
-    persistRooms,
-    renderRoomsUI,
-    sanitizeRoomName,
-    downloadRoomMd,
-    collectRoomConfig,
-    openModal,
-    closeModal,
-    toggleModal,
-    isModalOpen,
-    showScreen,
-    hideScreen
-};
+// Exports removed: `app.js` is now a page-level wiring module. Use `web/modules/*` for reusable APIs.

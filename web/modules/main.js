@@ -6,40 +6,8 @@
 // 모듈 수준에서 초기화 코드가 실행됩니다.
 // 모듈 진입점: 기존 `app.js`의 핵심 API를 중앙에서 전역에 할당합니다.
 import '../app.js';
-import {
-	navigate,
-	sendMessage,
-	persistRooms,
-	renderRoomsUI,
-	sanitizeRoomName,
-	downloadRoomMd,
-	collectRoomConfig,
-	openModal,
-	closeModal,
-	toggleModal,
-	isModalOpen,
-	showScreen,
-	hideScreen
-} from '../app.js';
 
-// 중앙에서 한 곳에만 전역을 할당하도록 하여 `web/app.js`의 전역 노출을 줄입니다.
-try {
-	window.navigate = navigate;
-	window.sendMessage = sendMessage;
-	window.persistRooms = persistRooms;
-	window.renderRoomsUI = renderRoomsUI;
-	window.sanitizeRoomName = sanitizeRoomName;
-	window.downloadRoomMd = downloadRoomMd;
-	window.collectRoomConfig = collectRoomConfig;
-	window.openModal = openModal;
-	window.closeModal = closeModal;
-	window.toggleModal = toggleModal;
-	window.isModalOpen = isModalOpen;
-	window.showScreen = showScreen;
-	window.hideScreen = hideScreen;
-} catch (e) {
-	// 안전: 브라우저 환경이 아닐 경우 조용히 실패
-	console.debug('[modules/main] global assignment skipped', e?.message || e);
-}
-
-console.debug('[modules/main] loaded');
+// 기존에 `window.*`로 노출하던 함수들은 이제 ES 모듈을 통해 직접 임포트해서 사용하세요.
+// 예: `import { navigate } from \'/modules/routing/router.js\'` 또는 필요한 모듈에서 직접 가져옵니다.
+// 레거시 호환용 전역 바인딩은 제거했습니다.
+console.debug('[modules/main] loaded (no global bindings)');

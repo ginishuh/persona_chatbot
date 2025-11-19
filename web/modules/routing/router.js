@@ -3,15 +3,13 @@
  * @module routing/router
  */
 
-import { setPendingRoutePath, setCurrentRoom } from '../core/state.js';
+import { setPendingRoutePath, setCurrentRoom, appConfig, isAuthenticated, pendingRoutePath, currentRoom } from '../core/state.js';
 
-// 상태를 app.js의 실제 값에서 읽도록 window 참조 사용
-// app.js가 이미 isAuthenticated, appConfig를 관리하고 있으며,
-// core/state.js와 동기화되지 않으므로 window를 통해 직접 접근
-const getAppConfig = () => window.__appConfig || {};
-const getIsAuthenticated = () => window.__isAuthenticated || false;
-const getPendingRoutePath = () => window.__pendingRoutePath || null;
-const getCurrentRoom = () => window.currentRoom;
+// core/state의 값을 직접 사용하도록 변경
+const getAppConfig = () => appConfig || {};
+const getIsAuthenticated = () => !!isAuthenticated;
+const getPendingRoutePath = () => pendingRoutePath || null;
+const getCurrentRoom = () => currentRoom;
 
 /**
  * 라우트 테이블
@@ -48,7 +46,6 @@ export function parsePathname(pathname) {
 export function rememberPendingRoute(pathname) {
     const path = pathname || '/';
     setPendingRoutePath(path);
-    window.__pendingRoutePath = path;
 }
 
 /**
@@ -62,7 +59,6 @@ export function resumePendingRoute(renderFn) {
         return;
     }
     setPendingRoutePath(null);
-    window.__pendingRoutePath = null;
     try {
         renderFn(pendingPath);
     } catch (_) {}

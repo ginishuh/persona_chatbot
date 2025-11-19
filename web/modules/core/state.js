@@ -81,18 +81,13 @@ export function setAuthRequired(required) {
 
 export function setIsAuthenticated(authenticated) {
     isAuthenticated = authenticated;
-    if (typeof window !== 'undefined') {
-        window.__isAuthenticated = authenticated;
-    }
 }
 
 export function setUserRole(role) {
     userRole = role;
 }
 
-if (typeof window !== 'undefined') {
-    window.__isAuthenticated = isAuthenticated;
-}
+// Note: do not write authentication state to `window` here; use module exports instead.
 
 // ===== 재연결 및 요청 상태 =====
 export let isReconnecting = false;
@@ -155,16 +150,10 @@ export function setSessionKey(key) {
 
 export function setRooms(newRooms) {
     rooms = newRooms;
-    if (typeof window !== 'undefined') {
-        window.rooms = newRooms;
-    }
 }
 
 export function setCurrentRoom(room) {
     currentRoom = room;
-    if (typeof window !== 'undefined') {
-        window.currentRoom = room;
-    }
 }
 
 export function setPendingRoutePath(path) {
