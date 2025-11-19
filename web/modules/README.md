@@ -74,13 +74,19 @@ web/modules/
 │   └── modals.js       ✅ 완료 (Phase 3)
 ├── utils/
 │   └── utils.js        ✅ 완료
-├── rooms/              ⏳ 예정 (Phase 4)
-├── chat/               ⏳ 예정 (Phase 4)
-├── context/            ⏳ 예정 (Phase 5)
-├── settings/           ⏳ 예정 (Phase 5)
-├── files/              ⏳ 예정 (Phase 5)
-├── admin/              ⏳ 예정 (Phase 6)
-└── export/             ⏳ 예정 (Phase 6)
+├── rooms/              ✅ 완료 (Room UI + modal + helpers)
+├── chat/               ✅ 완료 (Chat UI + stream handling)
+├── files/              ✅ 완료 (pending helpers, file load/save helpers)
+├── export/             ✅ 완료 (Export / backup UI helpers)
+├── admin/              ✅ 완료 (admin modal)
+├── ui/a11y.js          ✅ 완료
+├── ui/mobile.js        ✅ 완료
+├── ui/status.js        ✅ 완료
+├── ui/last_focus.js    ✅ 완료
+├── ui/screens.js       ✅ 완료
+├── ui/modals.js        ✅ 완료
+├── context/            (implemented via rooms + chat + export; not split for Issue #20)
+└── settings/           (kept inside `app.js` and `rooms` for now; not split in this PR)
 ```
 
 ## 사용 예시
@@ -122,6 +128,14 @@ async function initApp() {
 
 ### Phase 5-7
 자세한 계획은 [Issue #20 코멘트](https://github.com/ginishuh/persona_chatbot/issues/20#issuecomment-3544782509)를 참조하세요.
+
+**Issue #20 Done 기준:**
+
+- `web/modules/*` 아래에 재사용 가능한 도메인 로직(rooms, chat, files, export, admin, ui 등)이 존재하고 사용 중이다.
+- `web/app.js`는 페이지 진입점으로서 DOM 바인딩, 이벤트 연결, 모듈 조합(wiring)만 담당한다.
+- 사용자 정의 전역(`window.*`)은 더 이상 사용하지 않는다(브라우저 표준 API는 예외).
+
+위 기준을 만족하면 Issue #20은 완료로 간주하고, 이후 추가적인 모듈 세분화는 별도 이슈로 진행합니다.
 
 ## 주의사항
 

@@ -678,6 +678,7 @@ function scheduleTokenRefresh() {
     }, delay);
 }
 
+// SCOPE-GUARD (Issue #20): KEEP IN APP.JS — do NOT extract this function in this PR.
 function attemptTokenRefresh() {
     if (!authToken || !authTokenExpiresAt) {
         return;
@@ -724,6 +725,7 @@ function mapAuthError(code) {
     }
 }
 
+// SCOPE-GUARD (Issue #20): KEEP IN APP.JS — do NOT extract this function in this PR.
 function showLoginModal() {
     if (!loginModal) return;
     loginModal.classList.remove('hidden');
@@ -1866,6 +1868,8 @@ function handleFileLoad(data) {
     }
 }
 
+// SCOPE-GUARD (Issue #20): KEEP file save/load logic in `app.js` for now.
+// Do NOT extract saveFile/savePreset into separate modules in this PR; treat as future work.
 // 파일 저장
 async function saveFile(fileType, selectElement, contentGetter) {
     const filename = prompt(`파일 이름을 입력하세요 (${fileType}):`);
@@ -2168,6 +2172,7 @@ function updatePresetList(files) {
 }
 
 // 현재 설정을 프리셋으로 저장
+// SCOPE-GUARD (Issue #20): KEEP file/preset management in `app.js` for now.
 function savePreset() {
     const filename = prompt('프리셋 이름을 입력하세요:');
     if (!filename) return;
@@ -2350,7 +2355,8 @@ injectStoryBtn?.addEventListener('click', () => alert('스토리 주입 기능�
 window.addEventListener('load', async () => {
     await loadAppConfig();
     setAppConfig(appConfig);
-    window.__appConfig = appConfig;
+    // Note: `appConfig` is provided by `web/modules/core/state.js` and imported where needed.
+    // SCOPE-GUARD (Issue #20): do NOT create or rely on page-level globals for appConfig.
     initA11y();
     initExportModule();
     initAdminPanel({
@@ -2413,12 +2419,4 @@ window.addEventListener('load', async () => {
 // app.js의 내부 함수들을 모듈화된 방식으로 외부에서 사용할 수 있도록 내보냅니다.
 // 전역 할당(window.*)은 `web/modules/main.js`에서 중앙 관리하도록 이전했습니다.
 
-export {
-    navigate,
-    sendMessage,
-    persistRooms,
-    renderRoomsUI,
-    sanitizeRoomName,
-    collectRoomConfig,
-    // UI 모달/스크린은 `web/modules/ui/*`로 분리되었으므로 더 이상 여기서 export하지 않습니다.
-};
+// Exports removed: `app.js` is now a page-level wiring module. Use `web/modules/*` for reusable APIs.

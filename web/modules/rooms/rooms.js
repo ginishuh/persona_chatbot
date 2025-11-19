@@ -1,5 +1,5 @@
 import { sendMessage } from '../websocket/connection.js';
-import { log } from '../utils/logger.js';
+import { log } from '../ui/status.js';
 import { rooms, currentRoom, setRooms, setCurrentRoom, setParticipants } from '../core/state.js';
 import { navigate } from '../routing/router.js';
 import { showScreen } from '../ui/screens.js';

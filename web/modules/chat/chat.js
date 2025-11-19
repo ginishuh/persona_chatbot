@@ -1,6 +1,6 @@
 import { sendMessage } from '../websocket/connection.js';
 import { isAuthenticated, authRequired, getCharacterColor } from '../core/state.js';
-import { log } from '../utils/logger.js';
+import { log } from '../ui/status.js';
 import { isTouchDevice } from '../utils/utils.js';
 import { parseMultiCharacterResponse } from './characters.js';
 
