@@ -249,7 +249,7 @@ document.addEventListener('keydown', (e) => {
 
 // Rooms 화면
 function renderRoomsScreen() {
-    const items = (Array.isArray(window.rooms) ? window.rooms : []).map(r => {
+    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
         const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
         const title = (typeof r === 'object' && r.title) ? r.title : rid;
         return { rid, title };
@@ -271,28 +271,30 @@ function renderRoomsScreen() {
         document.querySelectorAll('.room-card').forEach(btn => {
                 btn.addEventListener('click', () => {
                         const rid = decodeURIComponent(btn.getAttribute('data-rid') || '');
-                        navigate(`/rooms/${encodeURIComponent(rid)}`);
+                navigate(`/rooms/${encodeURIComponent(rid)}`);
                 });
         });
         // back button
         document.getElementById('roomsBackBtn')?.addEventListener('click', () => {
-                try { navigate(window.currentRoom ? `/rooms/${encodeURIComponent(window.currentRoom)}` : '/'); } catch (_) { navigate('/'); }
+            try { navigate(currentRoom ? `/rooms/${encodeURIComponent(currentRoom)}` : '/'); } catch (_) { navigate('/'); }
         });
         // new room button (same behavior as inline prompt before)
         document.getElementById('roomsNewBtn')?.addEventListener('click', () => {
-                const name = prompt('새 채팅방 이름','room_'+Math.random().toString(36).slice(2,6));
-                if(!name) return;
-                const r = sanitizeRoomName(name);
-                if(!window.rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) window.rooms.push(r);
-                window.currentRoom = r;
-                persistRooms();
-                renderRoomsUI();
-                try {
-                        const cfg = collectRoomConfig(r);
-                        sendMessage({ action: 'room_save', room_id: r, config: cfg });
-                        setTimeout(() => sendMessage({ action: 'room_list' }), 300);
-                } catch (_) {}
-                navigate(`/rooms/${encodeURIComponent(r)}`);
+            const name = prompt('새 채팅방 이름','room_'+Math.random().toString(36).slice(2,6));
+            if(!name) return;
+            const r = sanitizeRoomName(name);
+            if(!rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) {
+                setRooms([...(Array.isArray(rooms) ? rooms : []), r]);
+            }
+            setCurrentRoom(r);
+            persistRooms();
+            renderRoomsUI();
+            try {
+                const cfg = collectRoomConfig(r);
+                sendMessage({ action: 'room_save', room_id: r, config: cfg });
+                setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+            } catch (_) {}
+            navigate(`/rooms/${encodeURIComponent(r)}`);
         });
 }
 
@@ -384,8 +386,8 @@ function populateRoomsModal() {
     const q = (document.getElementById('rmSearch')?.value || '').trim().toLowerCase();
     if (!wrap) return;
     wrap.innerHTML = '';
-    const items = (Array.isArray(window.rooms) ? window.rooms : []).map(r => {
-        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+           const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
         const title = (typeof r === 'object' && r.title) ? r.title : rid;
         return { rid, title };
     }).filter(x => !q || x.title.toLowerCase().includes(q) || x.rid.toLowerCase().includes(q));
@@ -418,9 +420,10 @@ function populateRoomsModal() {
             // DB 삭제 후 목록 재동기화
             setTimeout(() => sendMessage({ action: 'room_list' }), 300);
             // 로컬 상태는 즉시 업데이트 (UX)
-            setRooms(window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid));
-            if (window.currentRoom === it.rid) {
-                setCurrentRoom(window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null);
+            setRooms((Array.isArray(rooms) ? rooms : []).filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid));
+            if (currentRoom === it.rid) {
+                const next = (Array.isArray(rooms) && rooms.length > 0) ? (typeof rooms[0] === 'string' ? rooms[0] : rooms[0].room_id) : null;
+                setCurrentRoom(next);
             }
             persistRooms();
             populateRoomsModal();
@@ -472,8 +475,8 @@ function renderRoomsRightPanelList() {
     if (!list) return;
     const q = (search?.value || '').trim().toLowerCase();
     list.innerHTML = '';
-    const items = (Array.isArray(window.rooms) ? window.rooms : []).map(r => {
-        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+           const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
         const title = (typeof r === 'object' && r.title) ? r.title : rid;
         return { rid, title };
     }).filter(x => !q || x.title.toLowerCase().includes(q) || x.rid.toLowerCase().includes(q));
@@ -505,9 +508,9 @@ function renderRoomsRightPanelList() {
             // DB 삭제 후 목록 재동기화
             setTimeout(() => sendMessage({ action: 'room_list' }), 300);
             // 로컬 상태는 즉시 업데이트 (UX)
-            setRooms(window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid));
-            if (window.currentRoom === it.rid) {
-                setCurrentRoom(window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null);
+            setRooms((Array.isArray(rooms) ? rooms : []).filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid));
+            if (currentRoom === it.rid) {
+                setCurrentRoom((Array.isArray(rooms) && rooms.length > 0) ? (typeof rooms[0] === 'string' ? rooms[0] : rooms[0].room_id) : null);
             }
             persistRooms();
             renderRoomsUI();
@@ -624,14 +627,14 @@ if (roomSelect) {
         setCurrentRoom(selectedValue);
         persistRooms();
         // 방 설정 로드 시도
-        sendMessage({ action: 'room_load', room_id: window.currentRoom });
+        sendMessage({ action: 'room_load', room_id: currentRoom });
         // 방 전환 시 해당 방의 프로바이더 세션 초기화(신규 프롬프트 적용)
-        sendMessage({ action: 'reset_sessions', room_id: window.currentRoom });
+        sendMessage({ action: 'reset_sessions', room_id: currentRoom });
         // 서사/히스토리 뷰 갱신
         refreshRoomViews();
         updateChatInputState(); // 입력 상태 업데이트
-        log(`채팅방 전환: ${window.currentRoom}`, 'info');
-        announce(`채팅방 전환: ${window.currentRoom}`);
+        log(`채팅방 전환: ${currentRoom}`, 'info');
+        announce(`채팅방 전환: ${currentRoom}`);
     });
 }
 if (roomAddBtn) {
@@ -644,7 +647,7 @@ if (roomAddBtn) {
 }
 
 // 채팅방 이름 모달 - 확인 버튼
-if (roomNameConfirmBtn) {
+    if (roomNameConfirmBtn) {
     roomNameConfirmBtn.addEventListener('click', () => {
         const name = roomNameInput.value.trim();
         if (!name) {
@@ -652,7 +655,9 @@ if (roomNameConfirmBtn) {
             return;
         }
         const r = sanitizeRoomName(name);
-        if (!window.rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) window.rooms.push(r);
+        if (!(Array.isArray(rooms) ? rooms : []).find(x => (typeof x === 'string' ? x : x.room_id) === r)) {
+            setRooms([...(Array.isArray(rooms) ? rooms : []), r]);
+        }
         setCurrentRoom(r);
         persistRooms();
         renderRoomsUI();
@@ -694,14 +699,14 @@ if (roomNameInput) {
     });
 }
 // roomDelBtn 제거됨 - 각 채팅방 옆에 개별 삭제 버튼으로 대체
-if (roomSaveBtn) {
+    if (roomSaveBtn) {
     roomSaveBtn.addEventListener('click', () => {
-        if (!window.currentRoom) {
+        if (!currentRoom) {
             alert('저장할 채팅방을 선택해주세요.');
             return;
         }
-        const config = collectRoomConfig(window.currentRoom);
-        sendMessage({ action: 'room_save', room_id: window.currentRoom, config });
+        const config = collectRoomConfig(currentRoom);
+        sendMessage({ action: 'room_save', room_id: currentRoom, config });
         setTimeout(() => { sendMessage({ action: 'room_list' }); renderRoomsRightPanelList(); }, 300);
         log('채팅방 설정 저장 완료', 'success');
     });
@@ -1346,7 +1351,7 @@ function handleMessage(msg) {
         case 'room_list':
             if (data.success) {
                 setRooms(data.rooms || []);
-                try { localStorage.setItem(ROOMS_KEY, JSON.stringify(window.rooms)); } catch (_) {}
+                try { localStorage.setItem(ROOMS_KEY, JSON.stringify(rooms)); } catch (_) {}
                 renderRoomsUI();
                 renderRoomsRightPanelList();
             } else {
@@ -1534,7 +1539,7 @@ addCharacterBtn.addEventListener('click', () => {
 
 // 컨텍스트 저장
 saveContextBtn.addEventListener('click', () => {
-    if (!window.currentRoom) {
+    if (!currentRoom) {
         alert('설정을 저장할 채팅방을 선택해주세요.');
         return;
     }
@@ -1561,7 +1566,7 @@ saveContextBtn.addEventListener('click', () => {
 
     sendMessage({
         action: 'set_context',
-        room_id: window.currentRoom,  // 채팅방별 독립 설정
+        room_id: currentRoom,  // 채팅방별 독립 설정
         world: worldInput.value.trim(),
         situation: situationInput.value.trim(),
         user_character: userCharacterData,
@@ -1581,9 +1586,9 @@ saveContextBtn.addEventListener('click', () => {
         choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
     });
     // 방 설정도 함께 저장(room.json)
-    try {
-        const config = collectRoomConfig(window.currentRoom);
-        sendMessage({ action: 'room_save', room_id: window.currentRoom, config });
+        try {
+        const config = collectRoomConfig(currentRoom);
+        sendMessage({ action: 'room_save', room_id: currentRoom, config });
     } catch (_) {}
     // 설정 적용 시 설정 모달 닫기
     try {
@@ -1717,7 +1722,7 @@ saveNarrativeBtn.addEventListener('click', () => {
     }
 
     const defaultName = `서사_${new Date().toISOString().slice(0, 10)}`;
-    const filename = prompt('채팅방(서사) 이름을 입력하세요:', window.currentRoom || defaultName) || window.currentRoom || defaultName;
+    const filename = prompt('채팅방(서사) 이름을 입력하세요:', currentRoom || defaultName) || currentRoom || defaultName;
     if (!filename) return;
 
     const exists = (typeof latestStories !== 'undefined') && latestStories.some(f => f.name === filename || f.filename === filename || f.filename === `${filename}.md`);
@@ -1733,12 +1738,12 @@ saveNarrativeBtn.addEventListener('click', () => {
         use_server: true,
         append: append
     });
-    window.currentRoom = filename;
-    try { localStorage.setItem(CURRENT_ROOM_KEY, window.currentRoom); } catch (_) {}
+    setCurrentRoom(filename);
+    try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
     // 서사 저장과 동시에 방 설정도 저장
     try {
-        const config = collectRoomConfig(window.currentRoom);
-        sendMessage({ action: 'room_save', room_id: window.currentRoom, config });
+        const config = collectRoomConfig(currentRoom);
+        sendMessage({ action: 'room_save', room_id: currentRoom, config });
     } catch (_) {}
 });
 

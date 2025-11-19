@@ -155,16 +155,10 @@ export function setSessionKey(key) {
 
 export function setRooms(newRooms) {
     rooms = newRooms;
-    if (typeof window !== 'undefined') {
-        window.rooms = newRooms;
-    }
 }
 
 export function setCurrentRoom(room) {
     currentRoom = room;
-    if (typeof window !== 'undefined') {
-        window.currentRoom = room;
-    }
 }
 
 export function setPendingRoutePath(path) {

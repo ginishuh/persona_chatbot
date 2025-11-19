@@ -26,7 +26,6 @@ try {
 	window.persistRooms = persistRooms;
 	window.renderRoomsUI = renderRoomsUI;
 	window.sanitizeRoomName = sanitizeRoomName;
-	window.downloadRoomMd = downloadRoomMd;
 	window.collectRoomConfig = collectRoomConfig;
 	// UI 모달/스크린은 모듈로 직접 import 하도록 변경했습니다.
 	// (기존에는 전역에 노출했지만, Batch2에서 전역 제거 작업을 진행합니다.)

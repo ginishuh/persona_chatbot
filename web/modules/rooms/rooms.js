@@ -310,7 +310,7 @@ export function applyContextToSettingsScreen(ctx) {
 }
 
 export function renderSettingsScreenView(roomId) {
-    const html = `
+        const html = `
       <section aria-labelledby="settingsScreenTitle">
         <h1 id="settingsScreenTitle">설정 — ${roomId}</h1>
         <div style="display:grid; gap:0.75rem; max-width:920px;">
@@ -337,10 +337,10 @@ export function renderSettingsScreenView(roomId) {
               <option value="gemini">Gemini</option>
             </select>
           </div>
-          <div style="display:flex; gap:0.5rem;">
-            <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(roomId)}')">← 돌아가기</button>
-            <button id="sSaveBtn" class="btn btn-primary">저장</button>
-          </div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="btn" id="sBackBtn">← 돌아가기</button>
+                        <button id="sSaveBtn" class="btn btn-primary">저장</button>
+                    </div>
         </div>
       </section>`;
     showScreen(html);
@@ -356,6 +356,12 @@ export function renderSettingsScreenView(roomId) {
     } catch (_) {}
 
     const save = document.getElementById('sSaveBtn');
+    const back = document.getElementById('sBackBtn');
+
+    back?.addEventListener('click', () => {
+        navigate(`/rooms/${encodeURIComponent(roomId)}`);
+    });
+
     save?.addEventListener('click', () => {
         const ctx = {
             world: document.getElementById('sWorld')?.value || '',
