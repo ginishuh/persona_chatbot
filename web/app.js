@@ -254,24 +254,51 @@ function renderRoomsScreen() {
         const title = (typeof r === 'object' && r.title) ? r.title : rid;
         return { rid, title };
     });
-    const cards = items.map(it => `
-      <button class="btn" style="width:100%; text-align:left; margin-bottom:8px;" onclick="navigate('/rooms/${encodeURIComponent(it.rid)}')">${it.title}</button>
-    `).join('');
+        const cards = items.map(it => `
+            <button class="btn room-card" style="width:100%; text-align:left; margin-bottom:8px;" data-rid="${encodeURIComponent(it.rid)}">${it.title}</button>
+        `).join('');
     const html = `
       <section aria-labelledby="roomsScreenTitle">
         <h1 id="roomsScreenTitle">채팅방</h1>
         <div style="max-width:720px; margin-top:0.5rem;">${cards || '<div class="empty">채팅방이 없습니다.</div>'}</div>
-        <div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
-          <button class="btn" onclick="navigate(window.currentRoom ? '/rooms/${encodeURIComponent(window.currentRoom)}' : '/')">← 돌아가기</button>
-          <button class="btn btn-primary" onclick="(function(){ const name=prompt('새 채팅방 이름','room_'+Math.random().toString(36).slice(2,6)); if(!name) return; const r=sanitizeRoomName(name); if(!window.rooms.find(x => (typeof x==='string'?x:x.room_id)===r)) window.rooms.push(r); window.currentRoom=r; persistRooms(); renderRoomsUI(); const cfg=collectRoomConfig(r); sendMessage({action:'room_save', room_id:r, config:cfg}); setTimeout(()=>sendMessage({action:'room_list'}),300); navigate('/rooms/'+encodeURIComponent(r)); })()">+ 새 채팅방</button>
-        </div>
+                <div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
+                    <button class="btn" id="roomsBackBtn">← 돌아가기</button>
+                    <button class="btn btn-primary" id="roomsNewBtn">+ 새 채팅방</button>
+                </div>
       </section>`;
     showScreen(html);
+        // bind room card clicks
+        document.querySelectorAll('.room-card').forEach(btn => {
+                btn.addEventListener('click', () => {
+                        const rid = decodeURIComponent(btn.getAttribute('data-rid') || '');
+                        navigate(`/rooms/${encodeURIComponent(rid)}`);
+                });
+        });
+        // back button
+        document.getElementById('roomsBackBtn')?.addEventListener('click', () => {
+                try { navigate(window.currentRoom ? `/rooms/${encodeURIComponent(window.currentRoom)}` : '/'); } catch (_) { navigate('/'); }
+        });
+        // new room button (same behavior as inline prompt before)
+        document.getElementById('roomsNewBtn')?.addEventListener('click', () => {
+                const name = prompt('새 채팅방 이름','room_'+Math.random().toString(36).slice(2,6));
+                if(!name) return;
+                const r = sanitizeRoomName(name);
+                if(!window.rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) window.rooms.push(r);
+                window.currentRoom = r;
+                persistRooms();
+                renderRoomsUI();
+                try {
+                        const cfg = collectRoomConfig(r);
+                        sendMessage({ action: 'room_save', room_id: r, config: cfg });
+                        setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+                } catch (_) {}
+                navigate(`/rooms/${encodeURIComponent(r)}`);
+        });
 }
 
 // Chat 전용 화면
 function renderRoomScreenView(roomId) {
-    const html = `
+        const html = `
       <section aria-labelledby="roomScreenTitle" style="max-width:900px;">
         <h1 id="roomScreenTitle">대화 — ${roomId}</h1>
         <div id="chatMessages" class="chat-messages" style="height:60vh; overflow:auto; border:1px solid #e8ecef; border-radius:6px; padding:0.75rem; background:#fff; margin-top:0.5rem;">
@@ -281,14 +308,18 @@ function renderRoomScreenView(roomId) {
           <textarea id="chatInput" rows="3" class="input" placeholder="메시지를 입력하세요..." style="flex:1;"></textarea>
           <button id="sendChatBtn" class="btn btn-primary">전송</button>
         </div>
-        <div style="margin-top:0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
-          <button class="btn" onclick="navigate('/')">← 방 목록</button>
-          <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(roomId)}/settings')">⚙️ 설정</button>
-          <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(roomId)}/history')">📜 히스토리</button>
-        </div>
+                <div style="margin-top:0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button class="btn" id="roomBackBtn">← 방 목록</button>
+                    <button class="btn" id="roomSettingsBtn">⚙️ 설정</button>
+                    <button class="btn" id="roomHistoryBtn">📜 히스토리</button>
+                </div>
       </section>`;
     showScreen(html);
-    bindChatEvents();
+        // bind navigation buttons
+        document.getElementById('roomBackBtn')?.addEventListener('click', () => navigate('/'));
+        document.getElementById('roomSettingsBtn')?.addEventListener('click', () => navigate(`/rooms/${encodeURIComponent(roomId)}/settings`));
+        document.getElementById('roomHistoryBtn')?.addEventListener('click', () => navigate(`/rooms/${encodeURIComponent(roomId)}/history`));
+        bindChatEvents();
 }
 
 // History 화면
@@ -303,18 +334,20 @@ function renderHistoryScreenView(id) {
     const jsonUrl = `/api/export?${params.toString()}`;
     const ndjsonUrl = `/api/export/stream?${params.toString()}`;
 
-    const html = `
+        const html = `
       <section aria-labelledby="historyScreenTitle">
         <h1 id="historyScreenTitle">히스토리</h1>
         <div id="historyScreenBody">로딩...</div>
         <div style="display:flex; gap:0.5rem; margin-top:0.5rem; flex-wrap:wrap;">
-          <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(id)}')">← 돌아가기</button>
-          <button class="btn" onclick="downloadRoomMd('${id}')">MD 다운로드</button>
+                    <button class="btn" id="historyBackBtn">← 돌아가기</button>
+                    <button class="btn" id="historyDownloadBtn">MD 다운로드</button>
           <a class="btn" href="${jsonUrl}" target="_blank">JSON</a>
           <a class="btn" href="${ndjsonUrl}" target="_blank">NDJSON</a>
         </div>
       </section>`;
     showScreen(html);
+        document.getElementById('historyBackBtn')?.addEventListener('click', () => navigate(`/rooms/${encodeURIComponent(id)}`));
+        document.getElementById('historyDownloadBtn')?.addEventListener('click', () => downloadRoomMd(id));
     // 데이터 로드
     sendMessage({ action: 'get_history_snapshot', room_id: id });
 }
@@ -2526,29 +2559,23 @@ window.addEventListener('load', async () => {
 // stories UI는 비활성화 상태이므로 관련 이벤트 없음
 
 // ============================================================================
-// ES 모듈 글로벌 바인딩
+// ES 모듈: 핵심 API를 모듈로 export
 // ============================================================================
-// app.js를 ES 모듈로 전환하면서 모든 함수가 모듈 스코프로 이동했습니다.
-// 템플릿의 인라인 이벤트 핸들러(onclick 등)는 전역(window) 스코프에서 함수를 찾기 때문에,
-// 필요한 함수들을 명시적으로 window 객체에 바인딩합니다.
+// app.js의 내부 함수들을 모듈화된 방식으로 외부에서 사용할 수 있도록 내보냅니다.
+// 전역 할당(window.*)은 `web/modules/main.js`에서 중앙 관리하도록 이전했습니다.
 
-// 라우팅 함수
-window.navigate = navigate;
-
-// 채팅방 관리 함수
-window.sendMessage = sendMessage;
-window.persistRooms = persistRooms;
-window.renderRoomsUI = renderRoomsUI;
-window.sanitizeRoomName = sanitizeRoomName;
-window.downloadRoomMd = downloadRoomMd;
-window.collectRoomConfig = collectRoomConfig;
-
-// 채팅방 상태 변수는 이미 window에 직접 선언됨 (173-174줄)
-
-// UI 모듈에서 임포트한 함수들도 노출
-window.openModal = openModal;
-window.closeModal = closeModal;
-window.toggleModal = toggleModal;
-window.isModalOpen = isModalOpen;
-window.showScreen = showScreen;
-window.hideScreen = hideScreen;
+export {
+    navigate,
+    sendMessage,
+    persistRooms,
+    renderRoomsUI,
+    sanitizeRoomName,
+    downloadRoomMd,
+    collectRoomConfig,
+    openModal,
+    closeModal,
+    toggleModal,
+    isModalOpen,
+    showScreen,
+    hideScreen
+};
