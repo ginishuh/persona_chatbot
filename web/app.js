@@ -10,7 +10,12 @@ import {
     initRouter as routerInitRouter
 } from './modules/routing/router.js';
 import { showScreen, hideScreen } from './modules/ui/screens.js';
-import { connect as connectWebSocket, sendMessage } from './modules/websocket/connection.js';
+import { initA11y, enableFocusTrap, disableFocusTrap, announce, focusMainAfterRoute } from './modules/ui/a11y.js';
+import { log, updateStatus, updateModelOptions } from './modules/ui/status.js';
+import { initMobileUI, openMobilePanel, closeMoreMenu } from './modules/ui/mobile.js';
+import { initExportModule, openBackupModal, renderBackupScreenView } from './modules/export/export.js';
+import { initAdminPanel, openAdminModal, closeAdminModal } from './modules/admin/admin.js';
+import { connect, sendMessage, loadAppConfig } from './modules/websocket/connection.js';
 import {
     ws, appConfig, setAppConfig,
     authRequired, setAuthRequired, isAuthenticated, setIsAuthenticated,
@@ -40,7 +45,6 @@ import {
     loadContext, collectRoomConfig, bindRoomEvents,
     persistRooms, sanitizeRoomName
 } from './modules/rooms/rooms.js';
-import { log } from './modules/utils/logger.js';
 import {
     AUTH_TOKEN_KEY, AUTH_EXP_KEY, REFRESH_TOKEN_KEY, REFRESH_EXP_KEY,
     USER_ROLE_KEY, SESSION_KEY_KEY, ROOMS_KEY, CURRENT_ROOM_KEY,
@@ -49,11 +53,6 @@ import {
 
 // router.js가 접근할 수 있도록 window에도 바인딩
 window.__appConfig = appConfig;
-
-// DOM 요소
-const statusIndicator = document.getElementById('statusIndicator');
-const statusText = document.getElementById('statusText');
-const logArea = document.getElementById('logArea');
 
 // 컨텍스트 패널 요소 (Modules에서 관리하지 않는 나머지)
 const contextContent = document.getElementById('contextContent');
@@ -160,8 +159,6 @@ const moreAdminBtn = document.getElementById('moreAdminBtn');
 const adminBtn = document.getElementById('adminBtn');
 const adminModal = document.getElementById('adminModal');
 const adminCloseBtn = document.getElementById('adminCloseBtn');
-const pendingUsersList = document.getElementById('pendingUsersList');
-const noPendingUsers = document.getElementById('noPendingUsers');
 
 // 채팅방 이름 입력 모달 요소
 const roomNameModal = document.getElementById('roomNameModal');
@@ -196,6 +193,7 @@ const routingHandlers = {
     hideScreen,
     openRoomsModal,
     openBackupModal,
+    renderBackupScreenView,
     persistRooms,
     renderRoomsUI,
     refreshRoomViews,
@@ -223,119 +221,6 @@ function initRouter(handlers) {
     routerInitRouter(handlers);
 }
 
-// ===== 접근성(A11y) 보완 =====
-function focusMainAfterRoute() {
-    // 채팅 입력으로 포커스 이동, 없으면 첫 번째 헤더로
-    try {
-        if (chatInput && !chatInput.disabled) {
-            chatInput.focus();
-            return;
-        }
-        const h1 = document.querySelector('main h1, header h1');
-        if (h1) h1.tabIndex = -1, h1.focus();
-    } catch (_) {}
-}
-
-function applyARIA() {
-    const pairs = [
-        [sendChatBtn, '메시지 전송'],
-        [clearHistoryBtn, '대화 히스토리 초기화'],
-        [resetSessionsBtn, '세션 초기화'],
-        [roomAddBtn, '채팅방 추가'],
-        // [roomDelBtn, '채팅방 삭제'], // 제거됨 - 개별 삭제 버튼으로 대체
-        [roomSaveBtn, '채팅방 설정 저장'],
-        [saveContextBtn, '컨텍스트 저장'],
-        [document.getElementById('narrativeMenuBtn'), '히스토리 패널 열기'],
-        [document.getElementById('moreMenuBtn'), '더보기 메뉴 열기'],
-        [document.getElementById('participantsBtn'), '참여자 관리'],
-        [document.getElementById('settingsBtn'), '설정 열기'],
-        [document.getElementById('hamburgerBtn'), '좌측 패널 토글'],
-        [document.getElementById('narrativeMenuBtn'), '우측 패널 토글'],
-        [document.getElementById('loginButton'), '로그인 제출'],
-        [document.getElementById('autoLoginButton'), '자동 로그인']
-    ];
-    pairs.forEach(([el, label]) => { try { el?.setAttribute('aria-label', label); } catch (_) {} });
-    try { narrativeContent?.setAttribute('aria-live', 'polite'); } catch (_) {}
-}
-
-function injectSkipLink() {
-    try {
-        const a = document.createElement('a');
-        a.href = '#';
-        a.className = 'skip-link';
-        a.textContent = '본문으로 건너뛰기';
-        a.style.position = 'absolute';
-        a.style.left = '-9999px';
-        a.style.top = '0';
-        a.style.zIndex = '10000';
-        a.addEventListener('focus', () => { a.style.left = '8px'; a.style.top = '8px'; });
-        a.addEventListener('blur', () => { a.style.left = '-9999px'; });
-        a.addEventListener('click', (e) => { e.preventDefault(); focusMainAfterRoute(); });
-        document.body.prepend(a);
-    } catch (_) {}
-}
-
-// 초기 접근성 적용
-applyARIA();
-injectSkipLink();
-
-// ===== A11y: 포커스 트랩 =====
-const __focusTrap = new Map();
-
-function getFocusable(el) {
-    return el.querySelectorAll('a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])');
-}
-
-function enableFocusTrap(modalEl) {
-    try {
-        if (!modalEl) return;
-        const handler = (e) => {
-            if (e.key !== 'Tab') return;
-            const nodes = Array.from(getFocusable(modalEl)).filter(n => !n.disabled && n.tabIndex !== -1);
-            if (!nodes.length) return;
-            const first = nodes[0];
-            const last = nodes[nodes.length - 1];
-            if (e.shiftKey) {
-                if (document.activeElement === first || !modalEl.contains(document.activeElement)) {
-                    e.preventDefault();
-                    last.focus();
-                }
-            } else {
-                if (document.activeElement === last) {
-                    e.preventDefault();
-                    first.focus();
-                }
-            }
-        };
-        modalEl.addEventListener('keydown', handler);
-        __focusTrap.set(modalEl, handler);
-        // 초점 진입
-        setTimeout(() => {
-            const nodes = Array.from(getFocusable(modalEl)).filter(n => !n.disabled && n.tabIndex !== -1);
-            (nodes[0] || modalEl).focus();
-        }, 0);
-    } catch (_) {}
-}
-
-function disableFocusTrap(modalEl) {
-    try {
-        const handler = __focusTrap.get(modalEl);
-        if (handler) modalEl.removeEventListener('keydown', handler);
-        __focusTrap.delete(modalEl);
-    } catch (_) {}
-}
-
-// ===== A11y: 상태 안내 =====
-function announce(message) {
-    try {
-        const live = document.getElementById('ariaLive');
-        if (!live) return;
-        live.textContent = '';
-        // SR이 같은 문장을 무시하지 않도록 미세 지연
-        setTimeout(() => { live.textContent = message; }, 10);
-    } catch (_) {}
-}
-
 // ESC로 닫기(로그인 모달 제외)
 document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
@@ -356,233 +241,6 @@ document.addEventListener('keydown', (e) => {
     if (tryClose(participants)) return;
     if (tryClose(settings)) return;
 });
-
-// ===== 백업(Export) 모달 =====
-function buildExportUrl() {
-    const scope = document.getElementById('bkScopeFull').checked ? 'full'
-        : (document.getElementById('bkScopeSelected').checked ? 'selected' : 'single');
-    const inc = [];
-    if (document.getElementById('bkIncMessages').checked) inc.push('messages');
-    if (document.getElementById('bkIncContext').checked) inc.push('context');
-    if (document.getElementById('bkIncToken').checked) inc.push('token_usage');
-    const start = document.getElementById('bkStart').value;
-    const end = document.getElementById('bkEnd').value;
-    const ndjson = document.getElementById('bkFmtNdjson').checked;
-    const zip = document.getElementById('bkFmtZip').checked;
-
-    const base = ndjson ? '/api/export/stream' : '/api/export';
-    const params = new URLSearchParams();
-    params.set('scope', scope);
-    if (scope === 'single') {
-        if (!window.currentRoom) {
-            alert('내보낼 채팅방을 선택해주세요.');
-            return null;
-        }
-        params.set('room_id', window.currentRoom);
-    }
-    if (scope === 'selected') {
-        const sel = Array.from(document.querySelectorAll('#bkRoomsWrap input[type="checkbox"]:checked')).map(x => x.value);
-        if (sel.length) {
-            params.set('room_ids', sel.join(','));
-        } else if (window.currentRoom) {
-            params.set('room_ids', window.currentRoom);
-        } else {
-            alert('내보낼 채팅방을 선택해주세요.');
-            return null;
-        }
-    }
-    if (inc.length) params.set('include', inc.join(','));
-    if (start) params.set('start', start.replace('T','T')); // 그대로 전달
-    if (end) params.set('end', end.replace('T','T'));
-    if (!ndjson && zip) params.set('format','zip');
-    if (appConfig.login_required && authToken) {
-        params.set('token', authToken);
-    } else if (sessionKey) {
-        // 비로그인 모드: session_key를 쿼리 파라미터로 전달
-        params.set('session_key', sessionKey);
-    }
-    return `${base}?${params.toString()}`;
-}
-
-function populateBackupRooms() {
-    const wrap = document.getElementById('bkRoomsWrap');
-    if (!wrap) return;
-    wrap.innerHTML = '';
-    const items = Array.isArray(window.rooms) ? window.rooms : [];
-    if (!items.length) { wrap.innerHTML = '<p class="hint">저장된 방이 없습니다.</p>'; return; }
-    items.forEach(r => {
-        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
-        const title = (typeof r === 'object' && r.title) ? r.title : rid;
-        const id = `bk-room-${rid}`;
-        const row = document.createElement('label');
-        row.className = 'checkbox-label';
-        row.innerHTML = `<input type="checkbox" value="${rid}" id="${id}"> <span>${title}</span>`;
-        wrap.appendChild(row);
-        if (rid === window.currentRoom) {
-            row.querySelector('input').checked = true;
-        }
-    });
-}
-
-function openBackupModal() {
-    const modal = document.getElementById('backupModal');
-    if (!modal) return;
-    populateBackupRooms();
-    modal.classList.remove('hidden');
-    enableFocusTrap(modal);
-}
-
-function closeBackupModal() {
-    const modal = document.getElementById('backupModal');
-    if (!modal) return;
-    modal.classList.add('hidden');
-    disableFocusTrap(modal);
-}
-
-document.getElementById('bkCloseBtn')?.addEventListener('click', closeBackupModal);
-document.querySelector('#backupModal .settings-modal-overlay')?.addEventListener('click', closeBackupModal);
-document.getElementById('bkDownloadBtn')?.addEventListener('click', () => {
-    const url = buildExportUrl();
-    if (!url) return; // 검증 실패 시 리턴
-    try { window.open(url, '_blank'); } catch (_) { location.href = url; }
-});
-
-// scope 라디오 변경 시 방 목록 표시/숨김
-['bkScopeSingle','bkScopeSelected','bkScopeFull'].forEach(id => {
-    const el = document.getElementById(id);
-    el?.addEventListener('change', () => {
-        const show = document.getElementById('bkScopeSelected').checked;
-        const wrap = document.getElementById('bkRoomsWrap');
-        if (wrap) wrap.style.display = show ? 'block' : 'none';
-        if (show) populateBackupRooms();
-    });
-});
-
-// Backup 전용 화면
-function buildExportUrlFrom(prefix) {
-    const byId = (id) => document.getElementById(prefix + id);
-    const scope = byId('ScopeFull')?.checked ? 'full' : (byId('ScopeSelected')?.checked ? 'selected' : 'single');
-    const inc = [];
-    if (byId('IncMessages')?.checked) inc.push('messages');
-    if (byId('IncContext')?.checked) inc.push('context');
-    if (byId('IncToken')?.checked) inc.push('token_usage');
-    const start = byId('Start')?.value;
-    const end = byId('End')?.value;
-    const ndjson = byId('FmtNdjson')?.checked;
-    const zip = byId('FmtZip')?.checked;
-    const base = ndjson ? '/api/export/stream' : '/api/export';
-    const params = new URLSearchParams();
-    params.set('scope', scope);
-    if (scope === 'single') {
-        if (!window.currentRoom) {
-            alert('내보낼 채팅방을 선택해주세요.');
-            return null;
-        }
-        params.set('room_id', window.currentRoom);
-    }
-    if (scope === 'selected') {
-        const sel = Array.from(document.querySelectorAll('#sbkRoomsWrap input[type="checkbox"]:checked')).map(x => x.value);
-        if (sel.length) {
-            params.set('room_ids', sel.join(','));
-        } else if (window.currentRoom) {
-            params.set('room_ids', window.currentRoom);
-        } else {
-            alert('내보낼 채팅방을 선택해주세요.');
-            return null;
-        }
-    }
-    if (inc.length) params.set('include', inc.join(','));
-    if (start) params.set('start', start);
-    if (end) params.set('end', end);
-    if (!ndjson && zip) params.set('format','zip');
-    if (appConfig.login_required && authToken) {
-        params.set('token', authToken);
-    } else if (sessionKey) {
-        // 비로그인 모드: session_key를 쿼리 파라미터로 전달
-        params.set('session_key', sessionKey);
-    }
-    return `${base}?${params.toString()}`;
-}
-
-function populateBackupRoomsScreen() {
-    const wrap = document.getElementById('sbkRoomsWrap');
-    if (!wrap) return;
-    wrap.innerHTML = '';
-    const items = Array.isArray(window.rooms) ? window.rooms : [];
-    items.forEach(r => {
-        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
-        const title = (typeof r === 'object' && r.title) ? r.title : rid;
-        const id = `sbk-room-${rid}`;
-        const row = document.createElement('label');
-        row.className = 'checkbox-label';
-        row.innerHTML = `<input type="checkbox" value="${rid}" id="${id}"> <span>${title}</span>`;
-        wrap.appendChild(row);
-        if (rid === window.currentRoom) row.querySelector('input').checked = true;
-    });
-}
-
-function renderBackupScreenView() {
-    const html = `
-    <section aria-labelledby="backupScreenTitle">
-      <h1 id="backupScreenTitle">백업 내보내기</h1>
-      <div class="context-section">
-        <label>범위(scope)</label>
-        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
-          <label class="checkbox-label"><input type="radio" name="sbkScope" id="sbkScopeSingle" checked> <span>현재 방</span></label>
-          <label class="checkbox-label"><input type="radio" name="sbkScope" id="sbkScopeSelected"> <span>선택한 방</span></label>
-          <label class="checkbox-label"><input type="radio" name="sbkScope" id="sbkScopeFull"> <span>전체</span></label>
-        </div>
-        <div id="sbkRoomsWrap" style="margin-top:0.5rem; display:none; border:1px solid #e8ecef; border-radius:6px; padding:0.5rem; max-height:160px; overflow:auto;"></div>
-      </div>
-      <div class="context-section">
-        <label>포함 항목(include)</label>
-        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
-          <label class="checkbox-label"><input type="checkbox" id="sbkIncMessages" checked> <span>messages</span></label>
-          <label class="checkbox-label"><input type="checkbox" id="sbkIncContext" checked> <span>context</span></label>
-          <label class="checkbox-label"><input type="checkbox" id="sbkIncToken"> <span>token_usage</span></label>
-        </div>
-      </div>
-      <div class="context-section">
-        <label>기간(start/end)</label>
-        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
-          <input type="datetime-local" id="sbkStart" class="input" style="min-width:220px;">
-          <input type="datetime-local" id="sbkEnd" class="input" style="min-width:220px;">
-        </div>
-      </div>
-      <div class="context-section">
-        <label>형식(format)</label>
-        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
-          <label class="checkbox-label"><input type="radio" name="sbkFormat" id="sbkFmtJson" checked> <span>JSON</span></label>
-          <label class="checkbox-label"><input type="radio" name="sbkFormat" id="sbkFmtZip"> <span>ZIP(JSON)</span></label>
-          <label class="checkbox-label"><input type="radio" name="sbkFormat" id="sbkFmtNdjson"> <span>Stream(NDJSON)</span></label>
-        </div>
-      </div>
-      <div class="context-section" style="display:flex; gap:0.5rem;">
-        <button class="btn" onclick="navigate(window.currentRoom ? '/rooms/${encodeURIComponent(window.currentRoom)}' : '/')">← 돌아가기</button>
-        <button id="sbkDownloadBtn" class="btn btn-primary">⬇️ 다운로드</button>
-      </div>
-    </section>`;
-    showScreen(html);
-    // events
-    document.getElementById('sbkDownloadBtn')?.addEventListener('click', () => {
-        const idmap = {
-          ScopeFull: 'sbkScopeFull', ScopeSelected: 'sbkScopeSelected', IncMessages:'sbkIncMessages', IncContext:'sbkIncContext', IncToken:'sbkIncToken', Start:'sbkStart', End:'sbkEnd', FmtNdjson:'sbkFmtNdjson', FmtZip:'sbkFmtZip'
-        };
-        // helper expects prefix mapping; we alias by setting IDs; simpler: temporarily map
-        const url = buildExportUrlFrom('sbk');
-        if (!url) return; // 검증 실패 시 리턴
-        try { window.open(url, '_blank'); } catch (_) { location.href = url; }
-    });
-    // scope radio
-    ['sbkScopeSingle','sbkScopeSelected','sbkScopeFull'].forEach(id => {
-        document.getElementById(id)?.addEventListener('change', () => {
-            const show = document.getElementById('sbkScopeSelected').checked;
-            const wrap = document.getElementById('sbkRoomsWrap');
-            if (wrap) wrap.style.display = show ? 'block' : 'none';
-            if (show) populateBackupRoomsScreen();
-        });
-    });
-}
 
 // ===== 전용 화면 컨테이너 토글 =====
 // showScreen(), hideScreen()은 modules/ui/screens.js에서 import됨
@@ -844,96 +502,20 @@ if (roomSearchBtn) {
     });
 }
 
-// ===== WebSocket 연결 =====
+// 모델 옵션 갱신 - ui/status 모듈 사용
 
-async function loadAppConfig() {
-    try {
-        const response = await fetch('/app-config.json', { cache: 'no-store' });
-        if (!response.ok) {
-            throw new Error(`status ${response.status}`);
-        }
-        const config = await response.json();
-        setAppConfig(config);
-        window.__appConfig = appConfig;
-    } catch (error) {
-        log('앱 설정을 불러오지 못해 기본값을 사용합니다.', 'error');
-    }
-}
-
-function connect() {
-    connectWebSocket({
+function startWebSocket() {
+    connect({
         onConnected: () => {
-            updateStatus('connected', '연결됨');
-            log('WebSocket 연결 성공', 'success');
-            // 저장된 세션키/채팅방 불러오기
-            try {
-                const sk = localStorage.getItem(SESSION_KEY_KEY) || '';
-                setSessionKey(sk);
-                const savedRooms = JSON.parse(localStorage.getItem(ROOMS_KEY) || '[]');
-                if (Array.isArray(savedRooms) && savedRooms.length) {
-                    setRooms(savedRooms);
-                }
-                const savedCurrent = localStorage.getItem(CURRENT_ROOM_KEY);
-                if (savedCurrent) setCurrentRoom(savedCurrent);
-                renderRoomsUI();
-            } catch (_) {}
-            // 초기 라우트 반영
             try { renderCurrentScreenFrom(location.pathname); } catch (_) {}
         },
-        onMessage: (message) => {
-            handleMessage(message);
-        },
+        onMessage: (message) => handleMessage(message),
         onDisconnected: () => {
-            updateStatus('disconnected', '연결 끊김');
-            log('연결이 끊어졌습니다. 5초 후 재연결...', 'error');
-            setAuthRequired(false);
-            // 의도적인 재연결(로그인 후 등)이 아닐 때만 인증 상태 초기화
-            if (!isReconnecting) {
-                setIsAuthenticated(false);
-            }
-            setIsReconnecting(false); // 플래그 초기화
-            setAutoLoginRequested(false);
             hideLoginModal();
-            clearTimeout(tokenRefreshTimeout);
-            setTokenRefreshTimeout(null);
-            setTimeout(connect, 5000);
-        }
+        },
+        log,
+        updateStatus
     });
-}
-
-// 모델 옵션 갱신
-function updateModelOptions(provider) {
-    if (!modelSelect) return;
-    const prev = modelSelect.value;
-    modelSelect.innerHTML = '';
-    const add = (label, value) => {
-        const opt = document.createElement('option');
-        opt.value = value;
-        opt.textContent = label;
-        modelSelect.appendChild(opt);
-    };
-    if (provider === 'gemini') {
-        add('gemini-2.5-flash', 'gemini-2.5-flash');
-        add('gemini-2.5-pro', 'gemini-2.5-pro');
-    } else if (provider === 'claude') {
-        add('기본(권장)', '');
-        // Anthropic CLI는 alias를 지원: sonnet | haiku | opus
-        add('Sonnet (alias: sonnet)', 'sonnet');
-        add('Haiku (alias: haiku)', 'haiku');
-    } else if (provider === 'droid') {
-        add('서버 기본(커스텀)', '');
-    }
-    // 이전 선택 복원
-    const found = [...modelSelect.options].some(o => o.value === prev);
-    modelSelect.value = found ? prev : '';
-    // Droid는 혼선 방지를 위해 모델 선택 비활성화 (서버 기본 사용)
-    if (provider === 'droid') {
-        modelSelect.disabled = true;
-        modelSelect.title = 'Droid는 서버 기본(DROID_MODEL)만 사용합니다';
-    } else {
-        modelSelect.disabled = false;
-        modelSelect.title = '';
-    }
 }
 
 if (aiProvider) {
@@ -970,16 +552,6 @@ if (forceChoices && choiceCount) {
         choiceCount.disabled = !forceChoices.checked;
     });
 }
-
-// 상태 업데이트
-function updateStatus(status, text) {
-    statusIndicator.className = `status-indicator ${status}`;
-    statusText.textContent = text;
-}
-
-
-
-
 
 function initializeAppData() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -1468,7 +1040,7 @@ async function submitLogin() {
                 setIsReconnecting(true); // 의도적인 재연결 표시
                 ws.close();
             }
-            connect();
+            startWebSocket();
         } else {
             loginError.textContent = data.error || '로그인 실패';
         }
@@ -2187,6 +1759,7 @@ if (loginBtn) {
 }
 if (moreLoginBtn) {
     moreLoginBtn.addEventListener('click', () => {
+        closeMoreMenu();
         showLoginModal();
     });
 }
@@ -2213,158 +1786,14 @@ if (logoutBtn) {
     logoutBtn.addEventListener('click', handleLogout);
 }
 if (moreLogoutBtn) {
-    moreLogoutBtn.addEventListener('click', handleLogout);
+    moreLogoutBtn.addEventListener('click', () => {
+        closeMoreMenu();
+        handleLogout();
+    });
 }
 
-// 관리자 모달 열기
-async function openAdminModal() {
-    adminModal.classList.remove('hidden');
-    await fetchPendingUsers();
-}
-
-if (adminBtn) {
-    adminBtn.addEventListener('click', openAdminModal);
-}
 if (moreAdminBtn) {
-    moreAdminBtn.addEventListener('click', openAdminModal);
-}
-
-// 관리자 모달 닫기
-if (adminCloseBtn) {
-    adminCloseBtn.addEventListener('click', () => {
-        adminModal.classList.add('hidden');
-    });
-}
-
-// 승인 대기 사용자 목록 조회
-async function fetchPendingUsers() {
-    if (!authToken) {
-        log('관리자 권한이 필요합니다.', 'error');
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/admin/pending-users', {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.success) {
-            renderPendingUsers(data.users || []);
-        } else {
-            log(data.error || '사용자 목록 조회 실패', 'error');
-            renderPendingUsers([]);
-        }
-    } catch (error) {
-        console.error('Fetch pending users error:', error);
-        log('서버 오류가 발생했습니다.', 'error');
-        renderPendingUsers([]);
-    }
-}
-
-// 승인 대기 사용자 목록 렌더링
-function renderPendingUsers(users) {
-    if (!users || users.length === 0) {
-        pendingUsersList.style.display = 'none';
-        noPendingUsers.style.display = 'block';
-        return;
-    }
-
-    pendingUsersList.style.display = 'block';
-    noPendingUsers.style.display = 'none';
-
-    pendingUsersList.innerHTML = users.map(user => `
-        <div class="pending-user-card" style="
-            background: #f8f9fa;
-            padding: 1rem;
-            margin-bottom: 0.75rem;
-            border-radius: 8px;
-            border: 1px solid #dee2e6;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        ">
-            <div style="flex: 1;">
-                <div style="font-weight: 600; color: #333; margin-bottom: 0.25rem;">
-                    ${escapeHtml(user.username)}
-                </div>
-                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">
-                    📧 ${escapeHtml(user.email)}
-                </div>
-                <div style="font-size: 0.75rem; color: #999;">
-                    가입일: ${new Date(user.created_at).toLocaleString('ko-KR')}
-                </div>
-            </div>
-            <button
-                class="approve-user-btn btn btn-sm"
-                data-user-id="${user.user_id}"
-                style="
-                    background: #28a745;
-                    color: white;
-                    border: none;
-                    padding: 0.5rem 1rem;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 0.875rem;
-                    white-space: nowrap;
-                "
-            >
-                ✓ 승인
-            </button>
-        </div>
-    `).join('');
-
-    // 승인 버튼 이벤트 리스너 등록
-    document.querySelectorAll('.approve-user-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const userId = parseInt(e.target.dataset.userId);
-            await approveUser(userId);
-        });
-    });
-}
-
-// 사용자 승인
-async function approveUser(userId) {
-    if (!authToken) {
-        log('관리자 권한이 필요합니다.', 'error');
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/admin/approve-user', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ user_id: userId })
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.success) {
-            log('사용자 승인이 완료되었습니다.', 'success');
-            // 목록 새로고침
-            await fetchPendingUsers();
-        } else {
-            log(data.error || '승인 실패', 'error');
-        }
-    } catch (error) {
-        console.error('Approve user error:', error);
-        log('서버 오류가 발생했습니다.', 'error');
-    }
-}
-
-// HTML 이스케이프 함수
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    moreAdminBtn.addEventListener('click', () => closeMoreMenu());
 }
 
 // ===== 파일 관리 =====
@@ -3012,256 +2441,26 @@ deleteStoryBtn?.addEventListener('click', () => alert('스토리 삭제 기능�
 // 서사 → 컨텍스트 주입 버튼
 injectStoryBtn?.addEventListener('click', () => alert('스토리 주입 기능은 비활성화되었습니다.'));
 
-// ===== 햄버거 메뉴 (모바일) =====
-
-const hamburgerBtn = document.getElementById('hamburgerBtn');
-const narrativeMenuBtn = document.getElementById('narrativeMenuBtn');
-const moreMenuBtn = document.getElementById('moreMenuBtn');
-const moreMenuDropdown = document.getElementById('moreMenuDropdown');
-const mobileOverlay = document.getElementById('mobileOverlay');
-const leftPanel = document.querySelector('.left-panel');
-const rightPanel = document.querySelector('.right-panel');
-
-let currentMobilePanel = null; // 'left' or 'right' or null
-
-if (hamburgerBtn) {
-    hamburgerBtn.addEventListener('click', () => {
-        if (currentMobilePanel === 'left') {
-            // 이미 좌측 패널이 열려 있으면 닫기
-            closeMobilePanel();
-        } else {
-            // 좌측 패널 열기
-            openMobilePanel('left');
-        }
-    });
-}
-
-if (narrativeMenuBtn) {
-    narrativeMenuBtn.addEventListener('click', () => {
-        if (currentMobilePanel === 'right') {
-            // 이미 우측 패널이 열려 있으면 닫기
-            closeMobilePanel();
-        } else {
-            // 우측 패널 열기
-            openMobilePanel('right');
-        }
-    });
-}
-
-// 더보기 메뉴 토글
-if (moreMenuBtn) {
-    moreMenuBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleMoreMenu();
-    });
-}
-
-function toggleMoreMenu() {
-    const isVisible = moreMenuDropdown.classList.contains('visible');
-    if (isVisible) {
-        closeMoreMenu();
-    } else {
-        openMoreMenu();
-    }
-}
-
-function openMoreMenu() {
-    closeMoreMenu(); // 먼저 닫기
-    moreMenuDropdown.classList.remove('hidden');
-    moreMenuDropdown.classList.add('visible');
-    moreMenuBtn.classList.add('active');
-
-    // 토큰 정보, 연결 상태, 세션 정보 동기화
-    syncMoreMenuStatus();
-}
-
-function closeMoreMenu() {
-    moreMenuDropdown.classList.remove('visible');
-    moreMenuDropdown.classList.add('hidden');
-    moreMenuBtn.classList.remove('active');
-}
-
-function syncMoreMenuStatus() {
-    // 토큰 정보
-    const tokenInfo = document.getElementById('tokenInfo');
-    const moreTokenInfo = document.getElementById('moreTokenInfo');
-    if (tokenInfo && moreTokenInfo) {
-        moreTokenInfo.textContent = tokenInfo.textContent;
-    }
-
-    // 연결 상태
-    const statusIndicator = document.getElementById('statusIndicator');
-    const moreStatusIndicator = document.getElementById('moreStatusIndicator');
-    const statusText = document.getElementById('statusText');
-    const moreStatusText = document.getElementById('moreStatusText');
-    if (statusIndicator && moreStatusIndicator) {
-        moreStatusIndicator.className = statusIndicator.className;
-    }
-    if (statusText && moreStatusText) {
-        moreStatusText.textContent = statusText.textContent;
-    }
-
-    // 세션 상태
-    const sessionBadge = document.getElementById('sessionBadge');
-    const moreSessionBadgeText = document.getElementById('moreSessionBadgeText');
-    if (sessionBadge && moreSessionBadgeText) {
-        moreSessionBadgeText.textContent = sessionBadge.textContent.replace('세션: ', '');
-        moreSessionBadgeText.className = sessionBadge.className;
-    }
-}
-
-// 더보기 메뉴 아이템 클릭 이벤트
-document.getElementById('moreSettingsBtn')?.addEventListener('click', () => {
-    closeMoreMenu();
-    const settingsModal = document.getElementById('settingsModal');
-    settingsModal?.classList.remove('hidden');
-    enableFocusTrap(settingsModal);
-});
-
-document.getElementById('moreParticipantsBtn')?.addEventListener('click', () => {
-    closeMoreMenu();
-    openParticipantsModal();
-});
-
-document.getElementById('moreClearHistoryBtn')?.addEventListener('click', () => {
-    closeMoreMenu();
-    document.getElementById('clearHistoryBtn')?.click();
-});
-
-document.getElementById('moreResetSessionsBtn')?.addEventListener('click', () => {
-    closeMoreMenu();
-    document.getElementById('resetSessionsBtn')?.click();
-});
-
-// 로그아웃 버튼
-document.getElementById('logoutBtn')?.addEventListener('click', () => {
-    closeMoreMenu();
-    handleLogout();
-});
-
-// handleLogout 중복 제거 - 이미 3338줄에 정의되어 있음
-
-// 문서 전체 클릭 시 더보기 메뉴 닫기
-document.addEventListener('click', (e) => {
-    if (moreMenuDropdown && !moreMenuDropdown.contains(e.target) && e.target !== moreMenuBtn) {
-        closeMoreMenu();
-    }
-});
-
-function openMobilePanel(panel) {
-    closeMobilePanel(); // 먼저 기존 패널 닫기
-
-    if (panel === 'left' && leftPanel) {
-        leftPanel.classList.add('mobile-visible');
-        currentMobilePanel = 'left';
-        if (hamburgerBtn) {
-            hamburgerBtn.classList.add('active');
-        }
-    } else if (panel === 'right' && rightPanel) {
-        rightPanel.classList.add('mobile-visible');
-        currentMobilePanel = 'right';
-        if (narrativeMenuBtn) {
-            narrativeMenuBtn.classList.add('active');
-        }
-    }
-
-    if (mobileOverlay) {
-        mobileOverlay.classList.add('active');
-    }
-}
-
-function closeMobilePanel() {
-    if (leftPanel) {
-        leftPanel.classList.remove('mobile-visible');
-    }
-    if (rightPanel) {
-        rightPanel.classList.remove('mobile-visible');
-    }
-    if (mobileOverlay) {
-        mobileOverlay.classList.remove('active');
-    }
-    if (hamburgerBtn) {
-        hamburgerBtn.classList.remove('active');
-    }
-    if (narrativeMenuBtn) {
-        narrativeMenuBtn.classList.remove('active');
-    }
-    currentMobilePanel = null;
-}
-
-// ===== 스와이프 제스처 =====
-let touchStartX = 0;
-let touchStartY = 0;
-let touchStartTime = 0;
-const SWIPE_THRESHOLD = 50; // 최소 이동 거리 (px)
-const SWIPE_VELOCITY_THRESHOLD = 0.3; // 최소 속도 (px/ms)
-const SWIPE_MAX_VERTICAL_RATIO = 0.5; // 수직 이동 비율 제한
-
-function handleTouchStart(e) {
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
-    touchStartTime = Date.now();
-}
-
-function handleTouchEnd(e) {
-    if (!currentMobilePanel) return;
-
-    const touchEndX = e.changedTouches[0].clientX;
-    const touchEndY = e.changedTouches[0].clientY;
-    const touchEndTime = Date.now();
-
-    const deltaX = touchEndX - touchStartX;
-    const deltaY = touchEndY - touchStartY;
-    const deltaTime = touchEndTime - touchStartTime;
-
-    // 수직 이동이 너무 크면 스와이프로 인식하지 않음
-    if (Math.abs(deltaY) > Math.abs(deltaX) * SWIPE_MAX_VERTICAL_RATIO) {
-        return;
-    }
-
-    const distance = Math.abs(deltaX);
-    const velocity = distance / deltaTime;
-
-    // 최소 거리 또는 최소 속도 조건 만족 시 스와이프로 인식
-    if (distance < SWIPE_THRESHOLD && velocity < SWIPE_VELOCITY_THRESHOLD) {
-        return;
-    }
-
-    // 좌측 패널: 좌측으로 스와이프 → 닫기
-    if (currentMobilePanel === 'left' && deltaX < 0) {
-        closeMobilePanel();
-    }
-
-    // 우측 패널: 우측으로 스와이프 → 닫기
-    if (currentMobilePanel === 'right' && deltaX > 0) {
-        closeMobilePanel();
-    }
-}
-
-// 패널에 스와이프 이벤트 리스너 추가
-if (leftPanel) {
-    leftPanel.addEventListener('touchstart', handleTouchStart, { passive: true });
-    leftPanel.addEventListener('touchend', handleTouchEnd, { passive: true });
-}
-
-if (rightPanel) {
-    rightPanel.addEventListener('touchstart', handleTouchStart, { passive: true });
-    rightPanel.addEventListener('touchend', handleTouchEnd, { passive: true });
-}
-
-// 오버레이 클릭 시 패널 닫기
-if (mobileOverlay) {
-    mobileOverlay.addEventListener('click', closeMobilePanel);
-}
-
-// 서사 패널을 여는 기능 추가 (필요 시)
-// 예: 서사 버튼 클릭 시 우측 패널 열기
-// 이 기능은 필요에 따라 나중에 추가할 수 있습니다.
-
 // ===== 초기화 =====
 
 window.addEventListener('load', async () => {
     await loadAppConfig();
+    setAppConfig(appConfig);
+    window.__appConfig = appConfig;
+    initA11y();
+    initExportModule();
+    initAdminPanel({
+        adminModal,
+        adminBtn,
+        moreAdminBtn,
+        adminCloseBtn
+    });
+    initMobileUI({
+        onOpenParticipants: openParticipantsModal,
+        onClearHistory: () => document.getElementById('clearHistoryBtn')?.click(),
+        onResetSessions: () => document.getElementById('resetSessionsBtn')?.click(),
+        onLogout: handleLogout
+    });
     // UI 초기 상태 강제 정리 (헤더 가려짐 방지)
     document.getElementById('settingsModal')?.classList.add('hidden');
     document.getElementById('characterEditorModal')?.classList.add('hidden');
@@ -3296,7 +2495,7 @@ window.addEventListener('load', async () => {
     // 라우터 초기화 (popstate 이벤트 리스너 등록)
     initRouter(routingHandlers);
 
-    connect();
+    startWebSocket();
     // 연결 전이라도 라우트 화면을 먼저 표시(데이터는 연결 후 갱신)
     try { renderCurrentScreenFrom(location.pathname); } catch (_) {}
 });
