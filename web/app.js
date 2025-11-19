@@ -1,16 +1,52 @@
 // ===== ES6 모듈 import =====
 import { openModal, closeModal, toggleModal, isModalOpen } from './modules/ui/modals.js';
+import { setAuthToken, clearAuthToken, setRefreshToken, login, register, logout } from './modules/auth/auth.js';
+import {
+    parsePathname,
+    rememberPendingRoute,
+    resumePendingRoute as routerResumePendingRoute,
+    renderCurrentScreenFrom as routerRenderCurrentScreenFrom,
+    navigate as routerNavigate,
+    initRouter as routerInitRouter
+} from './modules/routing/router.js';
 import { showScreen, hideScreen } from './modules/ui/screens.js';
-import { parsePathname, navigate as routerNavigate, initRouter, renderCurrentScreenFrom as routerRenderCurrentScreenFrom, rememberPendingRoute, resumePendingRoute as routerResumePendingRoute } from './modules/routing/router.js';
+import { connect as connectWebSocket, sendMessage } from './modules/websocket/connection.js';
+import {
+    ws, appConfig, setAppConfig,
+    authRequired, setAuthRequired, isAuthenticated, setIsAuthenticated,
+    authToken, setAuthTokenState,
+    refreshToken, refreshTokenExpiresAt, setRefreshTokenState,
+    rooms, currentRoom, setRooms, setCurrentRoom,
+    participants, setParticipants,
+    userRole, setUserRole,
+    isReconnecting, setIsReconnecting,
+    lastRequest, setLastRequest,
+    autoLoginRequested, setAutoLoginRequested,
+    sessionKey, setSessionKey,
+    currentHistoryLimit,
+    sessionSettingsLoaded,
+    tokenRefreshTimeout, setTokenRefreshTimeout,
+    refreshRetryCount, setRefreshRetryCount,
+    refreshInProgress, setRefreshInProgress
+} from './modules/core/state.js';
+import {
+    refreshChatRefs, addChatMessage, addCharacterMessage,
+    sendChatMessage, handleChatStream, handleChatComplete,
+    bindChatEvents, updateChatInputState,
+    updateTokenDisplay
+} from './modules/chat/chat.js';
+import {
+    refreshRoomRefs, renderRoomsUI, renderRoomsRightPanelList,
+    loadContext, collectRoomConfig, bindRoomEvents,
+    persistRooms, sanitizeRoomName
+} from './modules/rooms/rooms.js';
+import { log } from './modules/utils/logger.js';
+import {
+    AUTH_TOKEN_KEY, AUTH_EXP_KEY, REFRESH_TOKEN_KEY, REFRESH_EXP_KEY,
+    USER_ROLE_KEY, SESSION_KEY_KEY, ROOMS_KEY, CURRENT_ROOM_KEY,
+    RETRY_ACTIONS, MAX_REFRESH_RETRIES, HISTORY_LIMIT_DEFAULT
+} from './modules/core/constants.js';
 
-// WebSocket 연결
-let ws = null;
-let appConfig = {
-    ws_url: '',
-    ws_port: 8765,
-    login_required: true,
-    show_token_usage: true
-};
 // router.js가 접근할 수 있도록 window에도 바인딩
 window.__appConfig = appConfig;
 
@@ -19,39 +55,11 @@ const statusIndicator = document.getElementById('statusIndicator');
 const statusText = document.getElementById('statusText');
 const logArea = document.getElementById('logArea');
 
-// 채팅 관련 요소(동적 화면 대응)
-let chatMessages = document.getElementById('chatMessages');
-let chatInput = document.getElementById('chatInput');
-let sendChatBtn = document.getElementById('sendChatBtn');
-function refreshChatRefs() {
-    chatMessages = document.getElementById('chatMessages');
-    chatInput = document.getElementById('chatInput');
-    sendChatBtn = document.getElementById('sendChatBtn');
-}
-
-// 컨텍스트 패널 요소
+// 컨텍스트 패널 요소 (Modules에서 관리하지 않는 나머지)
 const contextContent = document.getElementById('contextContent');
-const worldInput = document.getElementById('worldInput');
-const situationInput = document.getElementById('situationInput');
-const userCharacterInput = document.getElementById('userCharacterInput');
-const narratorEnabled = document.getElementById('narratorEnabled');
-const userIsNarrator = document.getElementById('userIsNarrator');
-const narratorSettings = document.getElementById('narratorSettings');
-const narratorMode = document.getElementById('narratorMode');
-const narratorDescription = document.getElementById('narratorDescription');
 const charactersList = document.getElementById('charactersList');
 const addCharacterBtn = document.getElementById('addCharacterBtn');
 const applyCharactersBtn = document.getElementById('applyCharactersBtn');
-const aiProvider = document.getElementById('aiProvider');
-const modelSelect = document.getElementById('modelSelect');
-const adultLevel = document.getElementById('adultLevel');
-const adultConsent = document.getElementById('adultConsent');
-const narrativeSeparation = document.getElementById('narrativeSeparation');
-const narratorDrive = document.getElementById('narratorDrive');
-const outputLevel = document.getElementById('outputLevel');
-const storyPace = document.getElementById('storyPace');
-const forceChoices = document.getElementById('forceChoices');
-const choiceCount = document.getElementById('choiceCount');
 const saveContextBtn = document.getElementById('saveContextBtn');
 const historyLengthSlider = document.getElementById('historyLengthSlider');
 const historyLengthValue = document.getElementById('historyLengthValue');
@@ -61,15 +69,39 @@ const historyUnlimitedToggle = document.getElementById('historyUnlimitedToggle')
 const worldSelect = document.getElementById('worldSelect');
 const saveWorldBtn = document.getElementById('saveWorldBtn');
 const deleteWorldBtn = document.getElementById('deleteWorldBtn');
+const worldInput = document.getElementById('worldInput');
 const situationSelect = document.getElementById('situationSelect');
 const saveSituationBtn = document.getElementById('saveSituationBtn');
 const deleteSituationBtn = document.getElementById('deleteSituationBtn');
+const situationInput = document.getElementById('situationInput');
 const myCharacterSelect = document.getElementById('myCharacterSelect');
 const saveMyCharacterBtn = document.getElementById('saveMyCharacterBtn');
 const deleteMyCharacterBtn = document.getElementById('deleteMyCharacterBtn');
 const userCharacterAgeInput = document.getElementById('userCharacterAge');
+const userCharacterInput = document.getElementById('userCharacterInput');
 const loadProfileJsonBtn = document.getElementById('loadProfileJsonBtn');
 const saveProfileJsonBtn = document.getElementById('saveProfileJsonBtn');
+
+// 채팅/세션 제어 요소
+const chatMessages = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const sendChatBtn = document.getElementById('sendChatBtn');
+const aiProvider = document.getElementById('aiProvider');
+const modelSelect = document.getElementById('modelSelect');
+const narratorEnabled = document.getElementById('narratorEnabled');
+const narratorMode = document.getElementById('narratorMode');
+const narratorDescription = document.getElementById('narratorDescription');
+const userIsNarrator = document.getElementById('userIsNarrator');
+const narratorDrive = document.getElementById('narratorDrive');
+const forceChoices = document.getElementById('forceChoices');
+const choiceCount = document.getElementById('choiceCount');
+const adultLevel = document.getElementById('adultLevel');
+const narrativeSeparation = document.getElementById('narrativeSeparation');
+const narratorSettings = document.getElementById('narratorSettings');
+const outputLevel = document.getElementById('outputLevel');
+const storyPace = document.getElementById('storyPace');
+const adultConsent = document.getElementById('adultConsent');
+const sessionRetentionToggle = document.getElementById('sessionRetentionToggle');
 
 // 프리셋 관리 요소
 const presetSelect = document.getElementById('presetSelect');
@@ -78,11 +110,9 @@ const loadPresetBtn = document.getElementById('loadPresetBtn');
 const deletePresetBtn = document.getElementById('deletePresetBtn');
 
 // 헤더 버튼
-// 모드 전환 UI 제거됨: 잔여 참조 방지를 위해 버튼 조회 삭제
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 const resetSessionsBtn = document.getElementById('resetSessionsBtn');
 const tokenText = document.getElementById('tokenText');
-const sessionRetentionToggle = document.getElementById('sessionRetentionToggle');
 const sessionStatusBadge = document.getElementById('sessionStatusBadge');
 
 // 서사 패널 요소
@@ -94,10 +124,9 @@ const loadStoryBtn = document.getElementById('loadStoryBtn');
 const deleteStoryBtn = document.getElementById('deleteStoryBtn');
 const resumeStoryBtn = document.getElementById('resumeStoryBtn');
 const STORIES_ENABLED = false;
-// 채팅방 UI
-const roomSelect = document.getElementById('roomSelect');
+
+// 채팅방 UI (Modules에서 관리하지 않는 나머지)
 const roomAddBtn = document.getElementById('roomAddBtn');
-// const roomDelBtn = document.getElementById('roomDelBtn'); // 제거됨 - 개별 삭제 버튼으로 대체
 const roomSaveBtn = document.getElementById('roomSaveBtn');
 
 // 로그인 요소
@@ -141,144 +170,22 @@ const roomNameCloseBtn = document.getElementById('roomNameCloseBtn');
 const roomNameCancelBtn = document.getElementById('roomNameCancelBtn');
 const roomNameConfirmBtn = document.getElementById('roomNameConfirmBtn');
 
-let currentAssistantMessage = null;
-let characterColors = {}; // 캐릭터별 색상 매핑
-let authRequired = false;
-let isAuthenticated = false;
-// router.js가 접근할 수 있도록 window에도 바인딩
-window.__isAuthenticated = isAuthenticated;
-
-// isAuthenticated 업데이트 helper 함수
-function setIsAuthenticatedState(value) {
-    isAuthenticated = value;
-    window.__isAuthenticated = value;
-}
-let isReconnecting = false; // 의도적인 재연결 여부
-let currentProvider = 'claude'; // 최근 전송에 사용한 프로바이더
-let participants = []; // 현재 대화 참여자 목록
+// Local State
 let pendingConsentResend = false; // 성인 동의 직후 직전 요청 재전송
-
-const AUTH_TOKEN_KEY = 'persona_auth_token';
-const AUTH_EXP_KEY = 'persona_auth_exp';
-const REFRESH_TOKEN_KEY = 'persona_refresh_token';
-const REFRESH_EXP_KEY = 'persona_refresh_exp';
-const USER_ROLE_KEY = 'persona_user_role';
-// 세션/채팅방 로컬키
-const SESSION_KEY_KEY = 'persona_session_key';
-const ROOMS_KEY = 'persona_rooms';
-const CURRENT_ROOM_KEY = 'persona_current_room';
-let authToken = '';
-let authTokenExpiresAt = '';
-let refreshToken = '';
-let refreshTokenExpiresAt = '';
-let tokenRefreshTimeout = null;
-let refreshRetryCount = 0;
-let refreshInProgress = false;
-let lastRequest = null; // 재전송용 마지막 사용자 액션
-let sessionKey = '';
-let userRole = 'user'; // 사용자 역할 ('user' | 'admin')
-// ES 모듈로 전환: 인라인 이벤트 핸들러 호환을 위해 window에 직접 선언
-// (let으로 선언하면 모듈 스코프에 격리되어 onclick에서 접근 불가)
-window.rooms = [];
-window.currentRoom = null;
-let pendingRoutePath = null; // 로그인 이후 복원할 경로
-// router.js가 접근할 수 있도록 window에도 바인딩
-window.__pendingRoutePath = pendingRoutePath;
-let autoLoginRequested = false; // 비로그인 환경 자동 로그인 시도 여부
-const RETRY_ACTIONS = new Set([
-    'set_context', 'chat',
-    'save_workspace_file', 'delete_workspace_file',
-    'save_preset', 'delete_preset', 'load_preset',
-    'set_history_limit',
-    // 모드 전환 액션 제거됨
-    'clear_history', 'reset_sessions'
-]);
-const MAX_REFRESH_RETRIES = 3;
-const HISTORY_LIMIT_DEFAULT = 30;
-let currentHistoryLimit = HISTORY_LIMIT_DEFAULT;
-let sessionSettingsLoaded = false;
+// tokenRefreshTimeout, refreshRetryCount, refreshInProgress imported from modules
 // 로그인 저장 키
 const LOGIN_USER_KEY = 'persona_login_user';
 const LOGIN_AUTOLOGIN_KEY = 'persona_login_auto';
 const LOGIN_SAVED_PW_KEY = 'persona_login_pw';
 const LOGIN_ADULT_KEY = 'persona_login_adult';
-try {
-    authToken = localStorage.getItem(AUTH_TOKEN_KEY) || '';
-    authTokenExpiresAt = localStorage.getItem(AUTH_EXP_KEY) || '';
-    refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY) || '';
-    refreshTokenExpiresAt = localStorage.getItem(REFRESH_EXP_KEY) || '';
-} catch (error) {
-    authToken = '';
-    authTokenExpiresAt = '';
-    refreshToken = '';
-    refreshTokenExpiresAt = '';
-}
+// Tokens initialized in core/state.js
 
-function buildWebSocketUrl() {
-    if (appConfig.ws_url) {
-        return appConfig.ws_url;
-    }
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const host = window.location.hostname;
-    const port = appConfig.ws_port || 8765;
-    return `${protocol}://${host}:${port}`;
-}
 
-// 유틸: 터치(모바일) 디바이스 감지
-function isTouchDevice() {
-    try {
-        if (typeof window === 'undefined') return false;
-        if ('ontouchstart' in window) return true;
-        if (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) return true;
-        if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
-        if (/Mobi|Android|iPhone|iPad|iPod|Windows Phone|webOS/i.test(navigator.userAgent)) return true;
-    } catch (_) {}
-    return false;
-}
+// buildWebSocketUrl, isTouchDevice imported from modules (if needed)
 
-function setAuthToken(token, expiresAt) {
-    authToken = token || '';
-    authTokenExpiresAt = expiresAt || '';
-    try {
-        if (authToken) {
-            localStorage.setItem(AUTH_TOKEN_KEY, authToken);
-            if (authTokenExpiresAt) {
-                localStorage.setItem(AUTH_EXP_KEY, authTokenExpiresAt);
-            } else {
-                localStorage.removeItem(AUTH_EXP_KEY);
-            }
-        } else {
-            localStorage.removeItem(AUTH_TOKEN_KEY);
-            localStorage.removeItem(AUTH_EXP_KEY);
-        }
-    } catch (error) {
-        // ignore storage errors
-    }
-    scheduleTokenRefresh();
-}
 
-function clearAuthToken() {
-    refreshRetryCount = 0;
-    setAuthToken('', '');
-}
+// setAuthToken, clearAuthToken, setRefreshToken imported from modules
 
-function setRefreshToken(token, expiresAt) {
-    refreshToken = token || '';
-    refreshTokenExpiresAt = expiresAt || '';
-    try {
-        if (refreshToken) {
-            localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-            if (refreshTokenExpiresAt) {
-                localStorage.setItem(REFRESH_EXP_KEY, refreshTokenExpiresAt);
-            } else {
-                localStorage.removeItem(REFRESH_EXP_KEY);
-            }
-        } else {
-            localStorage.removeItem(REFRESH_TOKEN_KEY);
-            localStorage.removeItem(REFRESH_EXP_KEY);
-        }
-    } catch (_) { /* ignore */ }
-}
 
 // ===== History API Router (스켈레톤) =====
 // 간단한 경로 → 화면 매핑. 현재 단계에서는 기존 화면 구조를 유지하면서 URL만 관리합니다.
@@ -310,6 +217,10 @@ function navigate(path) {
 
 function resumePendingRoute() {
     routerResumePendingRoute(renderCurrentScreenFrom);
+}
+
+function initRouter(handlers) {
+    routerInitRouter(handlers);
 }
 
 // ===== 접근성(A11y) 보완 =====
@@ -814,9 +725,9 @@ function populateRoomsModal() {
             // DB 삭제 후 목록 재동기화
             setTimeout(() => sendMessage({ action: 'room_list' }), 300);
             // 로컬 상태는 즉시 업데이트 (UX)
-            window.rooms = window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
+            setRooms(window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid));
             if (window.currentRoom === it.rid) {
-                window.currentRoom = window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null;
+                setCurrentRoom(window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null);
             }
             persistRooms();
             populateRoomsModal();
@@ -901,9 +812,9 @@ function renderRoomsRightPanelList() {
             // DB 삭제 후 목록 재동기화
             setTimeout(() => sendMessage({ action: 'room_list' }), 300);
             // 로컬 상태는 즉시 업데이트 (UX)
-            window.rooms = window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid);
+            setRooms(window.rooms.filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid));
             if (window.currentRoom === it.rid) {
-                window.currentRoom = window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null;
+                setCurrentRoom(window.rooms.length > 0 ? (typeof window.rooms[0] === 'string' ? window.rooms[0] : window.rooms[0].room_id) : null);
             }
             persistRooms();
             renderRoomsUI();
@@ -942,10 +853,7 @@ async function loadAppConfig() {
             throw new Error(`status ${response.status}`);
         }
         const config = await response.json();
-        appConfig = {
-            ...appConfig,
-            ...config
-        };
+        setAppConfig(config);
         window.__appConfig = appConfig;
     } catch (error) {
         log('앱 설정을 불러오지 못해 기본값을 사용합니다.', 'error');
@@ -953,53 +861,44 @@ async function loadAppConfig() {
 }
 
 function connect() {
-    const wsUrl = buildWebSocketUrl();
-    log(`연결 시도: ${wsUrl}`);
-
-    ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-        updateStatus('connected', '연결됨');
-        log('WebSocket 연결 성공', 'success');
-        // 저장된 세션키/채팅방 불러오기
-        try {
-            sessionKey = localStorage.getItem(SESSION_KEY_KEY) || '';
-            const savedRooms = JSON.parse(localStorage.getItem(ROOMS_KEY) || '[]');
-            if (Array.isArray(savedRooms) && savedRooms.length) {
-                window.rooms = savedRooms;
+    connectWebSocket({
+        onConnected: () => {
+            updateStatus('connected', '연결됨');
+            log('WebSocket 연결 성공', 'success');
+            // 저장된 세션키/채팅방 불러오기
+            try {
+                const sk = localStorage.getItem(SESSION_KEY_KEY) || '';
+                setSessionKey(sk);
+                const savedRooms = JSON.parse(localStorage.getItem(ROOMS_KEY) || '[]');
+                if (Array.isArray(savedRooms) && savedRooms.length) {
+                    setRooms(savedRooms);
+                }
+                const savedCurrent = localStorage.getItem(CURRENT_ROOM_KEY);
+                if (savedCurrent) setCurrentRoom(savedCurrent);
+                renderRoomsUI();
+            } catch (_) {}
+            // 초기 라우트 반영
+            try { renderCurrentScreenFrom(location.pathname); } catch (_) {}
+        },
+        onMessage: (message) => {
+            handleMessage(message);
+        },
+        onDisconnected: () => {
+            updateStatus('disconnected', '연결 끊김');
+            log('연결이 끊어졌습니다. 5초 후 재연결...', 'error');
+            setAuthRequired(false);
+            // 의도적인 재연결(로그인 후 등)이 아닐 때만 인증 상태 초기화
+            if (!isReconnecting) {
+                setIsAuthenticated(false);
             }
-            const savedCurrent = localStorage.getItem(CURRENT_ROOM_KEY);
-            if (savedCurrent) window.currentRoom = savedCurrent;
-            renderRoomsUI();
-        } catch (_) {}
-        // 초기 라우트 반영
-        try { renderCurrentScreenFrom(location.pathname); } catch (_) {}
-    };
-
-    ws.onmessage = (event) => {
-        handleMessage(JSON.parse(event.data));
-    };
-
-    ws.onerror = (error) => {
-        log('WebSocket 에러 발생', 'error');
-        console.error('WebSocket error:', error);
-    };
-
-    ws.onclose = () => {
-        updateStatus('disconnected', '연결 끊김');
-        log('연결이 끊어졌습니다. 5초 후 재연결...', 'error');
-        authRequired = false;
-        // 의도적인 재연결(로그인 후 등)이 아닐 때만 인증 상태 초기화
-        if (!isReconnecting) {
-            setIsAuthenticatedState(false);
+            setIsReconnecting(false); // 플래그 초기화
+            setAutoLoginRequested(false);
+            hideLoginModal();
+            clearTimeout(tokenRefreshTimeout);
+            setTokenRefreshTimeout(null);
+            setTimeout(connect, 5000);
         }
-        isReconnecting = false; // 플래그 초기화
-        autoLoginRequested = false;
-        hideLoginModal();
-        clearTimeout(tokenRefreshTimeout);
-        tokenRefreshTimeout = null;
-        setTimeout(connect, 5000);
-    };
+    });
 }
 
 // 모델 옵션 갱신
@@ -1078,49 +977,9 @@ function updateStatus(status, text) {
     statusText.textContent = text;
 }
 
-// 로그 출력
-function log(message, type = 'info') {
-    const p = document.createElement('p');
-    p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-    if (type !== 'info') {
-        p.className = `log-${type}`;
-    }
-    logArea.appendChild(p);
-    logArea.scrollTop = logArea.scrollHeight;
 
-    // 로그 개수 제한 (최근 50개)
-    while (logArea.children.length > 50) {
-        logArea.removeChild(logArea.firstChild);
-    }
-}
 
-function sendMessage(payload, options = {}) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        log('WebSocket 연결이 끊어졌습니다', 'error');
-        return;
-    }
-    const message = { ...payload };
-    if (!options.skipToken && authToken) {
-        message.token = authToken;
-    }
-    if (sessionKey) {
-        message.session_key = sessionKey;
-    }
-    const ACTIONS_WITH_ROOM = new Set([
-        // 채팅/세션/히스토리 관련만 방 개념 적용
-        'chat', 'get_history_snapshot', 'clear_history', 'get_history_settings', 'set_history_limit', 'get_narrative'
-    ]);
-    if (ACTIONS_WITH_ROOM.has(String(payload.action))) {
-        if (window.currentRoom) {
-            message.room_id = window.currentRoom;
-        }
-        // currentRoom이 없으면 room_id를 설정하지 않음 (서버가 처리)
-    }
-    if (!options.skipRetry && RETRY_ACTIONS.has(payload.action)) {
-        lastRequest = message;
-    }
-    ws.send(JSON.stringify(message));
-}
+
 
 function initializeAppData() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -1139,102 +998,8 @@ function initializeAppData() {
 }
 
 // ===== 채팅방 관리 =====
-function sanitizeRoomName(name) {
-    // 한글, 영문, 숫자, 공백, 밑줄, 하이픈 허용
-    const sanitized = (name || '').trim().replace(/[^\uAC00-\uD7A3A-Za-z0-9_\-\s]/g, '_');
-    return sanitized || 'room_untitled';
-}
+// sanitizeRoomName, persistRooms, renderRoomsUI, updateChatInputState imported from modules
 
-function persistRooms() {
-    try {
-        localStorage.setItem(ROOMS_KEY, JSON.stringify(window.rooms));
-        localStorage.setItem(CURRENT_ROOM_KEY, window.currentRoom);
-    } catch (_) {}
-}
-
-function renderRoomsUI() {
-    if (!roomSelect) return;
-    // 방 목록 반영
-    roomSelect.innerHTML = '';
-
-    // 빈 옵션 추가 (채팅방 선택 안내)
-    const emptyOpt = document.createElement('option');
-    emptyOpt.value = '';
-    emptyOpt.textContent = '← 채팅방 선택 또는 추가';
-    emptyOpt.disabled = true;
-    roomSelect.appendChild(emptyOpt);
-
-    (window.rooms || []).forEach(r => {
-        const roomId = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
-        const title = (typeof r === 'object' && r.title) ? r.title : roomId;
-        const opt = document.createElement('option');
-        opt.value = roomId;
-        opt.textContent = title;
-        roomSelect.appendChild(opt);
-    });
-
-    const hasCurrent = window.currentRoom && (window.rooms || []).some(x => (typeof x === 'string' ? x : x.room_id) === window.currentRoom);
-    if (!hasCurrent && window.rooms && window.rooms.length > 0) {
-        // 방이 있지만 currentRoom이 없거나 유효하지 않으면 첫 번째 방 선택
-        const firstRoom = window.rooms[0];
-        const extractedId = typeof firstRoom === 'string' ? firstRoom : (firstRoom.room_id || null);
-        if (extractedId) {
-            window.currentRoom = extractedId;
-        }
-        // room_id가 없으면 window.currentRoom을 null로 유지
-    }
-
-    roomSelect.value = window.currentRoom || '';
-    if (window.currentRoom) {
-        announce(`채팅방 전환: ${window.currentRoom}`);
-    }
-
-    // 채팅 입력 상태 업데이트
-    updateChatInputState();
-}
-
-function updateChatInputState() {
-    refreshChatRefs(); // DOM 참조 갱신
-
-    if (!window.currentRoom) {
-        // 채팅방 미선택 - 입력 비활성화
-        if (chatInput) {
-            chatInput.disabled = true;
-            chatInput.placeholder = '← 먼저 채팅방을 선택하거나 생성하세요';
-        }
-        if (sendChatBtn) {
-            sendChatBtn.disabled = true;
-        }
-
-        // 환영 메시지 표시
-        if (chatMessages) {
-            chatMessages.innerHTML = `
-                <div class="welcome-message" style="text-align: center; padding: 4rem 2rem; color: var(--text-muted, #888);">
-                    <h2 style="margin-bottom: 1rem; color: var(--text-primary, #000);">Persona Chat에 오신 것을 환영합니다</h2>
-                    <p style="margin-bottom: 2rem;">왼쪽 상단의 <strong>채팅</strong> 탭에서 새 채팅방을 만들어보세요.</p>
-                    <div style="max-width: 500px; margin: 0 auto; text-align: left; line-height: 1.8;">
-                        <p><strong>📌 시작 방법:</strong></p>
-                        <ol style="padding-left: 1.5rem;">
-                            <li>왼쪽 패널의 <strong>채팅</strong> 탭 클릭</li>
-                            <li><strong>[+]</strong> 버튼으로 새 채팅방 생성</li>
-                            <li><strong>캐릭터</strong> 탭에서 대화 상대 추가</li>
-                            <li>대화 시작!</li>
-                        </ol>
-                    </div>
-                </div>
-            `;
-        }
-    } else {
-        // 채팅방 선택됨 - 입력 활성화
-        if (chatInput) {
-            chatInput.disabled = false;
-            chatInput.placeholder = '메시지를 입력하세요...';
-        }
-        if (sendChatBtn) {
-            sendChatBtn.disabled = false;
-        }
-    }
-}
 
 function refreshRoomViews() {
     sendMessage({ action: 'get_narrative' });
@@ -1249,7 +1014,7 @@ if (roomSelect) {
             // 빈 옵션 선택됨 - 무시
             return;
         }
-        window.currentRoom = selectedValue;
+        setCurrentRoom(selectedValue);
         persistRooms();
         // 방 설정 로드 시도
         sendMessage({ action: 'room_load', room_id: window.currentRoom });
@@ -1281,7 +1046,7 @@ if (roomNameConfirmBtn) {
         }
         const r = sanitizeRoomName(name);
         if (!window.rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) window.rooms.push(r);
-        window.currentRoom = r;
+        setCurrentRoom(r);
         persistRooms();
         renderRoomsUI();
         // 현재 설정으로 방 저장
@@ -1336,52 +1101,8 @@ if (roomSaveBtn) {
 }
 
 // 방 설정 수집
-function collectRoomConfig(roomId) {
-    const userName = document.getElementById('userCharacterName').value.trim();
-    const userGender = document.getElementById('userCharacterGender').value.trim();
-    const userAge = (userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '');
-    const userDesc = userCharacterInput.value.trim();
-    let userCharacterData = '';
-    if (userName) {
-        userCharacterData = `이름: ${userName}`;
-        if (userGender) userCharacterData += `, 성별: ${userGender}`;
-        if (userAge) userCharacterData += `, 나이: ${userAge}`;
-        if (userDesc) userCharacterData += `\n${userDesc}`;
-    } else if (userDesc) {
-        userCharacterData = userDesc;
-    }
-    return {
-        room_id: roomId,
-        title: roomId,
-        context: {
-            world: worldInput.value.trim(),
-            situation: situationInput.value.trim(),
-            user_character: userCharacterData,
-            narrator_enabled: !!narratorEnabled.checked,
-            narrator_mode: narratorMode.value,
-            narrator_description: narratorDescription.value.trim(),
-            user_is_narrator: !!userIsNarrator.checked,
-            ai_provider: aiProvider.value,
-            adult_level: adultLevel.value,
-            narrative_separation: !!narrativeSeparation.checked,
-            narrator_drive: narratorDrive ? narratorDrive.value : 'guide',
-            output_level: outputLevel ? outputLevel.value : 'normal',
-            pace: storyPace ? storyPace.value : 'normal',
-            // 모델 및 세션 유지 설정을 방 컨텍스트에 포함
-            model: (typeof modelSelect !== 'undefined' && modelSelect) ? modelSelect.value : '',
-            session_retention: !!(typeof sessionRetentionToggle !== 'undefined' && sessionRetentionToggle && sessionRetentionToggle.checked),
-            choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
-            choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : 3,
-            characters: Array.isArray(participants) ? participants : []
-        },
-        user_profile: {
-            name: userName,
-            gender: userGender,
-            age: userAge,
-            description: userDesc
-        }
-    };
-}
+// collectRoomConfig imported from modules
+
 
 // ===== 맥락 길이 슬라이더 =====
 
@@ -1694,18 +1415,16 @@ async function submitLogin() {
 
         if (response.ok && data.success) {
             // JWT 토큰 저장
-            authToken = data.access_token;
-            authTokenExpiresAt = data.access_exp;
-            refreshToken = data.refresh_token;
-            refreshTokenExpiresAt = data.refresh_exp;
+            setAuthTokenState(data.access_token, data.access_exp);
+            setRefreshTokenState(data.refresh_token, data.refresh_exp);
 
-            localStorage.setItem(AUTH_TOKEN_KEY, authToken);
-            localStorage.setItem(AUTH_EXP_KEY, authTokenExpiresAt);
-            localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-            localStorage.setItem(REFRESH_EXP_KEY, refreshTokenExpiresAt);
+            localStorage.setItem(AUTH_TOKEN_KEY, data.access_token);
+            localStorage.setItem(AUTH_EXP_KEY, data.access_exp);
+            localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
+            localStorage.setItem(REFRESH_EXP_KEY, data.refresh_exp);
 
             // 사용자 역할 저장
-            userRole = data.role || 'user';
+            setUserRole(data.role || 'user');
             localStorage.setItem(USER_ROLE_KEY, userRole);
 
             // 관리자 버튼 표시/숨김
@@ -1729,7 +1448,7 @@ async function submitLogin() {
                 localStorage.removeItem(LOGIN_SAVED_PW_KEY);
             }
 
-            setIsAuthenticatedState(true);
+            setIsAuthenticated(true);
             hideLoginModal();
             log(`${username}님 로그인 성공`, 'success');
 
@@ -1746,7 +1465,7 @@ async function submitLogin() {
 
             // WebSocket 재연결 (토큰 포함)
             if (ws && ws.readyState === WebSocket.OPEN) {
-                isReconnecting = true; // 의도적인 재연결 표시
+                setIsReconnecting(true); // 의도적인 재연결 표시
                 ws.close();
             }
             connect();
@@ -1793,19 +1512,19 @@ function handleMessage(msg) {
             const requiresLogin = Boolean(data && data.login_required);
             appConfig.login_required = requiresLogin;
             if (requiresLogin) {
-                authRequired = true;
+                setAuthRequired(true);
                 if (authToken) {
-                    setIsAuthenticatedState(true);
+                    setIsAuthenticated(true);
                     hideLoginModal();
                     resumePendingRoute();
                     initializeAppData();
                 } else {
-                    setIsAuthenticatedState(false);
+                    setIsAuthenticated(false);
                     showLoginModal();
                 }
             } else {
-                authRequired = false;
-                setIsAuthenticatedState(true);
+                setAuthRequired(false);
+                setIsAuthenticated(true);
                 hideLoginModal();
                 resumePendingRoute();
                 initializeAppData();
@@ -1814,14 +1533,14 @@ function handleMessage(msg) {
         }
 
         case 'auth_required':
-            authRequired = true;
-            setIsAuthenticatedState(false);
+            setAuthRequired(true);
+            setIsAuthenticated(false);
             if (appConfig.login_required) {
                 rememberPendingRoute(location.pathname);
             }
             // refresh 토큰으로 자동 갱신 시도
             if (!refreshInProgress && refreshToken) {
-                refreshInProgress = true;
+                setRefreshInProgress(true);
                 sendMessage({ action: 'token_refresh', refresh_token: refreshToken }, { skipToken: true, skipRetry: true });
                 log('토큰 갱신 시도 중...', 'info');
             } else {
@@ -1837,10 +1556,10 @@ function handleMessage(msg) {
 
         case 'login':
             if (data.success) {
-                authRequired = false;
-                setIsAuthenticatedState(true);
+                setAuthRequired(false);
+                setIsAuthenticated(true);
                 hideLoginModal();
-                refreshRetryCount = 0;
+                setRefreshRetryCount(0);
                 if (data.token) {
                     setAuthToken(data.token, data.expires_at);
                 }
@@ -1848,8 +1567,8 @@ function handleMessage(msg) {
                     setRefreshToken(data.refresh_token, data.refresh_expires_at);
                 }
                 if (data.session_key) {
-                    sessionKey = data.session_key;
-                    try { localStorage.setItem(SESSION_KEY_KEY, sessionKey); } catch (_) {}
+                    setSessionKey(data.session_key);
+                    try { localStorage.setItem(SESSION_KEY_KEY, data.session_key); } catch (_) {}
                 }
                 const handshakeOnly = !appConfig.login_required && !data.token && !data.refresh_token;
                 log(handshakeOnly ? '세션 키 동기화 완료' : '로그인 성공', 'success');
@@ -1878,7 +1597,7 @@ function handleMessage(msg) {
                 if (lastRequest) {
                     const payload = { ...lastRequest };
                     sendMessage(payload, { skipRetry: true });
-                    lastRequest = null;
+                    setLastRequest(null);
                 }
                 if (appConfig.login_required || data.token || data.refresh_token) {
                     initializeAppData();
@@ -1895,7 +1614,7 @@ function handleMessage(msg) {
             break;
 
         case 'token_refresh':
-            refreshInProgress = false;
+            setRefreshInProgress(false);
             if (data.success) {
                 if (data.token) setAuthToken(data.token, data.expires_at);
                 if (data.refresh_token) setRefreshToken(data.refresh_token, data.refresh_expires_at);
@@ -1903,7 +1622,7 @@ function handleMessage(msg) {
                 if (lastRequest) {
                     const payload = { ...lastRequest };
                     sendMessage(payload, { skipRetry: true });
-                    lastRequest = null;
+                    setLastRequest(null);
                 } else {
                     initializeAppData();
                 }
@@ -2019,7 +1738,7 @@ function handleMessage(msg) {
 
         case 'room_list':
             if (data.success) {
-                window.rooms = data.rooms || [];
+                setRooms(data.rooms || []);
                 try { localStorage.setItem(ROOMS_KEY, JSON.stringify(window.rooms)); } catch (_) {}
                 renderRoomsUI();
                 renderRoomsRightPanelList();
@@ -2170,337 +1889,8 @@ function handleMessage(msg) {
 }
 
 // ===== 채팅 기능 =====
+// addChatMessage, addTypingIndicator, removeTypingIndicator, sendChatMessage, handleChatStream, handleChatComplete, parseMultiCharacterResponse, getCharacterColor, addCharacterMessage imported from modules
 
-function addChatMessage(role, content) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `chat-message ${role}`;
-
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'message-content';
-    contentDiv.textContent = content;
-
-    const timeSpan = document.createElement('span');
-    timeSpan.className = 'message-time';
-    timeSpan.textContent = new Date().toLocaleTimeString();
-
-    messageDiv.appendChild(contentDiv);
-    messageDiv.appendChild(timeSpan);
-
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-
-    return messageDiv;
-}
-
-function addTypingIndicator() {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'chat-message assistant';
-    messageDiv.id = 'typingIndicator';
-
-    const typingDiv = document.createElement('div');
-    typingDiv.className = 'typing';
-    typingDiv.innerHTML = '<span></span><span></span><span></span>';
-
-    messageDiv.appendChild(typingDiv);
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-
-    return messageDiv;
-}
-
-function removeTypingIndicator() {
-    const indicator = document.getElementById('typingIndicator');
-    if (indicator) {
-        indicator.remove();
-    }
-}
-
-function sendChatMessage() {
-    const prompt = chatInput.value.trim();
-
-    if (!prompt) return;
-    if (authRequired && !isAuthenticated) {
-        log('로그인 후 이용 가능합니다.', 'error');
-        return;
-    }
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        // 사용자 메시지 표시
-        addChatMessage('user', prompt);
-
-        // 입력 필드 초기화
-        chatInput.value = '';
-        chatInput.disabled = true;
-        sendChatBtn.disabled = true;
-
-        // 타이핑 인디케이터 표시
-        addTypingIndicator();
-
-        // 선택된 프로바이더 확인 및 저장
-        const provider = (aiProvider && aiProvider.value) ? aiProvider.value : 'claude';
-        currentProvider = provider;
-
-        // 서버로 전송(프로바이더 명시)
-        sendMessage({
-            action: 'chat',
-            prompt: prompt,
-            provider: provider,
-            model: (modelSelect && modelSelect.value) ? modelSelect.value : ''
-        });
-
-        const providerLabel = provider === 'gemini' ? 'Gemini' : (provider === 'droid' ? 'Droid' : 'Claude');
-        const shortPrompt = prompt.length > 50 ? prompt.slice(0, 50) + '...' : prompt;
-        log(`${providerLabel}에게 메시지 전송: ${shortPrompt}`);
-    } else {
-        log('WebSocket 연결이 끊어졌습니다', 'error');
-    }
-}
-
-function handleChatStream(data) {
-    const jsonData = data;
-
-    if (jsonData.type === 'system' && jsonData.subtype === 'init') {
-        log('Claude Code 세션 시작', 'success');
-        return;
-    }
-
-    // Droid 세션 시작
-    if (jsonData.type === 'system' && jsonData.subtype === 'droid_init' && jsonData.session_id) {
-        log('Droid 세션 시작', 'success');
-        return;
-    }
-
-    // Gemini 세션 시작
-    if (jsonData.type === 'system' && jsonData.subtype === 'gemini_init' && jsonData.session_id) {
-        log('Gemini 세션 시작', 'success');
-        return;
-    }
-
-    // Droid/Gemini content_block_delta 처리
-    if (jsonData.type === 'content_block_delta') {
-        removeTypingIndicator();
-
-        const deltaText = jsonData.delta?.text || '';
-        if (deltaText) {
-            // 스트리밍 텍스트 누적
-            if (!window.streamingText) {
-                window.streamingText = '';
-            }
-            window.streamingText += deltaText;
-        }
-        return;
-    }
-
-    // (폴백 제거됨)
-
-    if (jsonData.type === 'assistant') {
-        removeTypingIndicator();
-
-        const message = jsonData.message;
-        const content = message.content || [];
-
-        let textContent = '';
-        for (const item of content) {
-            if (item.type === 'text') {
-                textContent += item.text;
-            }
-        }
-
-        if (textContent) {
-            // 디버깅: 원본 응답 출력
-            console.log('=== Claude 응답 원본 ===');
-            console.log(textContent);
-
-            // 멀티 캐릭터 파싱 시도
-            const parsedMessages = parseMultiCharacterResponse(textContent);
-
-            // 디버깅: 파싱 결과 출력
-            console.log('=== 파싱 결과 ===');
-            console.log('파싱된 메시지 수:', parsedMessages.length);
-            console.log('파싱된 메시지:', parsedMessages);
-
-            if (parsedMessages.length > 0) {
-                // 기존 assistant 메시지 제거 (스트리밍 업데이트)
-                const existingMsgs = chatMessages.querySelectorAll('.chat-message.assistant:not(#typingIndicator)');
-                existingMsgs.forEach(msg => {
-                    if (!msg.dataset.permanent) {
-                        msg.remove();
-                    }
-                });
-
-                // 파싱된 메시지들 표시
-                parsedMessages.forEach(msg => {
-                    const newMsg = addCharacterMessage(msg.character, msg.text);
-                    newMsg.dataset.permanent = 'false'; // 스트리밍 중에는 업데이트 가능
-                });
-            } else {
-                // 파싱 실패 시 일반 메시지로 표시
-                if (!currentAssistantMessage) {
-                    currentAssistantMessage = addChatMessage('assistant', textContent);
-                } else {
-                    const contentDiv = currentAssistantMessage.querySelector('.message-content');
-                    if (contentDiv) {
-                        contentDiv.textContent = textContent;
-                    }
-                }
-            }
-        }
-    }
-
-    if (jsonData.type === 'result') {
-        const label = currentProvider === 'gemini' ? 'Gemini' : (currentProvider === 'droid' ? 'Droid' : 'Claude');
-        log(`${label} 응답 완료`, 'success');
-        // 스트리밍 완료 시 메시지 고정
-        chatMessages.querySelectorAll('.chat-message.assistant').forEach(msg => {
-            msg.dataset.permanent = 'true';
-        });
-    }
-}
-
-function handleChatComplete(response) {
-    removeTypingIndicator();
-    currentAssistantMessage = null;
-
-    // 입력 필드 활성화
-    chatInput.disabled = false;
-    sendChatBtn.disabled = false;
-    chatInput.focus();
-
-    // response.data가 실제 데이터
-    const data = response.data || response;
-
-    if (data.success) {
-        const used = data.provider_used || currentProvider || 'claude';
-        const label = used === 'gemini' ? 'Gemini' : (used === 'droid' ? 'Droid' : 'Claude');
-        log(`${label} 응답 완료`, 'success');
-
-        // Droid/Gemini: 누적된 스트리밍 텍스트 처리
-        if (window.streamingText) {
-            console.log('=== Droid/Gemini 응답 원본 ===');
-            console.log(window.streamingText);
-
-            const parsedMessages = parseMultiCharacterResponse(window.streamingText);
-            console.log('=== 파싱 결과 ===');
-            console.log('파싱된 메시지 수:', parsedMessages.length);
-            console.log('파싱된 메시지:', parsedMessages);
-
-            if (parsedMessages.length > 0) {
-                // 파싱된 메시지들 표시
-                parsedMessages.forEach(msg => {
-                    const newMsg = addCharacterMessage(msg.character, msg.text);
-                    newMsg.dataset.permanent = 'true'; // 완료된 메시지
-                });
-            } else {
-                // 파싱 실패 시 일반 메시지로 표시
-                addChatMessage('assistant', window.streamingText);
-            }
-
-            // 스트리밍 텍스트 초기화
-            window.streamingText = '';
-        }
-
-        // 토큰 사용량 업데이트
-        console.log('Token usage:', data.token_usage); // 디버그
-        if (data.token_usage) {
-            updateTokenDisplay(data.token_usage);
-        }
-
-        // 서사 업데이트
-        sendMessage({ action: 'get_narrative' });
-    } else {
-        log('채팅 에러: ' + data.error, 'error');
-        addChatMessage('system', '에러: ' + data.error);
-    }
-}
-
-// ===== 멀티 캐릭터 응답 파싱 =====
-
-function parseMultiCharacterResponse(text) {
-    const messages = [];
-    const matches = [...text.matchAll(/\[([^\]]+)\]:?/g)];
-
-    if (matches.length === 0) {
-        return messages;
-    }
-
-    for (let i = 0; i < matches.length; i++) {
-        const match = matches[i];
-        const character = match[1].trim();
-        const start = match.index + match[0].length;
-        const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
-        const content = text.slice(start, end).trim();
-
-        if (character && content) {
-            messages.push({
-                character,
-                text: content
-            });
-        }
-    }
-
-    return messages;
-}
-
-function getCharacterColor(characterName) {
-    if (!characterColors[characterName]) {
-        const colors = [
-            'character-0',
-            'character-1',
-            'character-2',
-            'character-3',
-            'character-4',
-            'character-5',
-            'character-6',
-            'character-7',
-            'character-8',
-            'character-9'
-        ];
-        const index = Object.keys(characterColors).length % colors.length;
-        characterColors[characterName] = colors[index];
-    }
-    return characterColors[characterName];
-}
-
-function addCharacterMessage(characterName, text) {
-    const messageDiv = document.createElement('div');
-
-    // 진행자인 경우 특별한 스타일 적용
-    if (characterName === '진행자') {
-        messageDiv.className = 'chat-message assistant narrator';
-    } else {
-        const colorClass = getCharacterColor(characterName);
-        messageDiv.className = `chat-message assistant ${colorClass}`;
-    }
-
-    const charNameDiv = document.createElement('div');
-    charNameDiv.className = 'character-name';
-    charNameDiv.textContent = characterName;
-
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'message-content';
-
-    // 효과음 자동 줄바꿈 처리
-    // *...* 패턴 앞뒤로 줄바꿈 추가
-    const formattedText = text
-        .replace(/(\*[^*]+\*)/g, '\n$1\n')  // 효과음 앞뒤 줄바꿈
-        .replace(/\n{3,}/g, '\n\n')  // 연속된 줄바꿈 최대 2개로 제한
-        .trim();
-
-    contentDiv.textContent = formattedText;
-
-    const timeSpan = document.createElement('span');
-    timeSpan.className = 'message-time';
-    timeSpan.textContent = new Date().toLocaleTimeString();
-
-    messageDiv.appendChild(charNameDiv);
-    messageDiv.appendChild(contentDiv);
-    messageDiv.appendChild(timeSpan);
-
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-
-    return messageDiv;
-}
 
 // ===== 컨텍스트 관리 =====
 
@@ -2529,195 +1919,11 @@ addCharacterBtn.addEventListener('click', () => {
     openParticipantEditor(-1);
 });
 
-function addCharacterInput(name = '', gender = '', description = '', age = '') {
-    const characterDiv = document.createElement('div');
-    characterDiv.className = 'character-item';
+// addCharacterInput imported from modules
 
-    const header = document.createElement('div');
-    header.className = 'character-item-header';
 
-    // 요약/버튼 영역
-    const controls = document.createElement('div');
-    controls.style.display = 'flex';
-    controls.style.gap = '0.25rem';
-    controls.style.alignItems = 'center';
-    controls.style.justifyContent = 'flex-end';
+// loadCharTemplateList, saveCharacterTemplateFromModal, slugify, composeDescription, collectCharacterFromItem imported from modules
 
-    const editBtn = document.createElement('button');
-    editBtn.className = 'btn btn-sm';
-    editBtn.textContent = '✏️ 편집';
-    editBtn.title = '캐릭터 편집';
-    editBtn.onclick = () => openCharacterEditor(characterDiv);
-
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'btn btn-sm';
-    removeBtn.textContent = '❌';
-    removeBtn.title = '제거';
-    removeBtn.onclick = () => characterDiv.remove();
-
-    controls.appendChild(editBtn);
-    controls.appendChild(removeBtn);
-    header.appendChild(controls);
-
-    // 이름 필드
-    const nameRow = document.createElement('div');
-    nameRow.style.marginBottom = '0.5rem';
-
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.className = 'character-name-input character-name-field';
-    nameInput.placeholder = '이름';
-    nameInput.value = name;
-    nameInput.style.width = '100%';
-
-    nameRow.appendChild(nameInput);
-
-    // 성별 필드
-    const genderRow = document.createElement('div');
-    genderRow.style.marginBottom = '0.5rem';
-
-    const genderSelect = document.createElement('select');
-    genderSelect.className = 'character-gender-input character-gender-field';
-    genderSelect.style.width = '100%';
-    genderSelect.innerHTML = `
-        <option value="">성별</option>
-        <option value="남성">남성</option>
-        <option value="여성">여성</option>
-        <option value="기타">기타</option>
-    `;
-    genderSelect.value = gender;
-
-    genderRow.appendChild(genderSelect);
-
-    // 나이 필드
-    const ageRow = document.createElement('div');
-    ageRow.style.marginBottom = '0.5rem';
-    const ageInput = document.createElement('input');
-    ageInput.type = 'text';
-    ageInput.className = 'character-age-input character-age-field';
-    ageInput.placeholder = '나이(숫자 또는 예: 20대)';
-    ageInput.value = age;
-    ageInput.style.width = '100%';
-    ageRow.appendChild(ageInput);
-
-    const descTextarea = document.createElement('textarea');
-    descTextarea.className = 'character-description-input';
-    descTextarea.placeholder = '성격, 말투, 배경, 외모 등...';
-    descTextarea.value = description;
-
-    // 표시용 요약 바
-    const summaryBar = document.createElement('div');
-    summaryBar.className = 'character-summary';
-    summaryBar.style.fontSize = '0.9rem';
-    summaryBar.style.color = '#475569';
-    summaryBar.style.margin = '0.25rem 0 0.5rem 0';
-
-    function updateSummary() {
-        const nm = nameInput.value || '이름 없음';
-        const gd = genderSelect.value || '-';
-        const ag = ageInput.value || '-';
-        const snip = (descTextarea.value || '').slice(0, 40).replace(/\n/g, ' ');
-        summaryBar.textContent = `${nm} · ${gd} · ${ag} — ${snip}`;
-    }
-
-    // 내부 입력은 모달 전용 저장소로만 쓰고 숨김
-    nameRow.style.display = 'none';
-    genderRow.style.display = 'none';
-    ageRow.style.display = 'none';
-    descTextarea.style.display = 'none';
-
-    characterDiv.appendChild(header);
-    characterDiv.appendChild(summaryBar);
-    characterDiv.appendChild(nameRow);
-    characterDiv.appendChild(genderRow);
-    characterDiv.appendChild(ageRow);
-    characterDiv.appendChild(descTextarea);
-    charactersList.appendChild(characterDiv);
-
-    updateSummary();
-    // 요약은 값 변경 시 갱신되도록 이벤트 연결
-    [nameInput, genderSelect, ageInput, descTextarea].forEach(el => {
-        el.addEventListener('input', updateSummary);
-        el.addEventListener('change', updateSummary);
-    });
-}
-
-// 템플릿 목록 로드
-function loadCharTemplateList(selectElement) {
-    sendMessage({ action: 'list_workspace_files', file_type: 'char_template' });
-    window.pendingTemplateSelect = selectElement;
-}
-
-// 캐릭터 템플릿 저장(JSON)
-// 편집 모달 내 템플릿 저장에서 사용
-function saveCharacterTemplateFromModal() {
-    const name = document.getElementById('ceName').value.trim();
-    const gender = document.getElementById('ceGender').value.trim();
-    const age = document.getElementById('ceAge').value.trim();
-    const summary = document.getElementById('ceSummary').value.trim();
-    const traits = document.getElementById('ceTraits').value.trim();
-    const goals = document.getElementById('ceGoals').value.trim();
-    const boundaries = document.getElementById('ceBoundaries').value.trim();
-    const examples = document.getElementById('ceExamples').value.trim().split('\n').filter(Boolean);
-    const tags = document.getElementById('ceTags').value.split(',').map(s => s.trim()).filter(Boolean);
-    if (!name) { alert('이름을 입력하세요'); return; }
-    const filename = prompt('템플릿 파일명(확장자 제외):', slugify(name));
-    if (!filename) return;
-    const payload = { name, role: 'npc', gender, age, summary, traits, goals, boundaries, examples, tags };
-    sendMessage({ action: 'save_workspace_file', file_type: 'char_template', filename, content: JSON.stringify(payload, null, 2) });
-    // 모달의 템플릿 목록 갱신
-    setTimeout(() => {
-        const sel = document.getElementById('ceTemplateSelect');
-        if (sel) loadCharTemplateList(sel);
-    }, 500);
-}
-
-function slugify(str) {
-    return (str || '')
-        .toLowerCase()
-        .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9\-]/g, '')
-        .replace(/\-+/g, '-')
-        .replace(/^\-+|\-+$/g, '') || 'character';
-}
-
-function composeDescription(base, gender, age, traits, goals, boundaries, examples, tags, includeMeta = true) {
-    const lines = [];
-    if (includeMeta) {
-        const meta = [];
-        if (gender) meta.push(`성별: ${gender}`);
-        if (age) meta.push(`나이: ${age}`);
-        if (meta.length) lines.push(meta.join(', '));
-    }
-    if (base) lines.push(base);
-    if (traits) lines.push(`성격: ${traits}`);
-    if (goals) lines.push(`목표: ${goals}`);
-    if (boundaries) lines.push(`금지선: ${boundaries}`);
-    if (Array.isArray(examples) && examples.length) {
-        lines.push('예시 대사:');
-        examples.forEach(e => lines.push(`- ${e}`));
-    }
-    if (tags) lines.push(`태그: ${tags}`);
-    return lines.join('\n');
-}
-
-function collectCharacterFromItem(item) {
-    const name = item.querySelector('.character-name-input').value.trim();
-    const gender = item.querySelector('.character-gender-input').value.trim();
-    const age = item.querySelector('.character-age-input').value.trim();
-    const base = item.querySelector('.character-description-input').value.trim();
-    if (!name || !base) return null;
-    const traits = (item.dataset.traits || '').trim();
-    const goals = (item.dataset.goals || '').trim();
-    const boundaries = (item.dataset.boundaries || '').trim();
-    const tags = (item.dataset.tags || '').trim();
-    let examples = [];
-    try { examples = JSON.parse(item.dataset.examples || '[]'); } catch (_) { examples = []; }
-    const description = composeDescription(base, gender, age, traits, goals, boundaries, examples, tags, false);
-    const obj = { name, gender, description };
-    if (age) obj.age = age;
-    return obj;
-}
 
 // 컨텍스트 저장
 saveContextBtn.addEventListener('click', () => {
@@ -2827,151 +2033,8 @@ if (applyCharactersBtn) {
     });
 }
 
-// 컨텍스트 로드
-function loadContext(context) {
-    worldInput.value = context.world || '';
-    situationInput.value = context.situation || '';
+// loadContext, applyContextToSettingsScreen, renderSettingsScreenView imported from modules
 
-    // 사용자 캐릭터 정보 파싱
-    const userChar = context.user_character || '';
-    try {
-        const nameEl = document.getElementById('userCharacterName');
-        const genderEl = document.getElementById('userCharacterGender');
-        const ageEl = document.getElementById('userCharacterAge');
-        let body = userChar;
-        const lines = (userChar || '').split(/\r?\n/);
-        if (lines.length && /^\s*이름\s*:\s*/.test(lines[0])) {
-            const meta = lines[0];
-            body = lines.slice(1).join('\n');
-            const mName = meta.match(/이름\s*:\s*([^,]+)/);
-            const mGender = meta.match(/성별\s*:\s*([^,]+)/);
-            const mAge = meta.match(/나이\s*:\s*([^,]+)/);
-            if (nameEl) nameEl.value = mName ? mName[1].trim() : '';
-            if (genderEl) genderEl.value = mGender ? mGender[1].trim() : '';
-            if (ageEl) ageEl.value = mAge ? mAge[1].trim() : '';
-        }
-        userCharacterInput.value = (body || '').trim();
-    } catch (_) {
-        userCharacterInput.value = userChar;
-    }
-
-    narratorEnabled.checked = context.narrator_enabled || false;
-    narratorMode.value = context.narrator_mode || 'moderate';
-    narratorDescription.value = context.narrator_description || '';
-    userIsNarrator.checked = context.user_is_narrator || false;
-    aiProvider.value = context.ai_provider || 'claude';
-    // 모델 복원 (저장된 경우)
-    try {
-        if (typeof modelSelect !== 'undefined' && modelSelect && context.model !== undefined) {
-            // 모델이 빈 문자열이면 기본값을 유지
-            const val = context.model || '';
-            // 모델 옵션이 존재하면 복원
-            const found = [...modelSelect.options].some(o => o.value === val);
-            if (found) modelSelect.value = val;
-        }
-    } catch (_) {}
-    // 세션 유지 복원
-    try {
-        if (typeof sessionRetentionToggle !== 'undefined' && sessionRetentionToggle && context.session_retention !== undefined) {
-            sessionRetentionToggle.checked = !!context.session_retention;
-        }
-    } catch (_) {}
-    adultLevel.value = context.adult_level || 'explicit';
-    narrativeSeparation.checked = context.narrative_separation || false;
-    if (narratorDrive) narratorDrive.value = context.narrator_drive || 'guide';
-    if (outputLevel) outputLevel.value = context.output_level || 'normal';
-    if (storyPace) storyPace.value = context.pace || 'normal';
-    if (adultConsent) adultConsent.checked = false; // 세션 보관값은 서버 측, UI는 기본 해제
-    if (forceChoices) forceChoices.checked = (context.choice_policy || 'off') === 'require';
-    if (choiceCount) choiceCount.value = String(context.choice_count || 3);
-
-    // 진행자 설정 표시/숨김
-    if (narratorEnabled.checked) {
-        narratorSettings.style.display = 'block';
-    }
-
-    // 참여자 로드 및 렌더링
-    participants = Array.isArray(context.characters) ? [...context.characters] : [];
-    renderParticipantsLeftPanel();
-    renderParticipantsManagerList();
-}
-
-// 설정 전용 화면 채우기
-function applyContextToSettingsScreen(ctx) {
-    const w = document.getElementById('sWorld');
-    const s = document.getElementById('sSituation');
-    const u = document.getElementById('sUserChar');
-    const ne = document.getElementById('sNarratorEnabled');
-    const ap = document.getElementById('sAiProvider');
-    if (!w && !s && !u) return; // 화면 아닐 때
-    try { if (w) w.value = ctx.world || ''; } catch (_) {}
-    try { if (s) s.value = ctx.situation || ''; } catch (_) {}
-    try { if (u) u.value = ctx.user_character || ''; } catch (_) {}
-    try { if (ne) ne.checked = !!ctx.narrator_enabled; } catch (_) {}
-    try { if (ap && ctx.ai_provider) ap.value = ctx.ai_provider; } catch (_) {}
-}
-
-function renderSettingsScreenView(roomId) {
-    const html = `
-      <section aria-labelledby="settingsScreenTitle">
-        <h1 id="settingsScreenTitle">설정 — ${roomId}</h1>
-        <div style="display:grid; gap:0.75rem; max-width:920px;">
-          <div>
-            <label class="field-label">🌍 세계관/배경</label>
-            <textarea id="sWorld" rows="4" class="input" placeholder="세계관..."></textarea>
-          </div>
-          <div>
-            <label class="field-label">📍 현재 상황</label>
-            <textarea id="sSituation" rows="3" class="input" placeholder="상황..."></textarea>
-          </div>
-          <div>
-            <label class="field-label">🙋 나의 캐릭터</label>
-            <textarea id="sUserChar" rows="3" class="input" placeholder="캐릭터 요약..."></textarea>
-          </div>
-          <div>
-            <label class="checkbox-label"><input type="checkbox" id="sNarratorEnabled"> <span>AI 진행자</span></label>
-          </div>
-          <div>
-            <label class="field-label">🤖 AI 제공자</label>
-            <select id="sAiProvider" class="select-input">
-              <option value="claude">Claude</option>
-              <option value="droid">Droid</option>
-              <option value="gemini">Gemini</option>
-            </select>
-          </div>
-          <div style="display:flex; gap:0.5rem;">
-            <button class="btn" onclick="navigate('/rooms/${encodeURIComponent(roomId)}')">← 돌아가기</button>
-            <button id="sSaveBtn" class="btn btn-primary">저장</button>
-          </div>
-        </div>
-      </section>`;
-    showScreen(html);
-    // 기존 UI 값 복사(빠른 프리필)
-    try {
-        applyContextToSettingsScreen({
-            world: worldInput?.value || '',
-            situation: situationInput?.value || '',
-            user_character: userCharacterInput?.value || '',
-            narrator_enabled: !!narratorEnabled?.checked,
-            ai_provider: aiProvider?.value || 'claude'
-        });
-    } catch (_) {}
-
-    const save = document.getElementById('sSaveBtn');
-    save?.addEventListener('click', () => {
-        const ctx = {
-            world: document.getElementById('sWorld')?.value || '',
-            situation: document.getElementById('sSituation')?.value || '',
-            user_character: document.getElementById('sUserChar')?.value || '',
-            narrator_enabled: !!document.getElementById('sNarratorEnabled')?.checked,
-            ai_provider: document.getElementById('sAiProvider')?.value || 'claude',
-        };
-        sendMessage({ action: 'set_context', ...ctx });
-        const config = { room_id: roomId, title: roomId, context: ctx };
-        sendMessage({ action: 'room_save', room_id: roomId, config });
-        navigate(`/rooms/${encodeURIComponent(roomId)}`);
-    });
-}
 
 
 // ===== 히스토리 초기화 =====
@@ -3072,152 +2135,11 @@ saveNarrativeBtn.addEventListener('click', () => {
     } catch (_) {}
 });
 
-// ===== 토큰 표시 =====
+// updateHeaderTokenDisplay imported from modules (Note: module implementation might differ)
 
-function updateTokenDisplay(tokenUsage) {
-    const tokenInfoDiv = document.getElementById('tokenInfo');
-
-    // show_token_usage 설정 확인
-    if (!appConfig.show_token_usage) {
-        tokenInfoDiv.style.display = 'none';
-        return;
-    }
-
-    tokenInfoDiv.style.display = 'flex';
-
-    if (!tokenUsage || !tokenUsage.providers) return;
-
-    const formatNumber = (num) => num.toLocaleString('ko-KR');
-    const providers = tokenUsage.providers;
-
-    // 현재 사용 중인 제공자 또는 Claude 우선
-    let activeProvider = null;
-    if (currentProvider && providers[currentProvider] && providers[currentProvider].supported) {
-        activeProvider = currentProvider;
-    } else if (providers.claude && providers.claude.supported) {
-        activeProvider = 'claude';
-    } else if (providers.gemini && providers.gemini.supported) {
-        activeProvider = 'gemini';
-    } else if (providers.droid && providers.droid.supported) {
-        activeProvider = 'droid';
-    }
-
-    if (!activeProvider) {
-        // 토큰 정보를 제공하는 제공자가 없음
-        tokenText.textContent = '토큰: 정보 없음';
-        tokenText.title = '사용 중인 AI 제공자가 토큰 정보를 제공하지 않습니다.';
-        tokenInfoDiv.style.color = '#808080'; // 회색
-        return;
-    }
-
-    const providerData = providers[activeProvider];
-    const total = providerData.total_tokens || 0;
-    const contextWindow = 200000; // Claude 기본 컨텍스트 윈도우
-
-    // 남은 비율 계산
-    const usagePercent = total > 0 ? ((total / contextWindow) * 100).toFixed(1) : 0;
-
-    // 제공자 레이블
-    const providerLabel = activeProvider === 'claude' ? 'Claude' :
-                         activeProvider === 'gemini' ? 'Gemini' : 'Droid';
-
-    // 메인 텍스트
-    tokenText.textContent = `${providerLabel}: ${formatNumber(total)} / ${formatNumber(contextWindow)} (${usagePercent}%)`;
-
-    // 툴팁에 상세 정보 표시
-    const tooltipLines = [
-        `=== ${providerLabel} 토큰 사용량 ===`,
-        `총 누적: ${formatNumber(total)} 토큰 (${providerData.message_count || 0}회)`,
-        `최근: ${formatNumber(providerData.last_total_tokens || 0)} 토큰`,
-        ``,
-        `[누적 상세]`,
-        `입력: ${formatNumber(providerData.total_input_tokens || 0)}`,
-        `출력: ${formatNumber(providerData.total_output_tokens || 0)}`,
-        `캐시 읽기: ${formatNumber(providerData.total_cache_read_tokens || 0)}`,
-        `캐시 생성: ${formatNumber(providerData.total_cache_creation_tokens || 0)}`,
-        ``,
-        `[최근 사용량]`,
-        `입력: ${formatNumber(providerData.last_input_tokens || 0)}`,
-        `출력: ${formatNumber(providerData.last_output_tokens || 0)}`,
-        `캐시 읽기: ${formatNumber(providerData.last_cache_read_tokens || 0)}`,
-        `캐시 생성: ${formatNumber(providerData.last_cache_creation_tokens || 0)}`
-    ];
-
-    // 다른 제공자 정보도 추가
-    Object.keys(providers).forEach(provider => {
-        if (provider !== activeProvider && providers[provider].supported) {
-            const pData = providers[provider];
-            const pLabel = provider === 'claude' ? 'Claude' :
-                          provider === 'gemini' ? 'Gemini' : 'Droid';
-            tooltipLines.push('');
-            tooltipLines.push(`[${pLabel}]`);
-            tooltipLines.push(`총: ${formatNumber(pData.total_tokens || 0)} (${pData.message_count || 0}회)`);
-            tooltipLines.push(`최근: ${formatNumber(pData.last_total_tokens || 0)}`);
-        }
-    });
-
-    tokenText.title = tooltipLines.join('\n');
-
-    // 토큰 사용량에 따라 색상 변경
-    if (usagePercent > 80) {
-        tokenInfoDiv.style.color = '#f48771'; // 빨강 (경고)
-    } else if (usagePercent > 50) {
-        tokenInfoDiv.style.color = '#dcdcaa'; // 노랑
-    } else {
-        tokenInfoDiv.style.color = '#4ec9b0'; // 청록 (정상)
-    }
-}
 
 // ===== 이벤트 리스너 바인딩(동적) =====
-let isComposing = false; // IME 입력 중 플래그 (한글, 일본어, 중국어 등)
-
-function bindChatEvents() {
-    refreshChatRefs();
-    try {
-        if (sendChatBtn && !sendChatBtn.dataset.bound) {
-            sendChatBtn.addEventListener('click', sendChatMessage);
-            sendChatBtn.dataset.bound = '1';
-        }
-        if (chatInput && !chatInput.dataset.bound) {
-            // IME 입력 시작/종료 감지
-            chatInput.addEventListener('compositionstart', () => {
-                isComposing = true;
-            });
-            chatInput.addEventListener('compositionend', () => {
-                isComposing = false;
-            });
-
-                        // 모바일(터치) 환경에서는 Enter 키 전송을 막고 버튼으로만 전송하도록 처리
-                        const __isTouch = isTouchDevice();
-                        try { console.debug('isTouchDevice check:', __isTouch); } catch (_) {}
-
-            // 터치(모바일) 디바이스에서는 Enter로 전송하지 않도록
-            // 캐치/캡처 단계에서 기본 동작을 막아 다른 핸들러에 의해서
-            // 전송되는 것을 방지합니다.
-            chatInput.addEventListener(
-                'keydown',
-                (e) => {
-                    try { console.debug('keydown on chatInput', e.key, 'isComposing', isComposing, 'isTouchDevice', __isTouch); } catch (_) {}
-                    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-                        if (__isTouch) {
-                            try { console.debug('Preventing Enter on touch device'); } catch (_) {}
-                            e.preventDefault();
-                            e.stopImmediatePropagation();
-                            return;
-                        }
-                        // 터치가 아닌 경우(데스크탑)만 Enter로 전송
-                        e.preventDefault();
-                        sendChatMessage();
-                    }
-                },
-                { capture: true }
-            );
-
-            chatInput.dataset.bound = '1';
-        }
-    } catch (_) {}
-}
-
+// bindChatEvents imported from modules
 bindChatEvents();
 
 // ===== 탭 전환 =====
@@ -3275,7 +2197,7 @@ function handleLogout() {
     setRefreshToken('', '');
     localStorage.removeItem(USER_ROLE_KEY);
     userRole = 'user';
-    setIsAuthenticatedState(false);
+    setIsAuthenticated(false);
     adminBtn.style.display = 'none';
     moreAdminBtn.style.display = 'none';
     loginBtn.style.display = 'block';
@@ -3882,152 +2804,11 @@ function closeParticipantsModal() {
     }
 }
 
-function renderParticipantsLeftPanel() {
-    charactersList.innerHTML = '';
-    if (!Array.isArray(participants) || participants.length === 0) {
-        const p = document.createElement('p');
-        p.className = 'placeholder';
-        p.textContent = '현재 참여자가 없습니다. “참여자 추가”를 눌러 추가하세요.';
-        charactersList.appendChild(p);
-        return;
-    }
-    const stripMeta = (text) => (text || '')
-        .replace(/(^|\n)\s*(성별|나이|이름)\s*:[^\n]*\n?/g, '$1')
-        .trim();
-    participants.forEach((c, idx) => {
-        const row = document.createElement('div');
-        row.className = 'character-chip';
-        row.style.padding = '6px 8px';
-        row.style.marginBottom = '6px';
-        row.style.border = '1px solid #e8ecef';
-        row.style.borderRadius = '8px';
-        row.style.background = '#fff';
-        const nm = c.name || '이름 없음';
-        const gd = c.gender || '-';
-        const ag = c.age || '-';
-        const snip = stripMeta(c.description).slice(0, 60).replace(/\n/g, ' ');
-        row.textContent = `${nm} · ${gd} · ${ag} — ${snip}`;
-        charactersList.appendChild(row);
-    });
-}
+// renderParticipantsLeftPanel, renderParticipantsManagerList imported from modules
 
-function renderParticipantsManagerList() {
-    const wrap = document.getElementById('participantsManagerList');
-    if (!wrap) return;
-    wrap.innerHTML = '';
-    if (!Array.isArray(participants) || participants.length === 0) {
-        wrap.innerHTML = '<p class="placeholder">참여자가 없습니다.</p>';
-        return;
-    }
-    const stripMeta = (text) => (text || '')
-        .replace(/(^|\n)\s*(성별|나이|이름)\s*:[^\n]*\n?/g, '$1')
-        .trim();
-    participants.forEach((c, idx) => {
-        const row = document.createElement('div');
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
-        row.style.gap = '0.5rem';
-        row.style.margin = '4px 0';
-        const info = document.createElement('div');
-        info.style.flex = '1';
-        info.textContent = `${c.name || '이름 없음'} · ${c.gender || '-'} · ${c.age || '-'} — ${stripMeta(c.description).slice(0,60).replace(/\n/g,' ')}`;
-        const edit = document.createElement('button');
-        edit.className = 'btn btn-sm';
-        edit.textContent = '✏️ 편집';
-        edit.onclick = () => openParticipantEditor(idx);
-        const del = document.createElement('button');
-        del.className = 'btn btn-sm btn-remove';
-        del.textContent = '🗑️';
-        del.onclick = () => { participants.splice(idx,1); renderParticipantsLeftPanel(); renderParticipantsManagerList(); };
-        row.appendChild(info);
-        row.appendChild(edit);
-        row.appendChild(del);
-        wrap.appendChild(row);
-    });
-}
 
-function openParticipantEditor(index) {
-    // 참여자 모달이 열려 있으면 닫고(오버레이 제거) 편집 모달을 연다
-    closeParticipantsModal();
-    // 채우고 모달 오픈
-    const c = (index != null && index >=0) ? participants[index] : { name:'', gender:'', age:'', description:'', traits:'', goals:'', boundaries:'', examples:[], tags:[] };
-    const modal = document.getElementById('characterEditorModal');
-    document.getElementById('ceName').value = c.name || '';
-    document.getElementById('ceGender').value = c.gender || '';
-    document.getElementById('ceAge').value = c.age || '';
-    document.getElementById('ceSummary').value = c.description || '';
-    document.getElementById('ceTraits').value = c.traits || '';
-    document.getElementById('ceGoals').value = c.goals || '';
-    document.getElementById('ceBoundaries').value = c.boundaries || '';
-    document.getElementById('ceExamples').value = Array.isArray(c.examples)? c.examples.join('\n'): '';
-    document.getElementById('ceTags').value = Array.isArray(c.tags)? c.tags.join(', '): (c.tags || '');
-    loadCharTemplateList(document.getElementById('ceTemplateSelect'));
-    modal.classList.remove('hidden');
-    // 저장 핸들러 재바인딩
-    const saveBtn = document.getElementById('ceSaveBtn');
-    saveBtn.onclick = () => {
-        const name = document.getElementById('ceName').value.trim();
-        const gender = document.getElementById('ceGender').value.trim();
-        const age = document.getElementById('ceAge').value.trim();
-        const summary = document.getElementById('ceSummary').value.trim();
-        const traits = document.getElementById('ceTraits').value.trim();
-        const goals = document.getElementById('ceGoals').value.trim();
-        const boundaries = document.getElementById('ceBoundaries').value.trim();
-        const examples = document.getElementById('ceExamples').value.split('\n').map(s=>s.trim()).filter(Boolean);
-        const tags = document.getElementById('ceTags').value.split(',').map(s=>s.trim()).filter(Boolean);
-        const desc = composeDescription(summary, gender, age, traits, goals, boundaries, examples, tags.join(', '));
-        const obj = { name, gender, age, description: desc };
-        if (index != null && index >= 0) participants[index] = obj; else participants.push(obj);
-        renderParticipantsLeftPanel();
-        renderParticipantsManagerList();
-        closeCharacterEditor();
-    };
-}
+// openParticipantEditor and event listeners imported from modules
 
-// 설정 모달: 참여자 추가/템플릿 추가
-document.getElementById('participantsBtn')?.addEventListener('click', openParticipantsModal);
-document.getElementById('pmCloseBtn')?.addEventListener('click', closeParticipantsModal);
-document.querySelector('#participantsModal .settings-modal-overlay')?.addEventListener('click', closeParticipantsModal);
-document.getElementById('pmApplyBtn')?.addEventListener('click', () => {
-    // participants 를 서버 컨텍스트에 즉시 적용
-    const userName = document.getElementById('userCharacterName').value.trim();
-    const userGender = document.getElementById('userCharacterGender').value.trim();
-    const userDesc = userCharacterInput.value.trim();
-    const userAge = (userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '');
-    let userCharacterData = '';
-    if (userName) {
-        userCharacterData = `이름: ${userName}`;
-        if (userGender) userCharacterData += `, 성별: ${userGender}`;
-        if (userAge) userCharacterData += `, 나이: ${userAge}`;
-        if (userDesc) userCharacterData += `\n${userDesc}`;
-    } else if (userDesc) {
-        userCharacterData = userDesc;
-    }
-    sendMessage({
-        action: 'set_context',
-        world: worldInput.value.trim(),
-        situation: situationInput.value.trim(),
-        user_character: userCharacterData,
-        narrator_enabled: narratorEnabled.checked,
-        narrator_mode: narratorMode.value,
-        narrator_description: narratorDescription.value.trim(),
-        user_is_narrator: userIsNarrator.checked,
-        ai_provider: aiProvider.value,
-        adult_level: adultLevel.value,
-        narrative_separation: narrativeSeparation.checked,
-        characters: Array.isArray(participants) ? participants : []
-    });
-});
-
-document.getElementById('pmAddNewBtn')?.addEventListener('click', () => openParticipantEditor(-1));
-document.getElementById('pmAddFromTemplateBtn')?.addEventListener('click', () => {
-    const sel = document.getElementById('pmTemplateSelect');
-    if (sel && sel.value) {
-        window.pendingLoadType = 'char_template';
-        window.pendingAddFromTemplate = true;
-        sendMessage({ action: 'load_workspace_file', file_type: 'char_template', filename: sel.value });
-    }
-});
 
 // ===== 프리셋 관리 =====
 
@@ -4102,7 +2883,7 @@ function applyPreset(preset) {
     userCharacterInput.value = preset.user_character || '';
 
     // 참여자 초기화 및 로드
-    participants = Array.isArray(preset.characters) ? [...preset.characters] : [];
+    setParticipants(Array.isArray(preset.characters) ? [...preset.characters] : []);
     renderParticipantsLeftPanel();
     renderParticipantsManagerList();
 
@@ -4492,10 +3273,9 @@ window.addEventListener('load', async () => {
     const savedToken = localStorage.getItem(AUTH_TOKEN_KEY);
     const savedExp = localStorage.getItem(AUTH_EXP_KEY);
     if (savedToken && savedExp && new Date(savedExp) > new Date()) {
-        authToken = savedToken;
-        authTokenExpiresAt = savedExp;
-        setIsAuthenticatedState(true);
-        userRole = localStorage.getItem(USER_ROLE_KEY) || 'user';
+        setAuthTokenState(savedToken, savedExp);
+        setIsAuthenticated(true);
+        setUserRole(localStorage.getItem(USER_ROLE_KEY) || 'user');
         loginBtn.style.display = 'none';
         moreLoginBtn.style.display = 'none';
         logoutBtn.style.display = 'block';
