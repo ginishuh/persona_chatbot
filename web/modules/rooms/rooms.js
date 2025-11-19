@@ -3,6 +3,7 @@ import { log } from '../utils/logger.js';
 import { rooms, currentRoom, setRooms, setCurrentRoom, setParticipants } from '../core/state.js';
 import { navigate } from '../routing/router.js';
 import { showScreen } from '../ui/screens.js';
+import { enableFocusTrap, disableFocusTrap } from '../ui/a11y.js';
 import { updateChatInputState } from '../chat/chat.js';
 import { renderParticipantsLeftPanel, renderParticipantsManagerList } from '../chat/characters.js';
 import { ROOMS_KEY, CURRENT_ROOM_KEY } from '../core/constants.js';
@@ -118,6 +119,113 @@ export function renderRoomsUI() {
 
     // 채팅 입력 상태 업데이트
     updateChatInputState(!!currentRoom);
+}
+
+export function renderRoomsScreen() {
+    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        return { rid, title };
+    });
+    const cards = items.map(it => `
+            <button class="btn room-card" style="width:100%; text-align:left; margin-bottom:8px;" data-rid="${encodeURIComponent(it.rid)}">${it.title}</button>
+        `).join('');
+    const html = `
+      <section aria-labelledby="roomsScreenTitle">
+        <h1 id="roomsScreenTitle">채팅방</h1>
+        <div style="max-width:720px; margin-top:0.5rem;">${cards || '<div class="empty">채팅방이 없습니다.</div>'}</div>
+                <div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
+                    <button class="btn" id="roomsBackBtn">← 돌아가기</button>
+                    <button class="btn btn-primary" id="roomsNewBtn">+ 새 채팅방</button>
+                </div>
+      </section>`;
+    showScreen(html);
+    // bind room card clicks
+    document.querySelectorAll('.room-card').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const rid = decodeURIComponent(btn.getAttribute('data-rid') || '');
+            navigate(`/rooms/${encodeURIComponent(rid)}`);
+        });
+    });
+    // back button
+    document.getElementById('roomsBackBtn')?.addEventListener('click', () => {
+        try { navigate(currentRoom ? `/rooms/${encodeURIComponent(currentRoom)}` : '/'); } catch (_) { navigate('/'); }
+    });
+    // new room button
+    document.getElementById('roomsNewBtn')?.addEventListener('click', () => {
+        const name = prompt('새 채팅방 이름','room_'+Math.random().toString(36).slice(2,6));
+        if(!name) return;
+        const r = sanitizeRoomName(name);
+        if(!rooms.find(x => (typeof x === 'string' ? x : x.room_id) === r)) {
+            setRooms([...(Array.isArray(rooms) ? rooms : []), r]);
+        }
+        setCurrentRoom(r);
+        persistRooms();
+        renderRoomsUI();
+        try {
+            const cfg = collectRoomConfig(r);
+            sendMessage({ action: 'room_save', room_id: r, config: cfg });
+            setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+        } catch (_) {}
+        navigate(`/rooms/${encodeURIComponent(r)}`);
+    });
+}
+
+export function populateRoomsModal() {
+    const wrap = document.getElementById('rmList');
+    const q = (document.getElementById('rmSearch')?.value || '').trim().toLowerCase();
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const items = (Array.isArray(rooms) ? rooms : []).map(r => {
+        const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+        const title = (typeof r === 'object' && r.title) ? r.title : rid;
+        return { rid, title };
+    }).filter(x => !q || x.title.toLowerCase().includes(q) || x.rid.toLowerCase().includes(q));
+    if (!items.length) {
+        wrap.innerHTML = '<div class="empty">채팅방이 없습니다.</div>';
+        return;
+    }
+    items.forEach(it => {
+        const container = document.createElement('div');
+        container.style = 'display:flex; gap:0.25rem; margin-bottom:6px; align-items:stretch;';
+
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm';
+        btn.style = 'flex:1; text-align:left;';
+        btn.textContent = it.title;
+        btn.addEventListener('click', () => {
+            // close modal directly (avoid cross-module function call)
+            const modal = document.getElementById('roomsModal');
+            if (modal) modal.classList.add('hidden');
+            navigate(`/rooms/${encodeURIComponent(it.rid)}`);
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-sm btn-remove';
+        delBtn.textContent = '🗑️';
+        delBtn.title = '삭제';
+        delBtn.style = 'padding: 0.25rem 0.5rem;';
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!confirm(`채팅방 '${it.title}' 을(를) 삭제하시겠습니까?`)) return;
+            sendMessage({ action: 'room_delete', room_id: it.rid });
+            setTimeout(() => sendMessage({ action: 'room_list' }), 300);
+            setRooms((Array.isArray(rooms) ? rooms : []).filter(r => (typeof r === 'string' ? r : r.room_id) !== it.rid));
+            if (currentRoom === it.rid) {
+                const next = (Array.isArray(rooms) && rooms.length > 0) ? (typeof rooms[0] === 'string' ? rooms[0] : rooms[0].room_id) : null;
+                setCurrentRoom(next);
+            }
+            persistRooms();
+            populateRoomsModal();
+            renderRoomsUI();
+            renderRoomsRightPanelList();
+            log('채팅방 삭제 완료', 'success');
+        });
+
+        container.appendChild(btn);
+        container.appendChild(delBtn);
+        wrap.appendChild(container);
+    });
 }
 
 export function renderRoomsRightPanelList() {
