@@ -9,7 +9,7 @@ function formatTimestamp(date) {
     return date.toLocaleTimeString('ko-KR', { hour12: false });
 }
 
-function syncConnectionIndicator() {
+export function syncConnectionIndicator() {
     try {
         const statusIndicator = document.getElementById('statusIndicator');
         const moreStatusIndicator = document.getElementById('moreStatusIndicator');

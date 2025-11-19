@@ -28,6 +28,10 @@ export function initAdminPanel(options = {}) {
 export async function openAdminModal() {
     adminModal = adminModal || document.getElementById('adminModal');
     if (!adminModal) return;
+    if (!authToken) {
+        log('관리자 권한이 필요합니다.', 'error');
+        return;
+    }
     adminModal.classList.remove('hidden');
     enableFocusTrap(adminModal);
     await fetchPendingUsers();
@@ -42,6 +46,8 @@ export function closeAdminModal() {
 async function fetchPendingUsers() {
     if (!authToken) {
         log('관리자 권한이 필요합니다.', 'error');
+        renderPendingUsers([]);
+        closeAdminModal();
         return;
     }
 
@@ -53,6 +59,12 @@ async function fetchPendingUsers() {
                 'Content-Type': 'application/json'
             }
         });
+        if (response.status === 401 || response.status === 403) {
+            log('세션이 만료되었습니다. 다시 로그인 해주세요.', 'error');
+            renderPendingUsers([]);
+            closeAdminModal();
+            return;
+        }
         const data = await response.json();
         if (response.ok && data.success) {
             renderPendingUsers(data.users || []);
@@ -84,7 +96,7 @@ function renderPendingUsers(users) {
             <div class="pending-user-info">
                 <div class="pending-user-name">${escapeHtml(user.username)}</div>
                 <div class="pending-user-email">📧 ${escapeHtml(user.email)}</div>
-                <div class="pending-user-date">가입일: ${new Date(user.created_at).toLocaleString('ko-KR')}</div>
+                <div class="pending-user-date">가입일: ${escapeHtml(formatSignupDate(user.created_at))}</div>
             </div>
             <button class="approve-user-btn btn btn-sm" data-user-id="${user.user_id}">✓ 승인</button>
         </div>
@@ -101,6 +113,7 @@ function renderPendingUsers(users) {
 async function approveUser(userId) {
     if (!authToken) {
         log('관리자 권한이 필요합니다.', 'error');
+        closeAdminModal();
         return;
     }
 
@@ -113,6 +126,11 @@ async function approveUser(userId) {
             },
             body: JSON.stringify({ user_id: userId })
         });
+        if (response.status === 401 || response.status === 403) {
+            log('세션이 만료되었습니다. 다시 로그인 해주세요.', 'error');
+            closeAdminModal();
+            return;
+        }
         const data = await response.json();
         if (response.ok && data.success) {
             log('사용자 승인이 완료되었습니다.', 'success');
@@ -124,4 +142,13 @@ async function approveUser(userId) {
         console.error('Approve user error:', error);
         log('서버 오류가 발생했습니다.', 'error');
     }
+}
+
+function formatSignupDate(value) {
+    if (!value) return '알 수 없음';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return '알 수 없음';
+    }
+    return date.toLocaleString('ko-KR');
 }

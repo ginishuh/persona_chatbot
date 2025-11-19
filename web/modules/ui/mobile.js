@@ -4,6 +4,7 @@
  */
 
 import { enableFocusTrap } from './a11y.js';
+import { syncConnectionIndicator } from './status.js';
 
 let elements = {};
 let callbacks = {};
@@ -28,14 +29,16 @@ export function initMobileUI(options = {}) {
         moreSettingsBtn: options.moreSettingsBtn || document.getElementById('moreSettingsBtn'),
         moreParticipantsBtn: options.moreParticipantsBtn || document.getElementById('moreParticipantsBtn'),
         moreClearHistoryBtn: options.moreClearHistoryBtn || document.getElementById('moreClearHistoryBtn'),
-        moreResetSessionsBtn: options.moreResetSessionsBtn || document.getElementById('moreResetSessionsBtn')
+        moreResetSessionsBtn: options.moreResetSessionsBtn || document.getElementById('moreResetSessionsBtn'),
+        moreBackupBtn: options.moreBackupBtn || document.getElementById('moreBackupBtn')
     };
 
     callbacks = {
         onOpenParticipants: options.onOpenParticipants || (() => {}),
         onClearHistory: options.onClearHistory || (() => {}),
         onResetSessions: options.onResetSessions || (() => {}),
-        onLogout: options.onLogout || (() => {})
+        onLogout: options.onLogout || (() => {}),
+        onOpenBackup: options.onOpenBackup || (() => {})
     };
 
     elements.hamburgerBtn?.addEventListener('click', () => {
@@ -81,6 +84,11 @@ export function initMobileUI(options = {}) {
     elements.moreResetSessionsBtn?.addEventListener('click', () => {
         closeMoreMenu();
         callbacks.onResetSessions();
+    });
+
+    elements.moreBackupBtn?.addEventListener('click', () => {
+        closeMoreMenu();
+        callbacks.onOpenBackup();
     });
 
     document.addEventListener('click', (event) => {
@@ -153,21 +161,12 @@ export function closeMoreMenu() {
 
 function syncMoreMenuStatus() {
     try {
+        syncConnectionIndicator();
+
         const tokenInfo = document.getElementById('tokenInfo');
         const moreTokenInfo = document.getElementById('moreTokenInfo');
         if (tokenInfo && moreTokenInfo) {
             moreTokenInfo.textContent = tokenInfo.textContent;
-        }
-
-        const statusIndicator = document.getElementById('statusIndicator');
-        const moreStatusIndicator = document.getElementById('moreStatusIndicator');
-        const statusText = document.getElementById('statusText');
-        const moreStatusText = document.getElementById('moreStatusText');
-        if (statusIndicator && moreStatusIndicator) {
-            moreStatusIndicator.className = statusIndicator.className;
-        }
-        if (statusText && moreStatusText) {
-            moreStatusText.textContent = statusText.textContent;
         }
 
         const sessionBadge = document.getElementById('sessionStatusBadge');

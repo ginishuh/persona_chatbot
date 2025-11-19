@@ -149,11 +149,13 @@ const registerError = document.getElementById('registerError');
 // 로그인/로그아웃 버튼
 const loginBtn = document.getElementById('loginBtn');
 const logoutBtn = document.getElementById('logoutBtn');
+const backupBtn = document.getElementById('backupBtn');
 
 // 모바일 더보기 메뉴의 로그인/로그아웃/관리 버튼
 const moreLoginBtn = document.getElementById('moreLoginBtn');
 const moreLogoutBtn = document.getElementById('moreLogoutBtn');
 const moreAdminBtn = document.getElementById('moreAdminBtn');
+const moreBackupBtn = document.getElementById('moreBackupBtn');
 
 // 관리자 요소
 const adminBtn = document.getElementById('adminBtn');
@@ -1792,6 +1794,26 @@ if (moreLogoutBtn) {
     });
 }
 
+function navigateToBackupScreen() {
+    try {
+        navigate('/backup');
+    } catch (error) {
+        console.error('Failed to navigate to backup screen', error);
+    }
+}
+
+if (backupBtn) {
+    backupBtn.addEventListener('click', () => {
+        navigateToBackupScreen();
+    });
+}
+if (moreBackupBtn) {
+    moreBackupBtn.addEventListener('click', () => {
+        closeMoreMenu();
+        navigateToBackupScreen();
+    });
+}
+
 if (moreAdminBtn) {
     moreAdminBtn.addEventListener('click', () => closeMoreMenu());
 }
@@ -2459,7 +2481,8 @@ window.addEventListener('load', async () => {
         onOpenParticipants: openParticipantsModal,
         onClearHistory: () => document.getElementById('clearHistoryBtn')?.click(),
         onResetSessions: () => document.getElementById('resetSessionsBtn')?.click(),
-        onLogout: handleLogout
+        onLogout: handleLogout,
+        onOpenBackup: navigateToBackupScreen
     });
     // UI 초기 상태 강제 정리 (헤더 가려짐 방지)
     document.getElementById('settingsModal')?.classList.add('hidden');

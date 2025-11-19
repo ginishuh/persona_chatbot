@@ -19,6 +19,7 @@ const getCurrentRoom = () => window.currentRoom;
  */
 const routeTable = [
     // 루트 경로는 매핑하지 않음 - ChatGPT 스타일 환영 화면만 표시
+    { pattern: /^\/rooms$/, view: 'room-list' },
     { pattern: /^\/rooms\/([^\/]+)$/, view: 'room-detail' },
     { pattern: /^\/rooms\/([^\/]+)\/settings$/, view: 'room-settings' },
     { pattern: /^\/rooms\/([^\/]+)\/history$/, view: 'room-history' },
