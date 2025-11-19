@@ -46,7 +46,6 @@ export function parsePathname(pathname) {
 export function rememberPendingRoute(pathname) {
     const path = pathname || '/';
     setPendingRoutePath(path);
-    window.__pendingRoutePath = path;
 }
 
 /**
@@ -60,7 +59,6 @@ export function resumePendingRoute(renderFn) {
         return;
     }
     setPendingRoutePath(null);
-    window.__pendingRoutePath = null;
     try {
         renderFn(pendingPath);
     } catch (_) {}

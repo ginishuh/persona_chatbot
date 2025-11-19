@@ -8,6 +8,7 @@ import { sendMessage } from '../websocket/connection.js';
 import { slugify } from '../utils/utils.js';
 import { openModal, closeModal, enableFocusTrap, disableFocusTrap } from '../ui/modals.js';
 import { setPendingTemplateSelect } from '../files/pending.js';
+import { setLastEditorTrigger, focusLastEditorTrigger } from '../ui/last_focus.js';
 
 // DOM 요소 참조 (initCharacters에서 설정)
 let charactersListEl = null;
@@ -262,14 +263,14 @@ export function openCharacterEditor(characterDiv) {
     // 템플릿 목록 갱신
     loadCharTemplateList(document.getElementById('ceTemplateSelect'));
 
-    try { window.__lastEditorTrigger = document.activeElement; } catch (_) {}
+    try { setLastEditorTrigger(document.activeElement); } catch (_) {}
     openModal('characterEditorModal', true);
 }
 
 export function closeCharacterEditor() {
     closeModal('characterEditorModal', true);
     currentEditingCharacterItem = null;
-    try { window.__lastEditorTrigger?.focus?.(); } catch (_) {}
+    focusLastEditorTrigger();
 }
 
 export function applyCharacterEditorToItem() {

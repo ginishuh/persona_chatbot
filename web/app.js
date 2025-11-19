@@ -13,6 +13,7 @@ import { showScreen, hideScreen } from './modules/ui/screens.js';
 import { initA11y, enableFocusTrap, disableFocusTrap, announce, focusMainAfterRoute } from './modules/ui/a11y.js';
 import { log, updateStatus, updateModelOptions } from './modules/ui/status.js';
 import { initMobileUI, openMobilePanel, closeMoreMenu } from './modules/ui/mobile.js';
+import { setLastSettingsTrigger, focusLastSettingsTrigger } from './modules/ui/last_focus.js';
 import { initExportModule, openBackupModal, renderBackupScreenView, downloadRoomMd } from './modules/export/export.js';
 import { initAdminPanel, openAdminModal, closeAdminModal } from './modules/admin/admin.js';
 import { connect, sendMessage, loadAppConfig } from './modules/websocket/connection.js';
@@ -1604,7 +1605,7 @@ const settingsModalOverlay = document.querySelector('.settings-modal-overlay');
 // 설정 모달 열기
 if (settingsBtn) {
     settingsBtn.addEventListener('click', () => {
-        try { window.__lastSettingsTrigger = document.activeElement; } catch (_) {}
+        try { setLastSettingsTrigger(document.activeElement); } catch (_) {}
         settingsModal.classList.remove('hidden');
         enableFocusTrap(settingsModal);
     });
@@ -1615,7 +1616,7 @@ if (closeSettingsBtn) {
     closeSettingsBtn.addEventListener('click', () => {
         settingsModal.classList.add('hidden');
         disableFocusTrap(settingsModal);
-        try { window.__lastSettingsTrigger?.focus?.(); } catch (_) {}
+        focusLastSettingsTrigger();
     });
 }
 
@@ -1624,7 +1625,7 @@ if (settingsModalOverlay) {
     settingsModalOverlay.addEventListener('click', () => {
         settingsModal.classList.add('hidden');
         disableFocusTrap(settingsModal);
-        try { window.__lastSettingsTrigger?.focus?.(); } catch (_) {}
+        focusLastSettingsTrigger();
     });
 }
 
@@ -1845,7 +1846,7 @@ function handleFileLoad(data) {
         clearPendingTemplateModal();
         clearPendingAddFromTemplate();
         clearPendingLoadType();
-    } else if (window.pendingLoadType === 'my_profile') {
+    } else if (getPendingLoadType() === 'my_profile') {
         try {
             const obj = JSON.parse(content || '{}');
             if (loginModal) { /* noop */ }
@@ -1860,6 +1861,7 @@ function handleFileLoad(data) {
         } catch (e) {
             log('내 프로필 JSON 파싱 실패', 'error');
         }
+        clearPendingLoadType();
     }
 }
 
