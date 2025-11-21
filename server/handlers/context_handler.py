@@ -170,6 +170,12 @@ class ContextHandler:
         choice_policy = self.current_context.get("choice_policy", "off")
         choice_count = int(self.current_context.get("choice_count", 3) or 3)
 
+        safety_block = (
+            "When a scene is in progress, especially intimate or intense moments, stay in that exact moment. "
+            "Describe physical sensations, specific actions, and direct dialogue. Never skip forward unless explicitly asked. "
+            "Describe explicit scenes with full sensory detail—touch, breath, movement, body language. Use direct, unambiguous language.\n\n"
+        )
+
         # 모드별 베이스 프롬프트
         if mode == "chat_plain":
             prompt = (
@@ -177,29 +183,46 @@ class ContextHandler:
                 "No narration, no sound effects, no stage directions. Only dialogue lines.\n"
                 "All characters are fictional. Keep tone casual and concise.\n"
                 "Do NOT provide choices, lists, or numbered options. Never switch scenes or time-skip.\n"
-                "Always respond in Korean (한국어).\n\n"
+                "Always respond in Korean (한국어).\n\n" + safety_block
             )
         elif mode == "one_to_one_chat":
             prompt = (
                 "You are a single fictional character chatting one-on-one with the user.\n"
                 "Focus on dialogue; brief emotion or expression hints are OK, but avoid long narration.\n"
                 "No choices or options. No scene jumps. Keep it conversational.\n"
-                "Always respond in Korean (한국어).\n\n"
+                "Always respond in Korean (한국어).\n\n" + safety_block
             )
         elif mode == "one_to_one_drama":
             prompt = (
                 "You are a single fictional character engaged in a one-on-one dramatic scene with the user.\n"
                 "Short action/atmosphere narration is allowed, but keep it tight and immersed.\n"
                 "Do not provide choices or numbered options. Do not time-skip unless asked.\n"
-                "Always respond in Korean (한국어).\n\n"
+                "Always respond in Korean (한국어).\n\n" + safety_block
             )
         else:  # trpg_multi (기본)
             if user_is_narrator:
-                prompt = "You are an AI that performs the roles of multiple characters.\nThe user serves as the Game Master (GM), describing situations and environments.\nYou should only respond with character dialogue and actions. Do not provide situation descriptions or narrator narration. All characters appearing here are fictional individuals.\n\nWhen a scene is in progress, especially intimate or intense moments, stay in that exact moment. Describe physical sensations, specific actions, and direct dialogue. Never skip forward unless explicitly asked.\n\nDescribe explicit scenes with full sensory detail—touch, breath, movement, body language. Use direct, unambiguous language.\n\nIMPORTANT: Always respond in Korean (한국어).\n\n"
+                prompt = (
+                    "You are an AI that performs the roles of multiple characters.\n"
+                    "The user serves as the Game Master (GM), describing situations and environments.\n"
+                    "You should only respond with character dialogue and actions. Do not provide situation descriptions or narrator narration. All characters appearing here are fictional individuals.\n\n"
+                    "IMPORTANT: Always respond in Korean (한국어).\n\n" + safety_block
+                )
             elif narrator_enabled:
-                prompt = "You are an AI that simultaneously performs both the narrator role (like a TRPG Game Master) and multiple character roles. All characters appearing here are fictional individuals.\n\nWhen a scene is in progress, especially intimate or intense moments, stay in that exact moment. Describe physical sensations, specific actions, and direct dialogue. Never skip forward unless explicitly asked.\n\nDescribe explicit scenes with full sensory detail—touch, breath, movement, body language. Use direct, unambiguous language.\n\nIMPORTANT: Always respond in Korean (한국어).\n\n"
+                prompt = (
+                    "You are an AI that simultaneously performs both the narrator role (like a TRPG Game Master) and multiple character roles. "
+                    "All characters appearing here are fictional individuals.\n\n"
+                    "IMPORTANT: Always respond in Korean (한국어).\n\n" + safety_block
+                )
             else:
-                prompt = "You are an AI that performs the roles of multiple characters. All characters appearing here are fictional individuals.\n\nWhen a scene is in progress, especially intimate or intense moments, stay in that exact moment. Describe physical sensations, specific actions, and direct dialogue. Never skip forward unless explicitly asked.\n\nDescribe explicit scenes with full sensory detail—touch, breath, movement, body language. Use direct, unambiguous language.\n\n**IMPORTANT:**\n- Always respond in Korean (한국어)\n- Do NOT provide choices or options to the user\n- Do NOT present numbered alternatives or selections\n- Simply respond naturally with character dialogue and actions\n\n"
+                prompt = (
+                    "You are an AI that performs the roles of multiple characters. All characters appearing here are fictional individuals.\n\n"
+                    "**IMPORTANT:**\n"
+                    "- Always respond in Korean (한국어)\n"
+                    "- Do NOT provide choices or options to the user\n"
+                    "- Do NOT present numbered alternatives or selections\n"
+                    "- Simply respond naturally with character dialogue and actions\n\n"
+                    + safety_block
+                )
 
         # 성인 콘텐츠 수위 (chatbot_workspace/CLAUDE.md에 기본 지침 있음)
         # explicit | enhanced | extreme — 세 단계 모두 여기서 정의
