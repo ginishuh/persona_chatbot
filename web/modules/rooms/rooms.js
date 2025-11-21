@@ -35,6 +35,7 @@ let adultConsent = null;
 let forceChoices = null;
 let choiceCount = null;
 let narratorSettings = null;
+let conversationMode = null;
 
 export function refreshRoomRefs() {
     roomSelect = document.getElementById('roomSelect');
@@ -63,6 +64,7 @@ export function refreshRoomRefs() {
     forceChoices = document.getElementById('forceChoices');
     choiceCount = document.getElementById('choiceCount');
     narratorSettings = document.getElementById('narratorSettings');
+    conversationMode = document.getElementById('conversationMode');
 }
 
 export function sanitizeRoomName(name) {
@@ -362,6 +364,7 @@ export function loadContext(context) {
     if (adultConsent) adultConsent.checked = false; // 세션 보관값은 서버 측, UI는 기본 해제
     if (forceChoices) forceChoices.checked = (context.choice_policy || 'off') === 'require';
     if (choiceCount) choiceCount.value = String(context.choice_count || 3);
+    if (conversationMode) conversationMode.value = context.conversation_mode || 'trpg_multi';
 
     // 진행자 설정 표시/숨김
     if (narratorEnabled && narratorEnabled.checked) {
@@ -413,7 +416,8 @@ export function collectRoomConfig(roomId) {
             output_level: outputLevel ? outputLevel.value : 'normal',
             pace: storyPace ? storyPace.value : 'normal',
             choice_policy: forceChoices && forceChoices.checked ? 'require' : 'off',
-            choice_count: choiceCount ? parseInt(choiceCount.value, 10) : 3
+            choice_count: choiceCount ? parseInt(choiceCount.value, 10) : 3,
+            conversation_mode: conversationMode ? conversationMode.value : 'trpg_multi'
         }
     };
 }
