@@ -964,9 +964,8 @@ def run_http_server(ctx: AppContext):
                     # 성공 응답
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
-                    response_data = json.dumps(
-                        {"success": True, "users": pending_users}, ensure_ascii=False
-                    ).encode("utf-8")
+                    resp = {"success": True, "users": pending_users}
+                    response_data = json.dumps(resp, ensure_ascii=False).encode("utf-8")
                     self.send_header("Content-Length", str(len(response_data)))
                     self.end_headers()
                     self.wfile.write(response_data)
