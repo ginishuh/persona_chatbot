@@ -65,6 +65,12 @@ import {
     persistRooms, sanitizeRoomName
 } from './modules/rooms/rooms.js';
 import {
+    parseMultiCharacterResponse,
+    loadCharTemplateList,
+    saveCharacterTemplateFromModal,
+    composeDescription
+} from './modules/chat/characters.js';
+import {
     AUTH_TOKEN_KEY, AUTH_EXP_KEY, REFRESH_TOKEN_KEY, REFRESH_EXP_KEY,
     USER_ROLE_KEY, SESSION_KEY_KEY, ROOMS_KEY, CURRENT_ROOM_KEY,
     RETRY_ACTIONS, MAX_REFRESH_RETRIES, HISTORY_LIMIT_DEFAULT
