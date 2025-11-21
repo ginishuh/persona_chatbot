@@ -6,7 +6,8 @@
 import { participants, setParticipants, getCharacterColor } from '../core/state.js';
 import { sendMessage } from '../websocket/connection.js';
 import { slugify } from '../utils/utils.js';
-import { openModal, closeModal, enableFocusTrap, disableFocusTrap } from '../ui/modals.js';
+import { openModal, closeModal } from '../ui/modals.js';
+import { enableFocusTrap, disableFocusTrap } from '../ui/a11y.js';
 import { setPendingTemplateSelect } from '../files/pending.js';
 import { setLastEditorTrigger, focusLastEditorTrigger } from '../ui/last_focus.js';
 
