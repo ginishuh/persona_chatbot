@@ -5,9 +5,6 @@
 
 import { enableFocusTrap as a11yEnableFocusTrap, disableFocusTrap as a11yDisableFocusTrap } from './a11y.js';
 
-// 과거 import 호환용 re-export (characters.js 등에서 사용)
-export { a11yEnableFocusTrap as enableFocusTrap, a11yDisableFocusTrap as disableFocusTrap };
-
 /**
  * 모달 열기
  * @param {string} modalId - 모달 요소 ID
