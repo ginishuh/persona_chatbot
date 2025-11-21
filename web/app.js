@@ -30,11 +30,13 @@ import {
     lastRequest, setLastRequest,
     autoLoginRequested, setAutoLoginRequested,
     sessionKey, setSessionKey,
-    currentHistoryLimit,
     sessionSettingsLoaded,
+    setSessionSettingsLoaded,
     tokenRefreshTimeout, setTokenRefreshTimeout,
     refreshRetryCount, setRefreshRetryCount,
-    refreshInProgress, setRefreshInProgress
+    refreshInProgress, setRefreshInProgress,
+    setCurrentHistoryLimit,
+    currentHistoryLimit
 } from './modules/core/state.js';
 import {
     setPendingFileList,
@@ -62,8 +64,17 @@ import {
 import {
     refreshRoomRefs, renderRoomsUI, renderRoomsRightPanelList, renderRoomsScreen,
     loadContext, collectRoomConfig, bindRoomEvents, populateRoomsModal, openRoomsModal, closeRoomsModal,
-    persistRooms, sanitizeRoomName
+    persistRooms, sanitizeRoomName, applyContextToSettingsScreen
 } from './modules/rooms/rooms.js';
+import {
+    parseMultiCharacterResponse,
+    loadCharTemplateList,
+    saveCharacterTemplateFromModal,
+    composeDescription,
+    renderParticipantsManagerList,
+    renderParticipantsLeftPanel,
+    openParticipantEditor
+} from './modules/chat/characters.js';
 import {
     AUTH_TOKEN_KEY, AUTH_EXP_KEY, REFRESH_TOKEN_KEY, REFRESH_EXP_KEY,
     USER_ROLE_KEY, SESSION_KEY_KEY, ROOMS_KEY, CURRENT_ROOM_KEY,
@@ -352,6 +363,8 @@ function renderHistorySnapshotScreen(history) {
 // ===== 방 목록(Home) 모달 =====
 // `populateRoomsModal`, `openRoomsModal`, `closeRoomsModal` are implemented in `web/modules/rooms/rooms.js`
 
+let roomSelect = document.getElementById('roomSelect');
+
 document.getElementById('rmCloseBtn')?.addEventListener('click', closeRoomsModal);
 document.querySelector('#roomsModal .settings-modal-overlay')?.addEventListener('click', closeRoomsModal);
 document.getElementById('rmSearch')?.addEventListener('input', populateRoomsModal);
@@ -362,6 +375,23 @@ document.getElementById('rmNewBtn')?.addEventListener('click', () => {
     setTimeout(() => roomNameInput.focus(), 100); // 포커스
     closeRoomsModal(); // 기존 모달 닫기
 });
+
+if (roomSelect) {
+    roomSelect.addEventListener('change', () => {
+        const selectedValue = roomSelect.value;
+        if (!selectedValue) {
+            return;
+        }
+        setCurrentRoom(selectedValue);
+        persistRooms();
+        sendMessage({ action: 'room_load', room_id: currentRoom });
+        sendMessage({ action: 'reset_sessions', room_id: currentRoom });
+        refreshRoomViews();
+        updateChatInputState(); // 입력 상태 업데이트
+        log(`채팅방 전환: ${currentRoom}`, 'info');
+        announce(`채팅방 전환: ${currentRoom}`);
+    });
+}
 
 // `renderRoomsRightPanelList` implementation moved to `web/modules/rooms/rooms.js`
 
@@ -564,7 +594,7 @@ function formatHistoryLimitLabel(limit) {
 
 function applyHistoryLimitUI(limit) {
     const unlimited = limit === null || limit === undefined;
-    currentHistoryLimit = unlimited ? null : limit;
+    setCurrentHistoryLimit(unlimited ? null : limit);
 
     if (historyLengthSlider) {
         if (!unlimited && typeof limit === 'number') {
@@ -607,7 +637,7 @@ function setupHistoryControls() {
                 return;
             }
             const value = parseInt(historyLengthSlider.value, 10) || HISTORY_LIMIT_DEFAULT;
-            currentHistoryLimit = value;
+            setCurrentHistoryLimit(value);
             sendHistoryLimit(value);
         });
     }
@@ -1143,13 +1173,13 @@ function handleMessage(msg) {
         case 'get_session_settings':
             if (data.success) {
                 applySessionRetentionUI(data.retention_enabled);
-                sessionSettingsLoaded = true;
+                setSessionSettingsLoaded(true);
             }
             break;
 
         case 'set_session_retention':
             if (data.success) {
-                sessionSettingsLoaded = true;
+                setSessionSettingsLoaded(true);
                 applySessionRetentionUI(data.retention_enabled);
                 const stateText = data.retention_enabled ? 'ON' : 'OFF';
                 log(`세션 유지가 ${stateText} 상태로 설정되었습니다.`, 'success');

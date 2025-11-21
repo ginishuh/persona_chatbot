@@ -3,6 +3,8 @@
  * @module ui/modals
  */
 
+import { enableFocusTrap as a11yEnableFocusTrap, disableFocusTrap as a11yDisableFocusTrap } from './a11y.js';
+
 /**
  * 모달 열기
  * @param {string} modalId - 모달 요소 ID
@@ -20,6 +22,8 @@ export function openModal(modalId, enableFocusTrap = null) {
     // 포커스 트랩 활성화 (제공된 경우)
     if (enableFocusTrap && typeof enableFocusTrap === 'function') {
         enableFocusTrap(modal);
+    } else {
+        a11yEnableFocusTrap(modal);
     }
 }
 
@@ -40,6 +44,8 @@ export function closeModal(modalId, disableFocusTrap = null) {
     // 포커스 트랩 비활성화 (제공된 경우)
     if (disableFocusTrap && typeof disableFocusTrap === 'function') {
         disableFocusTrap(modal);
+    } else {
+        a11yDisableFocusTrap(modal);
     }
 }
 
