@@ -352,6 +352,8 @@ function renderHistorySnapshotScreen(history) {
 // ===== 방 목록(Home) 모달 =====
 // `populateRoomsModal`, `openRoomsModal`, `closeRoomsModal` are implemented in `web/modules/rooms/rooms.js`
 
+let roomSelect = document.getElementById('roomSelect');
+
 document.getElementById('rmCloseBtn')?.addEventListener('click', closeRoomsModal);
 document.querySelector('#roomsModal .settings-modal-overlay')?.addEventListener('click', closeRoomsModal);
 document.getElementById('rmSearch')?.addEventListener('input', populateRoomsModal);
@@ -362,6 +364,23 @@ document.getElementById('rmNewBtn')?.addEventListener('click', () => {
     setTimeout(() => roomNameInput.focus(), 100); // 포커스
     closeRoomsModal(); // 기존 모달 닫기
 });
+
+if (roomSelect) {
+    roomSelect.addEventListener('change', () => {
+        const selectedValue = roomSelect.value;
+        if (!selectedValue) {
+            return;
+        }
+        setCurrentRoom(selectedValue);
+        persistRooms();
+        sendMessage({ action: 'room_load', room_id: currentRoom });
+        sendMessage({ action: 'reset_sessions', room_id: currentRoom });
+        refreshRoomViews();
+        updateChatInputState(); // 입력 상태 업데이트
+        log(`채팅방 전환: ${currentRoom}`, 'info');
+        announce(`채팅방 전환: ${currentRoom}`);
+    });
+}
 
 // `renderRoomsRightPanelList` implementation moved to `web/modules/rooms/rooms.js`
 
