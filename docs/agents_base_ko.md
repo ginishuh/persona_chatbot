@@ -38,8 +38,12 @@
   - `AGENTS.md` (영어 지침)
 
 ### 문서 동기화
-- CLAUDE.md 동기화 시 `python3 scripts/sync_docs.py` 사용
-- 베이스 문서는 직접 편집 금지 - 항상 `docs/agents_base_en.md` 편집
+- `python3 scripts/sync_docs.py`를 실행하면 베이스(영문)에서 아래 파일들이 자동 생성됩니다:
+  - `AGENTS.md` (Codex/코딩 에이전트)
+  - `CLAUDE.md` (Anthropic Claude)
+  - `GEMINI.md` (Google Gemini)
+  - `.github/copilot-instructions.md` (GitHub Copilot 코드리뷰 지침)
+- 위 파일들은 모두 `docs/agents_base_en.md`에서 헤더를 덧붙여 생성됩니다. **복제본을 직접 수정하지 말고**, 베이스를 수정한 뒤 동기화 스크립트를 다시 실행하세요.
 
 ## 코딩 스타일 및 명명 규칙
 - Python: PEP 8, 4스페이스 들여쓰기, 실용적인 곳에 타입 힌트, 모듈/함수 `snake_case`, 클래스 `PascalCase`, 상수 `UPPER_SNAKE_CASE`.
@@ -100,3 +104,13 @@ python scripts/ws_chat_test.py --provider gemini --prompt "Smoke: Gemini"
 - `APP_LOGIN_PASSWORD` 설정 시, 서버 시작 시 `APP_JWT_SECRET`도 설정되어 있는지 확인. 그렇지 않으면 서버가 강제로 종료됨.
 - Docker의 경우, `.env`에서 호스트 절대 경로 사용 선호:
   - `FACTORY_AUTH_DIR=$HOME/.factory`, `CLAUDE_AUTH_DIR=$HOME/.claude`, `GEMINI_AUTH_DIR=$HOME/.gemini`.
+
+## MCP 도구(Serena & Context7)
+- Serena MCP(코드 내비게이션/리팩터링):
+  - 설치(머신 1회): `uvx --from git+https://github.com/oraios/serena serena --help`
+  - 프로젝트 생성(로컬 전용, `.serena/` 커밋 금지): `serena project create --name persona-chatbot --language python --index .`
+  - MCP 지원 도구 사용 시 서버 기동: `serena start-mcp-server --transport stdio --project .`
+  - `.serena/`는 절대경로/캐시를 포함하므로 `.gitignore`에 반드시 포함.
+- Context7 MCP(공식 문서 조회):
+  - FastAPI, websockets, SQLAlchemy, JWT, OpenAI SDK, React/JS DOM 등 외부 프레임워크/라이브러리 사용법을 설명할 때는 기억보다 Context7 기반 최신 공식 문서/예제를 우선 확인합니다.
+  - 단순 문법이 아닌 이상 Context7을 기본값으로, 애매하면 추측 대신 문서 근거를 남기고 답변/주석/PR 설명에 출처를 언급합니다.

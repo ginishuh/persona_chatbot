@@ -52,6 +52,7 @@ data/
 .factory/
 .claude/
 .gemini/
+.serena/
 
 # Runtime artifacts
 STORIES/
