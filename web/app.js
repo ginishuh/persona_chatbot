@@ -30,11 +30,13 @@ import {
     lastRequest, setLastRequest,
     autoLoginRequested, setAutoLoginRequested,
     sessionKey, setSessionKey,
-    currentHistoryLimit,
     sessionSettingsLoaded,
+    setSessionSettingsLoaded,
     tokenRefreshTimeout, setTokenRefreshTimeout,
     refreshRetryCount, setRefreshRetryCount,
-    refreshInProgress, setRefreshInProgress
+    refreshInProgress, setRefreshInProgress,
+    setCurrentHistoryLimit,
+    currentHistoryLimit
 } from './modules/core/state.js';
 import {
     setPendingFileList,
@@ -62,7 +64,7 @@ import {
 import {
     refreshRoomRefs, renderRoomsUI, renderRoomsRightPanelList, renderRoomsScreen,
     loadContext, collectRoomConfig, bindRoomEvents, populateRoomsModal, openRoomsModal, closeRoomsModal,
-    persistRooms, sanitizeRoomName
+    persistRooms, sanitizeRoomName, applyContextToSettingsScreen
 } from './modules/rooms/rooms.js';
 import {
     parseMultiCharacterResponse,
@@ -592,7 +594,7 @@ function formatHistoryLimitLabel(limit) {
 
 function applyHistoryLimitUI(limit) {
     const unlimited = limit === null || limit === undefined;
-    currentHistoryLimit = unlimited ? null : limit;
+    setCurrentHistoryLimit(unlimited ? null : limit);
 
     if (historyLengthSlider) {
         if (!unlimited && typeof limit === 'number') {
@@ -635,7 +637,7 @@ function setupHistoryControls() {
                 return;
             }
             const value = parseInt(historyLengthSlider.value, 10) || HISTORY_LIMIT_DEFAULT;
-            currentHistoryLimit = value;
+            setCurrentHistoryLimit(value);
             sendHistoryLimit(value);
         });
     }
@@ -1171,13 +1173,13 @@ function handleMessage(msg) {
         case 'get_session_settings':
             if (data.success) {
                 applySessionRetentionUI(data.retention_enabled);
-                sessionSettingsLoaded = true;
+                setSessionSettingsLoaded(true);
             }
             break;
 
         case 'set_session_retention':
             if (data.success) {
-                sessionSettingsLoaded = true;
+                setSessionSettingsLoaded(true);
                 applySessionRetentionUI(data.retention_enabled);
                 const stateText = data.retention_enabled ? 'ON' : 'OFF';
                 log(`세션 유지가 ${stateText} 상태로 설정되었습니다.`, 'success');
