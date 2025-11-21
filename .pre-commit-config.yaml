@@ -40,6 +40,15 @@ repos:
         name: detect-secrets (pre-commit)
         args: ["--baseline", ".secrets.baseline", "--exclude-files", "^persona_data/"]
 
+  # ESLint (웹 자산 전역 금지 규칙 포함)
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.56.0
+    hooks:
+      - id: eslint
+        name: eslint (web)
+        files: ^web/.*\.(js|mjs|cjs)$
+        args: ["--max-warnings=0"]
+
   # 웹 자산 포맷터 (Prettier) — 선택: 필요 시 주석 해제 후 `rev`는 최신으로 조정
   # - repo: https://github.com/pre-commit/mirrors-prettier
   #   rev: v3.2.5
