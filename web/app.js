@@ -68,7 +68,10 @@ import {
     parseMultiCharacterResponse,
     loadCharTemplateList,
     saveCharacterTemplateFromModal,
-    composeDescription
+    composeDescription,
+    renderParticipantsManagerList,
+    renderParticipantsLeftPanel,
+    openParticipantEditor
 } from './modules/chat/characters.js';
 import {
     AUTH_TOKEN_KEY, AUTH_EXP_KEY, REFRESH_TOKEN_KEY, REFRESH_EXP_KEY,
