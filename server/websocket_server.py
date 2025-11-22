@@ -268,6 +268,16 @@ async def handle_message(websocket, message):
         except Exception:
             logger.exception("Router dispatch error")
 
+        # 안전망: 배포 환경에서 라우터가 등록되지 않았을 때 room_save가 빠지는 사례 대응
+        if action == "room_save":
+            try:
+                from server.ws.actions import rooms as rooms_actions
+
+                await rooms_actions.room_save(APP_CTX, websocket, data)
+                return
+            except Exception:
+                logger.exception("room_save fallback failed")
+
         # 파일(레거시 STORIES) 관련 액션은 제거되었습니다.
         if action in {"list_files", "read_file", "write_file"}:
             await websocket.send(
