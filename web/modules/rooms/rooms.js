@@ -466,7 +466,8 @@ export function loadContext(context) {
 
     // 참여자 로드 및 렌더링
     const newParticipants = Array.isArray(context.characters) ? [...context.characters] : [];
-    setParticipants(newParticipants);
+    // 로드 시에는 자동 저장을 트리거하지 않도록 silent
+    setParticipants(newParticipants, { silent: true });
     renderParticipantsLeftPanel();
     renderParticipantsManagerList();
 }
