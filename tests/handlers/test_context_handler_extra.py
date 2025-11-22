@@ -83,3 +83,22 @@ def test_input_sanitization_and_choice_count_bounds():
     assert ctx.get_context()["choice_count"] == 2
     ctx.set_choice_count(10)
     assert ctx.get_context()["choice_count"] == 5
+
+
+def test_load_from_dict_applies_conversation_mode():
+    ctx = ContextHandler()
+    ctx.load_from_dict({"conversation_mode": "one_to_one_chat", "world": "w"})
+    c = ctx.get_context()
+    assert c["conversation_mode"] == "one_to_one_chat"
+    assert c["world"] == "w"
+
+
+def test_load_from_dict_resets_conversation_mode_when_missing():
+    ctx = ContextHandler()
+    # 먼저 다른 모드로 설정
+    ctx.set_conversation_mode("one_to_one_drama")
+    # 새 dict에 모드 키가 없어도 기본값으로 리셋되어야 한다
+    ctx.load_from_dict({"world": "new"})
+    c = ctx.get_context()
+    assert c["conversation_mode"] == "trpg_multi"
+    assert c["world"] == "new"

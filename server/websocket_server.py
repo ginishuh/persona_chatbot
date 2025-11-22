@@ -187,6 +187,35 @@ async def handle_token_refresh_action(websocket, data):
     # 기존 refresh 토큰의 session_key와 user_id 유지
     token_session_key = payload.get("session_key") if payload else None
     token_user_id = payload.get("user_id") if payload else None
+
+    # 레거시 토큰 호환: user_id가 없고 session_key가 "user:<username>" 형태이면 DB에서 user_id 조회
+    if (
+        token_user_id is None
+        and APP_CTX
+        and APP_CTX.db_handler
+        and isinstance(token_session_key, str)
+    ):
+        try:
+            if token_session_key.startswith("user:"):
+                username = token_session_key.split(":", 1)[1]
+                user_row = await APP_CTX.db_handler.get_user_by_username(username)
+                if user_row:
+                    token_user_id = user_row.get("user_id")
+        except Exception:
+            # 호환 로직 실패 시 일반 갱신 절차로 넘어가되 user_id 미포함 토큰은 거절
+            token_user_id = token_user_id
+
+    # user_id를 여전히 찾지 못하면 명확한 오류를 반환 (구버전 토큰 정리 유도)
+    if token_user_id is None:
+        await websocket.send(
+            json.dumps(
+                {
+                    "action": "token_refresh",
+                    "data": {"success": False, "error": "user_id_missing_in_token"},
+                }
+            )
+        )
+        return
     new_access, access_exp = issue_access_token(token_session_key, token_user_id)
     # 선택: refresh 토큰도 회전(보안 강화)
     rotate = bool(int(os.getenv("APP_REFRESH_ROTATE", "1")))
