@@ -1448,6 +1448,7 @@ saveContextBtn.addEventListener('click', () => {
         user_is_narrator: userIsNarrator.checked,
         ai_provider: aiProvider.value,
         adult_level: adultLevel.value,
+        conversation_mode: conversationMode && conversationMode.value ? conversationMode.value : undefined,
         adult_consent: adultConsent ? !!adultConsent.checked : undefined,
         narrative_separation: narrativeSeparation.checked,
         narrator_drive: narratorDrive ? narratorDrive.value : undefined,
@@ -1504,6 +1505,7 @@ if (applyCharactersBtn) {
             user_is_narrator: userIsNarrator.checked,
             ai_provider: aiProvider.value,
             adult_level: adultLevel.value,
+            conversation_mode: conversationMode && conversationMode.value ? conversationMode.value : undefined,
             adult_consent: adultConsent ? !!adultConsent.checked : undefined,
             narrative_separation: narrativeSeparation.checked,
             narrator_drive: narratorDrive ? narratorDrive.value : undefined,
@@ -2251,7 +2253,8 @@ function applyPreset(preset) {
     userCharacterInput.value = preset.user_character || '';
 
     // 참여자 초기화 및 로드
-    setParticipants(Array.isArray(preset.characters) ? [...preset.characters] : []);
+                // 프리셋 적용 시 자동 저장은 다른 필드 변화로 이미 트리거되므로 silent 적용
+                setParticipants(Array.isArray(preset.characters) ? [...preset.characters] : [], { silent: true });
     renderParticipantsLeftPanel();
     renderParticipantsManagerList();
 

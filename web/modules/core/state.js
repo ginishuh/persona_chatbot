@@ -110,8 +110,14 @@ export function setAutoLoginRequested(requested) {
 export let participants = [];
 export let characterColors = {};
 
-export function setParticipants(newParticipants) {
+export function setParticipants(newParticipants, { silent = false } = {}) {
     participants = Array.isArray(newParticipants) ? newParticipants : [];
+    if (silent) return;
+    try {
+        window.dispatchEvent(new CustomEvent('participants:updated', { detail: participants }));
+    } catch (_) {
+        /* no-op: 이벤트 알림 실패는 무시 */
+    }
 }
 
 export function setCharacterColors(colors) {
