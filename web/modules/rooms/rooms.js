@@ -1,6 +1,6 @@
 import { sendMessage } from '../websocket/connection.js';
 import { log } from '../ui/status.js';
-import { rooms, currentRoom, setRooms, setCurrentRoom, setParticipants } from '../core/state.js';
+import { rooms, currentRoom, setRooms, setCurrentRoom, setParticipants, participants } from '../core/state.js';
 import { navigate } from '../routing/router.js';
 import { showScreen } from '../ui/screens.js';
 import { enableFocusTrap, disableFocusTrap } from '../ui/a11y.js';
@@ -36,6 +36,64 @@ let forceChoices = null;
 let choiceCount = null;
 let narratorSettings = null;
 let conversationMode = null;
+let autoSaveTimer = null;
+let autoSaveBound = false;
+const AUTO_SAVE_DELAY_MS = 1500;
+
+function buildSetContextPayload(roomId) {
+    const userName = userCharacterName ? userCharacterName.value.trim() : '';
+    const userGender = userCharacterGender ? userCharacterGender.value.trim() : '';
+    const userAge = userCharacterAge ? userCharacterAge.value.trim() : '';
+    const userDesc = userCharacterInput ? userCharacterInput.value.trim() : '';
+
+    let userCharacterData = '';
+    if (userName) {
+        userCharacterData = `이름: ${userName}`;
+        if (userGender) userCharacterData += `, 성별: ${userGender}`;
+        if (userAge) userCharacterData += `, 나이: ${userAge}`;
+        if (userDesc) userCharacterData += `\n${userDesc}`;
+    } else if (userDesc) {
+        userCharacterData = userDesc;
+    }
+
+    const characters = Array.isArray(participants) ? participants : [];
+
+    return {
+        action: 'set_context',
+        room_id: roomId,
+        world: worldInput ? worldInput.value.trim() : '',
+        situation: situationInput ? situationInput.value.trim() : '',
+        user_character: userCharacterData,
+        narrator_enabled: narratorEnabled ? !!narratorEnabled.checked : false,
+        narrator_mode: narratorMode ? narratorMode.value : 'moderate',
+        narrator_description: narratorDescription ? narratorDescription.value.trim() : '',
+        user_is_narrator: userIsNarrator ? !!userIsNarrator.checked : false,
+        ai_provider: aiProvider ? aiProvider.value : 'claude',
+        adult_level: adultLevel ? adultLevel.value : 'explicit',
+        conversation_mode: conversationMode && conversationMode.value ? conversationMode.value : undefined,
+        adult_consent: adultConsent ? !!adultConsent.checked : undefined,
+        narrative_separation: narrativeSeparation ? !!narrativeSeparation.checked : false,
+        narrator_drive: narratorDrive ? narratorDrive.value : undefined,
+        output_level: outputLevel ? outputLevel.value : undefined,
+        pace: storyPace ? storyPace.value : undefined,
+        characters,
+        choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
+        choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
+    };
+}
+
+function triggerAutoSave(reason = 'change') {
+    if (!currentRoom) return;
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => {
+        const payload = buildSetContextPayload(currentRoom);
+        sendMessage(payload);
+        try {
+            const cfg = collectRoomConfig(currentRoom);
+            sendMessage({ action: 'room_save', room_id: currentRoom, config: cfg });
+        } catch (_) {}
+    }, AUTO_SAVE_DELAY_MS);
+}
 
 export function refreshRoomRefs() {
     roomSelect = document.getElementById('roomSelect');
@@ -65,6 +123,41 @@ export function refreshRoomRefs() {
     choiceCount = document.getElementById('choiceCount');
     narratorSettings = document.getElementById('narratorSettings');
     conversationMode = document.getElementById('conversationMode');
+
+    bindAutoSaveInputs();
+}
+
+function bindAutoSaveInputs() {
+    if (autoSaveBound) return;
+    autoSaveBound = true;
+
+    const listen = (el, events = ['input']) => {
+        if (!el) return;
+        events.forEach((ev) => el.addEventListener(ev, () => triggerAutoSave(ev)));
+    };
+
+    [worldInput, situationInput, userCharacterInput, userCharacterName, userCharacterGender, userCharacterAge].forEach(el => listen(el));
+    [narratorDescription].forEach(el => listen(el));
+    listen(narratorEnabled, ['change']);
+    listen(narratorMode, ['change']);
+    listen(userIsNarrator, ['change']);
+    listen(aiProvider, ['change']);
+    listen(modelSelect, ['change']);
+    listen(sessionRetentionToggle, ['change']);
+    listen(adultLevel, ['change']);
+    listen(narrativeSeparation, ['change']);
+    listen(narratorDrive, ['change']);
+    listen(outputLevel, ['change']);
+    listen(storyPace, ['change']);
+    listen(adultConsent, ['change']);
+    listen(forceChoices, ['change']);
+    listen(choiceCount, ['input', 'change']);
+    listen(conversationMode, ['change']);
+
+    // 캐릭터 목록 변경 시 자동 저장 (전역 이벤트)
+    try {
+        window.addEventListener('participants:updated', () => triggerAutoSave('participants'));
+    } catch (_) {}
 }
 
 export function sanitizeRoomName(name) {
