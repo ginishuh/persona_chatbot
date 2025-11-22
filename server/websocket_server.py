@@ -203,7 +203,7 @@ async def handle_token_refresh_action(websocket, data):
                     token_user_id = user_row.get("user_id")
         except Exception:
             # 호환 로직 실패 시 일반 갱신 절차로 넘어가되 user_id 미포함 토큰은 거절
-            token_user_id = token_user_id
+            token_user_id = None
 
     # user_id를 여전히 찾지 못하면 명확한 오류를 반환 (구버전 토큰 정리 유도)
     if token_user_id is None:
