@@ -5,6 +5,12 @@
 
 import { setPendingRoutePath, setCurrentRoom, appConfig, isAuthenticated, pendingRoutePath, currentRoom } from '../core/state.js';
 
+let defaultHandlers = {};
+
+export function setDefaultHandlers(handlers = {}) {
+    defaultHandlers = handlers;
+}
+
 // core/state의 값을 직접 사용하도록 변경
 const getAppConfig = () => appConfig || {};
 const getIsAuthenticated = () => !!isAuthenticated;
@@ -83,6 +89,7 @@ export function resumePendingRoute(renderFn) {
  * @param {Function} handlers.focusMainAfterRoute
  */
 export function renderCurrentScreenFrom(pathname, handlers = {}) {
+    const h = { ...defaultHandlers, ...handlers };
     const {
         showLoginModal = () => {},
         hideScreen = () => {},
@@ -96,7 +103,7 @@ export function renderCurrentScreenFrom(pathname, handlers = {}) {
         openMobilePanel = () => {},
         focusMainAfterRoute = () => {},
         sendMessage = () => {}
-    } = handlers;
+    } = h;
 
     // 인증 필요 시 로그인 모달 표시
     if (getAppConfig().login_required && !getIsAuthenticated()) {
@@ -182,17 +189,19 @@ export function renderCurrentScreenFrom(pathname, handlers = {}) {
  * @param {string} path
  * @param {object} handlers - renderCurrentScreenFrom에 전달할 핸들러들
  */
-export function navigate(path, handlers = {}) {
+export function navigate(path, handlers = undefined) {
+    const h = handlers || defaultHandlers;
     window.history.pushState({ path }, '', path);
-    renderCurrentScreenFrom(location.pathname, handlers);
+    renderCurrentScreenFrom(location.pathname, h);
 }
 
 /**
  * popstate 이벤트 리스너 등록
  * @param {object} handlers - renderCurrentScreenFrom에 전달할 핸들러들
  */
-export function initRouter(handlers = {}) {
+export function initRouter(handlers = undefined) {
+    const h = handlers || defaultHandlers;
     window.addEventListener('popstate', () => {
-        renderCurrentScreenFrom(location.pathname, handlers);
+        renderCurrentScreenFrom(location.pathname, h);
     });
 }

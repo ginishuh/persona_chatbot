@@ -7,7 +7,8 @@ import {
     resumePendingRoute as routerResumePendingRoute,
     renderCurrentScreenFrom as routerRenderCurrentScreenFrom,
     navigate as routerNavigate,
-    initRouter as routerInitRouter
+    initRouter as routerInitRouter,
+    setDefaultHandlers as routerSetDefaultHandlers
 } from './modules/routing/router.js';
 import { showScreen, hideScreen } from './modules/ui/screens.js';
 import { initA11y, enableFocusTrap, disableFocusTrap, announce, focusMainAfterRoute } from './modules/ui/a11y.js';
@@ -234,6 +235,9 @@ const routingHandlers = {
     focusMainAfterRoute,
     sendMessage  // router.js가 room_load/reset_sessions/get_context를 보내기 위해 필요
 };
+
+// router 모듈에 기본 handlers 주입(rooms.js 등에서 navigate 호출 시 사용)
+routerSetDefaultHandlers(routingHandlers);
 
 function openRoomsModalWrapper() {
     if (appConfig.login_required && !isAuthenticated) {
