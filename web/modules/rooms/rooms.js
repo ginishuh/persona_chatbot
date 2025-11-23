@@ -524,7 +524,8 @@ export function collectRoomConfig(roomId) {
             pace: storyPace ? storyPace.value : 'normal',
             choice_policy: forceChoices && forceChoices.checked ? 'require' : 'off',
             choice_count: choiceCount ? parseInt(choiceCount.value, 10) : 3,
-            conversation_mode: conversationMode ? conversationMode.value : 'trpg_multi'
+            conversation_mode: conversationMode ? conversationMode.value : 'trpg_multi',
+            single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false
         }
     };
 }
