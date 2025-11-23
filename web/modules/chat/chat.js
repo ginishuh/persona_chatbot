@@ -31,6 +31,7 @@ let autoTurnMax = '10';
 let autoTurnCount = 0;
 let autoTurnTimer = null;
 let streamRenderedDuringTurn = false;
+let stopRequested = false;
 
 export function refreshChatRefs() {
     chatMessages = document.getElementById('chatMessages');
@@ -162,6 +163,7 @@ export function sendChatMessage() {
     const prompt = chatInput.value.trim();
 
     if (!prompt) return;
+    stopRequested = false;
     if (authRequired && !isAuthenticated) {
         log('로그인 후 이용 가능합니다.', 'error');
         return;
@@ -246,6 +248,7 @@ export function handleChatStream(data) {
         removeTypingIndicator();
 
         let deltaText = jsonData.delta?.text || '';
+        if (stopRequested) return;
         if (deltaText) {
             if (singleSpeaker && currentTurnSpeaker) {
                 deltaText = stripSpeakerPrefix(deltaText, currentTurnSpeaker);
@@ -267,6 +270,7 @@ export function handleChatStream(data) {
 
     if (jsonData.type === 'assistant') {
         removeTypingIndicator();
+        if (stopRequested) return;
 
         const message = jsonData.message;
         const content = message.content || [];
@@ -370,6 +374,13 @@ export function handleChatComplete(response) {
 
         const singleSpeaker = isSingleSpeakerModeEnabled() && currentTurnSpeaker;
 
+        if (stopRequested) {
+            streamRenderedDuringTurn = false;
+            currentTurnSpeaker = null;
+            stopRequested = false;
+            return;
+        }
+
         // Droid/Gemini: 누적된 스트리밍 텍스트 처리
         if (streamingText) {
             console.log('=== Droid/Gemini 응답 원본 ===');
@@ -425,6 +436,19 @@ export function handleChatComplete(response) {
         addChatMessage('system', '에러: ' + data.error);
         stopAutoTurn('오류로 자동턴을 중단합니다.');
     }
+}
+
+export function requestStopAll() {
+    stopRequested = true;
+    stopAutoTurn('사용자 중단');
+    removeTypingIndicator();
+    streamingText = '';
+    streamRenderedDuringTurn = false;
+    currentTurnSpeaker = null;
+    currentAssistantMessage = null;
+    if (chatInput) chatInput.disabled = false;
+    if (sendChatBtn) sendChatBtn.disabled = false;
+    log('응답/자동턴을 중단했습니다.', 'info');
 }
 
 export function updateTokenDisplay(tokenUsage, provider = 'claude') {

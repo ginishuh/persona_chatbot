@@ -60,7 +60,7 @@ import {
     refreshChatRefs, addChatMessage, addCharacterMessage,
     sendChatMessage, handleChatStream, handleChatComplete,
     bindChatEvents, updateChatInputState,
-    updateTokenDisplay
+    updateTokenDisplay, requestStopAll
 } from './modules/chat/chat.js';
 import {
     refreshRoomRefs, renderRoomsUI, renderRoomsRightPanelList, renderRoomsScreen,
@@ -116,6 +116,7 @@ const userCharacterInput = document.getElementById('userCharacterInput');
 const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const sendChatBtn = document.getElementById('sendChatBtn');
+const stopChatBtn = document.getElementById('stopChatBtn');
 const aiProvider = document.getElementById('aiProvider');
 const modelSelect = document.getElementById('modelSelect');
 const narratorEnabled = document.getElementById('narratorEnabled');
@@ -1608,6 +1609,12 @@ if (resetSessionsBtn) {
         if (confirm('현재 연결된 AI 세션을 모두 초기화하시겠습니까?')) {
             sendMessage({ action: 'reset_sessions' });
         }
+    });
+}
+
+if (stopChatBtn) {
+    stopChatBtn.addEventListener('click', () => {
+        requestStopAll();
     });
 }
 

@@ -358,7 +358,10 @@
                 </div>
                 <div class="chat-input-container">
                     <textarea id="chatInput" placeholder="메시지를 입력하세요..." rows="3"></textarea>
-                    <button id="sendChatBtn" class="btn btn-primary">전송</button>
+                    <div style="display:flex; flex-direction:column; gap:0.4rem; min-width:96px;">
+                        <button id="sendChatBtn" class="btn btn-primary">전송</button>
+                        <button id="stopChatBtn" class="btn btn-warning" title="응답/자동턴 중단">중단</button>
+                    </div>
                 </div>
             </main>
 
