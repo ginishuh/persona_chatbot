@@ -78,7 +78,7 @@ function buildSetContextPayload(roomId) {
         conversation_mode: conversationMode && conversationMode.value ? conversationMode.value : undefined,
         single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false,
         auto_turn_enabled: autoTurnToggle ? !!autoTurnToggle.checked : false,
-        auto_turn_delay: autoTurnDelay ? parseInt(autoTurnDelay.value, 10) || 5000 : 5000,
+        auto_turn_delay: autoTurnDelay ? (Number(autoTurnDelay.value) || 0) : 0,
         auto_turn_max: autoTurnMax ? autoTurnMax.value : '10',
         narrative_separation: narrativeSeparation ? !!narrativeSeparation.checked : false,
         narrator_drive: narratorDrive ? narratorDrive.value : undefined,
@@ -553,7 +553,7 @@ export function collectRoomConfig(roomId) {
             conversation_mode: conversationMode ? conversationMode.value : 'trpg_multi',
             single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false,
             auto_turn_enabled: autoTurnToggle ? !!autoTurnToggle.checked : false,
-            auto_turn_delay: autoTurnDelay ? parseInt(autoTurnDelay.value, 10) || 5000 : 5000,
+            auto_turn_delay: autoTurnDelay ? (Number(autoTurnDelay.value) || 0) : 0,
             auto_turn_max: autoTurnMax ? autoTurnMax.value : '10'
         }
     };

@@ -583,7 +583,7 @@ function hasConversationHistory() {
 function syncAutoTurnState() {
     if (!autoTurnToggleEl) return;
     autoTurnEnabled = !!autoTurnToggleEl.checked;
-    autoTurnDelayMs = autoTurnDelayEl ? (parseInt(autoTurnDelayEl.value, 10) || 5000) : 5000;
+    autoTurnDelayMs = autoTurnDelayEl ? Number(autoTurnDelayEl.value) : 0;
     autoTurnMax = autoTurnMaxEl ? (autoTurnMaxEl.value || '10') : '10';
     autoTurnCount = 0;
     // 자동턴 ON이면 단일 화자 모드를 강제 ON
