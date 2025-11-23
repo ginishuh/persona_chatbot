@@ -545,17 +545,17 @@ export function collectRoomConfig(roomId) {
             session_retention: sessionRetentionToggle ? !!sessionRetentionToggle.checked : false,
             adult_level: adultLevel ? adultLevel.value : 'explicit',
             narrative_separation: narrativeSeparation ? !!narrativeSeparation.checked : false,
-        narrator_drive: narratorDrive ? narratorDrive.value : 'guide',
-        output_level: outputLevel ? outputLevel.value : 'normal',
-        pace: storyPace ? storyPace.value : 'normal',
-        choice_policy: forceChoices && forceChoices.checked ? 'require' : 'off',
-        choice_count: choiceCount ? parseInt(choiceCount.value, 10) : 3,
-        conversation_mode: conversationMode ? conversationMode.value : 'trpg_multi',
-        single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false,
-        auto_turn_enabled: autoTurnToggle ? !!autoTurnToggle.checked : false,
-        auto_turn_delay: autoTurnDelay ? parseInt(autoTurnDelay.value, 10) || 5000 : 5000,
-        auto_turn_max: autoTurnMax ? autoTurnMax.value : '10'
-    }
+            narrator_drive: narratorDrive ? narratorDrive.value : 'guide',
+            output_level: outputLevel ? outputLevel.value : 'normal',
+            pace: storyPace ? storyPace.value : 'normal',
+            choice_policy: forceChoices && forceChoices.checked ? 'require' : 'off',
+            choice_count: choiceCount ? parseInt(choiceCount.value, 10) : 3,
+            conversation_mode: conversationMode ? conversationMode.value : 'trpg_multi',
+            single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false,
+            auto_turn_enabled: autoTurnToggle ? !!autoTurnToggle.checked : false,
+            auto_turn_delay: autoTurnDelay ? parseInt(autoTurnDelay.value, 10) || 5000 : 5000,
+            auto_turn_max: autoTurnMax ? autoTurnMax.value : '10'
+        }
     };
 }
 
