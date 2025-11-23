@@ -346,11 +346,14 @@
                         <select id="storySelect" class="select-input stories-only" style="width: 100%; margin-bottom: 0.75rem; display: none;" title="채팅방(서사)">
                             <option value="">채팅방 선택...</option>
                         </select>
-                        <div style="display:flex; gap:0.5rem; margin: 0.25rem 0 0.5rem 0;">
+                        <div style="display:flex; gap:0.5rem; margin: 0.25rem 0 0.5rem 0; align-items:center;">
+                            <button id="roomSearchToggle" class="btn btn-sm" title="채팅방 검색 열기" style="flex:0 0 auto;">🔍 검색</button>
+                            <button id="roomAddBtn" class="btn btn-sm btn-primary" title="새 채팅방 추가" style="flex:1;">➕ 새 채팅방</button>
+                        </div>
+                        <div id="roomSearchContainer" class="hidden" style="display:flex; gap:0.5rem; margin: 0 0 0.5rem 0;">
                             <input id="roomSearch" type="text" class="input" placeholder="채팅방 검색" style="flex:1;" />
                             <button id="roomSearchBtn" class="btn btn-sm" title="채팅방 검색">검색</button>
                         </div>
-                        <button id="roomAddBtn" class="btn btn-sm btn-primary" title="새 채팅방 추가" style="width: 100%; margin-bottom: 0.5rem;">➕ 새 채팅방</button>
                         <div id="roomList" style="max-height: 180px; overflow:auto; border:1px solid #e8ecef; border-radius:6px; padding:0.5rem; background:#fff;"></div>
                         <button id="roomSaveBtn" class="btn btn-sm" title="현재 채팅방 설정 저장" style="width: 100%; margin-top: 0.5rem;">💾 설정 저장</button>
                         <!-- Stories 기능 비활성화: 관련 버튼들 숨김 -->

@@ -399,15 +399,44 @@ if (roomSelect) {
 
 // `renderRoomsRightPanelList` implementation moved to `web/modules/rooms/rooms.js`
 
+const roomSearchContainer = document.getElementById('roomSearchContainer');
+const roomSearchToggle = document.getElementById('roomSearchToggle');
 const roomSearchInput = document.getElementById('roomSearch');
 const roomSearchBtn = document.getElementById('roomSearchBtn');
+
+const setRoomSearchVisible = (show) => {
+    if (!roomSearchContainer) return;
+    if (show) {
+        roomSearchContainer.classList.remove('hidden');
+        roomSearchToggle?.setAttribute('aria-pressed', 'true');
+        roomSearchInput?.focus();
+    } else {
+        roomSearchContainer.classList.add('hidden');
+        roomSearchToggle?.setAttribute('aria-pressed', 'false');
+        if (roomSearchInput) roomSearchInput.value = '';
+        renderRoomsRightPanelList();
+    }
+};
+
+if (roomSearchToggle) {
+    roomSearchToggle.setAttribute('aria-pressed', 'false');
+    roomSearchToggle.addEventListener('click', () => {
+        const hidden = roomSearchContainer?.classList.contains('hidden');
+        setRoomSearchVisible(hidden);
+    });
+}
+
 if (roomSearchInput) {
     roomSearchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.isComposing) {
             renderRoomsRightPanelList();
         }
+        if (e.key === 'Escape') {
+            setRoomSearchVisible(false);
+        }
     });
 }
+
 if (roomSearchBtn) {
     roomSearchBtn.addEventListener('click', () => {
         renderRoomsRightPanelList();
