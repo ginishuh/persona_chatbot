@@ -31,6 +31,8 @@ let autoTurnMax = '10';
 let autoTurnCount = 0;
 let autoTurnTimer = null;
 let streamRenderedDuringTurn = false;
+let lastAssistantSpeaker = null;
+let lastAssistantText = '';
 let stopRequested = false;
 
 export function refreshChatRefs() {
@@ -186,6 +188,8 @@ export function sendChatMessage() {
     // 타이핑 인디케이터 표시
     addTypingIndicator();
     streamRenderedDuringTurn = false;
+    lastAssistantSpeaker = null;
+    lastAssistantText = '';
 
     // 선택된 프로바이더 확인 및 저장
     const provider = (aiProvider && aiProvider.value) ? aiProvider.value : 'claude';
@@ -373,6 +377,7 @@ export function handleChatComplete(response) {
         log(`${label} 응답 완료`, 'success');
 
         const singleSpeaker = isSingleSpeakerModeEnabled() && currentTurnSpeaker;
+        let finalAssistantText = '';
 
         if (stopRequested) {
             streamRenderedDuringTurn = false;
@@ -385,6 +390,9 @@ export function handleChatComplete(response) {
         if (streamingText) {
             console.log('=== Droid/Gemini 응답 원본 ===');
             console.log(streamingText);
+
+            // 자동턴 화자 결정용 원본 텍스트 보관
+            finalAssistantText = streamingText;
 
             if (singleSpeaker && currentTurnSpeaker) {
                 streamingText = stripSpeakerPrefix(streamingText, currentTurnSpeaker);
@@ -412,6 +420,20 @@ export function handleChatComplete(response) {
 
             // 스트리밍 텍스트 초기화
             streamingText = '';
+        }
+
+        // 마지막 어시스턴트 발화 정보 저장 (다음 자동턴 화자 결정에 사용)
+        try {
+            lastAssistantSpeaker = currentTurnSpeaker || null;
+            // Droid/Gemini에서는 스트리밍 텍스트, Claude는 data.message를 우선 사용
+            const messageText =
+                finalAssistantText ||
+                (typeof data.message === 'string' ? data.message : '');
+            if (messageText && messageText.trim()) {
+                lastAssistantText = messageText;
+            }
+        } catch (_) {
+            /* no-op */
         }
 
         // 토큰 사용량 업데이트
@@ -636,11 +658,34 @@ function scheduleNextAutoTurn() {
 function sendAutoTurn() {
     if (!canAutoTurn()) return;
 
-    // 라운드로빈 화자 선택
-    const idx = nextSpeakerIndex % participants.length;
-    const chosen = participants[idx];
-    const payloadSpeaker = (chosen && chosen.name) ? chosen.name : `캐릭터${idx + 1}`;
-    nextSpeakerIndex += 1;
+    // 마지막 어시스턴트 발화에서 대상 캐릭터를 추론해 우선 화자로 사용
+    let payloadSpeaker = null;
+    if (lastAssistantText && Array.isArray(participants) && participants.length > 0) {
+        const candidates = [];
+        const lowered = lastAssistantText.toString();
+        for (const p of participants) {
+            const name = p && p.name ? String(p.name) : '';
+            if (!name) continue;
+            // 진행자/나레이터 등은 타깃에서 제외
+            if (name === '진행자' || name === '나레이터') continue;
+            const idx = lowered.lastIndexOf(name);
+            if (idx >= 0 && name !== lastAssistantSpeaker) {
+                candidates.push({ name, idx });
+            }
+        }
+        // 정확히 한 명만 언급된 경우에만 타깃으로 사용
+        if (candidates.length === 1) {
+            payloadSpeaker = candidates[0].name;
+        }
+    }
+
+    // 라운드로빈 화자 선택 (대상 추론 실패 시)
+    if (!payloadSpeaker) {
+        const idx = nextSpeakerIndex % participants.length;
+        const chosen = participants[idx];
+        payloadSpeaker = (chosen && chosen.name) ? chosen.name : `캐릭터${idx + 1}`;
+        nextSpeakerIndex += 1;
+    }
     currentTurnSpeaker = payloadSpeaker;
 
     // 타이핑 인디케이터 표시
