@@ -74,7 +74,8 @@ import {
     composeDescription,
     renderParticipantsManagerList,
     renderParticipantsLeftPanel,
-    openParticipantEditor
+    openParticipantEditor,
+    initCharacters
 } from './modules/chat/characters.js';
 import {
     AUTH_TOKEN_KEY, AUTH_EXP_KEY, REFRESH_TOKEN_KEY, REFRESH_EXP_KEY,
@@ -88,6 +89,7 @@ import {
 // 컨텍스트 패널 요소 (Modules에서 관리하지 않는 나머지)
 const contextContent = document.getElementById('contextContent');
 const charactersList = document.getElementById('charactersList');
+const participantsManagerList = document.getElementById('participantsManagerList');
 const addCharacterBtn = document.getElementById('addCharacterBtn');
 const applyCharactersBtn = document.getElementById('applyCharactersBtn');
 const saveContextBtn = document.getElementById('saveContextBtn');
@@ -2432,6 +2434,12 @@ window.addEventListener('load', async () => {
         moreAdminBtn,
         adminCloseBtn
     });
+    initCharacters({
+        charactersList,
+        participantsManagerList
+    });
+    renderParticipantsLeftPanel();
+    renderParticipantsManagerList();
     initMobileUI({
         onOpenParticipants: openParticipantsModal,
         onClearHistory: () => document.getElementById('clearHistoryBtn')?.click(),
