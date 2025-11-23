@@ -179,6 +179,7 @@ const registerError = document.getElementById('registerError');
 const loginBtn = document.getElementById('loginBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const backupBtn = document.getElementById('backupBtn');
+const bkCloseBtn = document.getElementById('bkCloseBtn');
 const participantsBtn = document.getElementById('participantsBtn');
 
 // 모바일 더보기 메뉴의 로그인/로그아웃/관리 버튼
@@ -1731,17 +1732,60 @@ if (moreLogoutBtn) {
     });
 }
 
-function navigateToBackupScreen() {
-    try {
-        navigate('/backup');
-    } catch (error) {
-        console.error('Failed to navigate to backup screen', error);
+function openBackupModalInline() {
+    // 로그인 필요 시 로그인 모달 우선
+    if (appConfig.login_required && !isAuthenticated) {
+        showLoginModal();
+        return;
     }
+    const modal = document.getElementById('backupModal');
+    if (!modal) return;
+    // 선택한 방 목록 채우기 (rooms 모듈에서 관리하는 rooms 사용)
+    try {
+        const wrap = document.getElementById('bkRoomsWrap');
+        const scopeSelected = document.getElementById('bkScopeSelected');
+        const scopeSingle = document.getElementById('bkScopeSingle');
+        const scopeFull = document.getElementById('bkScopeFull');
+        if (wrap && Array.isArray(rooms)) {
+            wrap.innerHTML = '';
+            rooms.forEach((r) => {
+                const rid = typeof r === 'string' ? r : (r.room_id || r.title || 'default');
+                const title = (typeof r === 'object' && r.title) ? r.title : rid;
+                const row = document.createElement('label');
+                row.className = 'checkbox-label';
+                row.style.display = 'block';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.value = rid;
+                cb.checked = true;
+                row.appendChild(cb);
+                const span = document.createElement('span');
+                span.textContent = title;
+                row.appendChild(span);
+                wrap.appendChild(row);
+            });
+            wrap.style.display = 'block';
+        }
+        // 기본 스코프는 현재 방
+        if (scopeSingle) scopeSingle.checked = true;
+        if (scopeSelected && wrap) scopeSelected.onclick = () => (wrap.style.display = 'block');
+        if (scopeSingle && wrap) scopeSingle.onclick = () => (wrap.style.display = 'none');
+        if (scopeFull && wrap) scopeFull.onclick = () => (wrap.style.display = 'none');
+    } catch (_) {}
+    modal.classList.remove('hidden');
+    enableFocusTrap(modal);
+}
+
+function closeBackupModal() {
+    const modal = document.getElementById('backupModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    disableFocusTrap(modal);
 }
 
 if (backupBtn) {
     backupBtn.addEventListener('click', () => {
-        navigateToBackupScreen();
+        openBackupModalInline();
     });
 }
 
@@ -1763,7 +1807,7 @@ if (participantsBtn) {
 if (moreBackupBtn) {
     moreBackupBtn.addEventListener('click', () => {
         closeMoreMenu();
-        navigateToBackupScreen();
+        openBackupModalInline();
     });
 }
 
@@ -2479,3 +2523,5 @@ window.addEventListener('load', async () => {
 // 전역 할당(window.*)은 `web/modules/main.js`에서 중앙 관리하도록 이전했습니다.
 
 // Exports removed: `app.js` is now a page-level wiring module. Use `web/modules/*` for reusable APIs.
+document.getElementById('bkCloseBtn')?.addEventListener('click', closeBackupModal);
+document.querySelector('#backupModal .settings-modal-overlay')?.addEventListener('click', closeBackupModal);
