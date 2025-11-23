@@ -548,12 +548,26 @@ function syncAutoTurnState() {
     autoTurnDelayMs = autoTurnDelayEl ? (parseInt(autoTurnDelayEl.value, 10) || 5000) : 5000;
     autoTurnMax = autoTurnMaxEl ? (autoTurnMaxEl.value || '10') : '10';
     autoTurnCount = 0;
+    // 자동턴 ON이면 단일 화자 모드를 강제 ON
+    if (autoTurnEnabled && !isSingleSpeakerModeEnabled()) {
+        const single = document.getElementById('singleSpeakerMode');
+        if (single) single.checked = true;
+    }
     if (!canAutoTurn()) {
         stopAutoTurn();
+        if (autoTurnEnabled) {
+            let reason = '자동턴을 시작할 수 없습니다: ';
+            if (aiProvider && aiProvider.value === 'gemini') reason += 'Gemini는 지원 안 함';
+            else if (!isSingleSpeakerModeEnabled()) reason += '단일 화자 모드가 꺼져 있음';
+            else if (!participants || participants.length === 0) reason += '참여자가 없음';
+            else reason += '조건 미충족';
+            log(reason, 'warning');
+        }
     } else if (autoTurnEnabled) {
         stopAutoTurn();
         autoTurnEnabled = true;
         scheduleNextAutoTurn();
+        log('자동턴을 시작합니다.', 'info');
     }
 }
 
@@ -595,7 +609,9 @@ function sendAutoTurn() {
     const provider = (aiProvider && aiProvider.value) ? aiProvider.value : 'claude';
     currentProvider = provider;
 
-    const prompt = '대화를 자연스럽게 이어서 한 줄만 말하세요.';
+    const prompt = currentTurnSpeaker
+        ? `이전 대화를 참고해 ${currentTurnSpeaker}만 한 줄로 대화하세요. 다른 이름이나 대괄호, 콜론 없이 순수 대사만 말합니다.`
+        : '대화를 자연스럽게 이어서 한 줄만 말하세요.';
 
     const success = sendMessage({
         action: 'chat',
