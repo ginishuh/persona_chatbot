@@ -40,6 +40,12 @@ function isSingleSpeakerModeEnabled() {
     return !!(el && el.checked);
 }
 
+function stripSpeakerPrefix(text, speaker) {
+    if (!speaker || !text) return text;
+    const pattern = new RegExp(`^\\s*\\[?\\s*${speaker}\\s*\\]?\\s*[:：]\\s*`, 'i');
+    return text.replace(pattern, '').trimStart();
+}
+
 // 참여자 변경 시 라운드로빈 인덱스 리셋
 try {
     window.addEventListener('participants:updated', () => {
@@ -226,8 +232,11 @@ export function handleChatStream(data) {
     if (jsonData.type === 'content_block_delta') {
         removeTypingIndicator();
 
-        const deltaText = jsonData.delta?.text || '';
+        let deltaText = jsonData.delta?.text || '';
         if (deltaText) {
+            if (singleSpeaker && currentTurnSpeaker) {
+                deltaText = stripSpeakerPrefix(deltaText, currentTurnSpeaker);
+            }
             // 스트리밍 텍스트 누적
             streamingText += deltaText;
             if (singleSpeaker) {
@@ -259,6 +268,10 @@ export function handleChatStream(data) {
             // 디버깅: 원본 응답 출력
             console.log('=== Claude 응답 원본 ===');
             console.log(textContent);
+
+            if (singleSpeaker && currentTurnSpeaker) {
+                textContent = stripSpeakerPrefix(textContent, currentTurnSpeaker);
+            }
 
             // 단일 화자 모드면 파싱 생략하고 지정 화자로 표시
             const parsedMessages = singleSpeaker ? [] : parseMultiCharacterResponse(textContent);
@@ -347,6 +360,9 @@ export function handleChatComplete(response) {
             console.log('=== Droid/Gemini 응답 원본 ===');
             console.log(streamingText);
 
+            if (singleSpeaker && currentTurnSpeaker) {
+                streamingText = stripSpeakerPrefix(streamingText, currentTurnSpeaker);
+            }
             const parsedMessages = singleSpeaker ? [] : parseMultiCharacterResponse(streamingText);
             console.log('=== 파싱 결과 ===');
             console.log('파싱된 메시지 수:', parsedMessages.length);
