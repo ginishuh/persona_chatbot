@@ -30,6 +30,7 @@ let autoTurnDelayMs = 5000;
 let autoTurnMax = '10';
 let autoTurnCount = 0;
 let autoTurnTimer = null;
+let streamRenderedDuringTurn = false;
 
 export function refreshChatRefs() {
     chatMessages = document.getElementById('chatMessages');
@@ -182,6 +183,7 @@ export function sendChatMessage() {
 
     // 타이핑 인디케이터 표시
     addTypingIndicator();
+    streamRenderedDuringTurn = false;
 
     // 선택된 프로바이더 확인 및 저장
     const provider = (aiProvider && aiProvider.value) ? aiProvider.value : 'claude';
@@ -253,6 +255,7 @@ export function handleChatStream(data) {
             if (singleSpeaker) {
                 if (!currentAssistantMessage) {
                     currentAssistantMessage = addCharacterMessage(currentTurnSpeaker, deltaText);
+                    streamRenderedDuringTurn = true;
                 } else {
                     const contentDiv = currentAssistantMessage.querySelector('.message-content');
                     if (contentDiv) contentDiv.textContent += deltaText;
@@ -313,6 +316,7 @@ export function handleChatStream(data) {
                 if (singleSpeaker && currentTurnSpeaker) {
                     if (!currentAssistantMessage) {
                         currentAssistantMessage = addCharacterMessage(currentTurnSpeaker, textContent);
+                        streamRenderedDuringTurn = true;
                     } else {
                         const contentDiv = currentAssistantMessage.querySelector('.message-content');
                         if (contentDiv) contentDiv.textContent = textContent;
@@ -387,7 +391,7 @@ export function handleChatComplete(response) {
                 });
             } else {
                 if (singleSpeaker && currentTurnSpeaker) {
-                    if (!currentAssistantMessage) {
+                    if (!streamRenderedDuringTurn) {
                         addCharacterMessage(currentTurnSpeaker, streamingText);
                     } // 이미 스트리밍 중 표시된 경우 추가하지 않음
                 } else {
@@ -410,6 +414,7 @@ export function handleChatComplete(response) {
         // 서사 업데이트
         sendMessage({ action: 'get_narrative' });
         currentTurnSpeaker = null;
+        streamRenderedDuringTurn = false;
 
         // 자동턴 진행 중이면 다음 턴 예약
         if (canAutoTurn()) {
@@ -615,6 +620,7 @@ function sendAutoTurn() {
     // 타이핑 인디케이터 표시
     addTypingIndicator();
     if (sendChatBtn) sendChatBtn.disabled = true;
+    streamRenderedDuringTurn = false;
 
     const provider = (aiProvider && aiProvider.value) ? aiProvider.value : 'claude';
     currentProvider = provider;
