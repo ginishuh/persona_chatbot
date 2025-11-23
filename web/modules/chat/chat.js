@@ -623,7 +623,9 @@ function stopAutoTurn(reason = '') {
 function scheduleNextAutoTurn() {
     if (!canAutoTurn()) return;
     if (autoTurnMax !== 'unlimited' && autoTurnCount >= parseInt(autoTurnMax, 10)) {
-        stopAutoTurn('자동턴이 설정된 최대 턴에 도달해 중단되었습니다.');
+        const max = parseInt(autoTurnMax, 10);
+        log(`자동턴이 설정된 최대 턴(${max})에 도달했습니다. 다음 수동 턴 이후 다시 자동턴이 시작됩니다.`, 'info');
+        autoTurnCount = 0;
         return;
     }
     autoTurnTimer = setTimeout(() => {
