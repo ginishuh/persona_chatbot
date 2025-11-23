@@ -35,6 +35,7 @@ let forceChoices = null;
 let choiceCount = null;
 let narratorSettings = null;
 let conversationMode = null;
+let singleSpeakerMode = null;
 let autoSaveTimer = null;
 let autoSaveBound = false;
 const AUTO_SAVE_DELAY_MS = 1500;
@@ -72,6 +73,7 @@ function buildSetContextPayload(roomId) {
         session_retention: sessionRetentionToggle ? !!sessionRetentionToggle.checked : false,
         adult_level: adultLevel ? adultLevel.value : 'explicit',
         conversation_mode: conversationMode && conversationMode.value ? conversationMode.value : undefined,
+        single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false,
         narrative_separation: narrativeSeparation ? !!narrativeSeparation.checked : false,
         narrator_drive: narratorDrive ? narratorDrive.value : undefined,
         output_level: outputLevel ? outputLevel.value : undefined,
@@ -122,6 +124,8 @@ export function refreshRoomRefs() {
     choiceCount = document.getElementById('choiceCount');
     narratorSettings = document.getElementById('narratorSettings');
     conversationMode = document.getElementById('conversationMode');
+    singleSpeakerMode = document.getElementById('singleSpeakerMode');
+    singleSpeakerMode = document.getElementById('singleSpeakerMode');
 
     bindAutoSaveInputs();
 }
@@ -151,6 +155,8 @@ function bindAutoSaveInputs() {
     listen(forceChoices, ['change']);
     listen(choiceCount, ['input', 'change']);
     listen(conversationMode, ['change']);
+    listen(singleSpeakerMode, ['change']);
+    listen(singleSpeakerMode, ['change']);
 
     // 캐릭터 목록 변경 시 자동 저장 (전역 이벤트)
     try {
@@ -463,6 +469,7 @@ export function loadContext(context) {
     if (forceChoices) forceChoices.checked = (context.choice_policy || 'off') === 'require';
     if (choiceCount) choiceCount.value = String(context.choice_count || 3);
     if (conversationMode) conversationMode.value = context.conversation_mode || 'trpg_multi';
+    if (singleSpeakerMode) singleSpeakerMode.checked = !!context.single_speaker_mode;
 
     // 진행자 설정 표시/숨김
     if (narratorEnabled && narratorEnabled.checked) {

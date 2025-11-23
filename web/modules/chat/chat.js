@@ -1,5 +1,5 @@
 import { sendMessage } from '../websocket/connection.js';
-import { isAuthenticated, authRequired, getCharacterColor } from '../core/state.js';
+import { isAuthenticated, authRequired, getCharacterColor, participants } from '../core/state.js';
 import { log } from '../ui/status.js';
 import { isTouchDevice } from '../utils/utils.js';
 import { parseMultiCharacterResponse } from './characters.js';
@@ -20,6 +20,8 @@ let currentAssistantMessage = null;
 let currentProvider = 'claude';
 let isComposing = false;
 let streamingText = '';
+let nextSpeakerIndex = 0;
+let currentTurnSpeaker = null;
 
 export function refreshChatRefs() {
     chatMessages = document.getElementById('chatMessages');
@@ -32,6 +34,18 @@ export function refreshChatRefs() {
     tokenCompletion = document.getElementById('tokenCompletion');
     tokenTotal = document.getElementById('tokenTotal');
 }
+
+function isSingleSpeakerModeEnabled() {
+    const el = document.getElementById('singleSpeakerMode');
+    return !!(el && el.checked);
+}
+
+// 참여자 변경 시 라운드로빈 인덱스 리셋
+try {
+    window.addEventListener('participants:updated', () => {
+        nextSpeakerIndex = 0;
+    });
+} catch (_) {}
 
 export function addChatMessage(role, content) {
     if (!chatMessages) refreshChatRefs();
@@ -156,12 +170,23 @@ export function sendChatMessage() {
     const provider = (aiProvider && aiProvider.value) ? aiProvider.value : 'claude';
     currentProvider = provider;
 
+    // 단일 화자 모드: 참여자 라운드로빈
+    let payloadSpeaker = null;
+    if (isSingleSpeakerModeEnabled() && Array.isArray(participants) && participants.length > 0) {
+        const idx = nextSpeakerIndex % participants.length;
+        const chosen = participants[idx];
+        payloadSpeaker = (chosen && chosen.name) ? chosen.name : `캐릭터${idx + 1}`;
+        nextSpeakerIndex += 1;
+    }
+    currentTurnSpeaker = payloadSpeaker;
+
     // 서버로 전송(프로바이더 명시)
     const success = sendMessage({
         action: 'chat',
         prompt: prompt,
         provider: provider,
-        model: (modelSelect && modelSelect.value) ? modelSelect.value : ''
+        model: (modelSelect && modelSelect.value) ? modelSelect.value : '',
+        speaker: payloadSpeaker || undefined
     });
 
     if (success) {
@@ -178,6 +203,7 @@ export function sendChatMessage() {
 
 export function handleChatStream(data) {
     const jsonData = data;
+    const singleSpeaker = isSingleSpeakerModeEnabled() && currentTurnSpeaker;
 
     if (jsonData.type === 'system' && jsonData.subtype === 'init') {
         log('Claude Code 세션 시작', 'success');
@@ -204,6 +230,14 @@ export function handleChatStream(data) {
         if (deltaText) {
             // 스트리밍 텍스트 누적
             streamingText += deltaText;
+            if (singleSpeaker) {
+                if (!currentAssistantMessage) {
+                    currentAssistantMessage = addCharacterMessage(currentTurnSpeaker, deltaText);
+                } else {
+                    const contentDiv = currentAssistantMessage.querySelector('.message-content');
+                    if (contentDiv) contentDiv.textContent += deltaText;
+                }
+            }
         }
         return;
     }
@@ -226,8 +260,8 @@ export function handleChatStream(data) {
             console.log('=== Claude 응답 원본 ===');
             console.log(textContent);
 
-            // 멀티 캐릭터 파싱 시도
-            const parsedMessages = parseMultiCharacterResponse(textContent);
+            // 단일 화자 모드면 파싱 생략하고 지정 화자로 표시
+            const parsedMessages = singleSpeaker ? [] : parseMultiCharacterResponse(textContent);
 
             // 디버깅: 파싱 결과 출력
             console.log('=== 파싱 결과 ===');
@@ -252,12 +286,21 @@ export function handleChatStream(data) {
                 });
             } else {
                 // 파싱 실패 시 일반 메시지로 표시
-                if (!currentAssistantMessage) {
-                    currentAssistantMessage = addChatMessage('assistant', textContent);
+                if (singleSpeaker && currentTurnSpeaker) {
+                    if (!currentAssistantMessage) {
+                        currentAssistantMessage = addCharacterMessage(currentTurnSpeaker, textContent);
+                    } else {
+                        const contentDiv = currentAssistantMessage.querySelector('.message-content');
+                        if (contentDiv) contentDiv.textContent = textContent;
+                    }
                 } else {
-                    const contentDiv = currentAssistantMessage.querySelector('.message-content');
-                    if (contentDiv) {
-                        contentDiv.textContent = textContent;
+                    if (!currentAssistantMessage) {
+                        currentAssistantMessage = addChatMessage('assistant', textContent);
+                    } else {
+                        const contentDiv = currentAssistantMessage.querySelector('.message-content');
+                        if (contentDiv) {
+                            contentDiv.textContent = textContent;
+                        }
                     }
                 }
             }
@@ -297,12 +340,14 @@ export function handleChatComplete(response) {
         const label = used === 'gemini' ? 'Gemini' : (used === 'droid' ? 'Droid' : 'Claude');
         log(`${label} 응답 완료`, 'success');
 
+        const singleSpeaker = isSingleSpeakerModeEnabled() && currentTurnSpeaker;
+
         // Droid/Gemini: 누적된 스트리밍 텍스트 처리
         if (streamingText) {
             console.log('=== Droid/Gemini 응답 원본 ===');
             console.log(streamingText);
 
-            const parsedMessages = parseMultiCharacterResponse(streamingText);
+            const parsedMessages = singleSpeaker ? [] : parseMultiCharacterResponse(streamingText);
             console.log('=== 파싱 결과 ===');
             console.log('파싱된 메시지 수:', parsedMessages.length);
             console.log('파싱된 메시지:', parsedMessages);
@@ -314,8 +359,13 @@ export function handleChatComplete(response) {
                     newMsg.dataset.permanent = 'true'; // 완료된 메시지
                 });
             } else {
-                // 파싱 실패 시 일반 메시지로 표시
-                addChatMessage('assistant', streamingText);
+                if (singleSpeaker && currentTurnSpeaker) {
+                    if (!currentAssistantMessage) {
+                        addCharacterMessage(currentTurnSpeaker, streamingText);
+                    } // 이미 스트리밍 중 표시된 경우 추가하지 않음
+                } else {
+                    addChatMessage('assistant', streamingText);
+                }
             }
 
             // 스트리밍 텍스트 초기화
@@ -332,6 +382,7 @@ export function handleChatComplete(response) {
 
         // 서사 업데이트
         sendMessage({ action: 'get_narrative' });
+        currentTurnSpeaker = null;
     } else {
         log('채팅 에러: ' + data.error, 'error');
         addChatMessage('system', '에러: ' + data.error);

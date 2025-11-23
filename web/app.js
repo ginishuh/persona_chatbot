@@ -131,6 +131,7 @@ const narratorSettings = document.getElementById('narratorSettings');
 const outputLevel = document.getElementById('outputLevel');
 const storyPace = document.getElementById('storyPace');
 const sessionRetentionToggle = document.getElementById('sessionRetentionToggle');
+const singleSpeakerMode = document.getElementById('singleSpeakerMode');
 
 // 프리셋 관리 요소
 const presetSelect = document.getElementById('presetSelect');
@@ -1495,7 +1496,8 @@ saveContextBtn.addEventListener('click', () => {
         pace: storyPace ? storyPace.value : undefined,
         characters: characters,
         choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
-        choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
+        choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined,
+        single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false
     });
     // 방 설정도 함께 저장(room.json)
         try {
@@ -1541,11 +1543,11 @@ if (applyCharactersBtn) {
             narrator_enabled: narratorEnabled.checked,
             narrator_mode: narratorMode.value,
             narrator_description: narratorDescription.value.trim(),
-        user_is_narrator: userIsNarrator.checked,
-        ai_provider: aiProvider.value,
-        model: modelSelect ? modelSelect.value : '',
-        session_retention: sessionRetentionToggle ? !!sessionRetentionToggle.checked : false,
-        adult_level: adultLevel.value,
+            user_is_narrator: userIsNarrator.checked,
+            ai_provider: aiProvider.value,
+            model: modelSelect ? modelSelect.value : '',
+            session_retention: sessionRetentionToggle ? !!sessionRetentionToggle.checked : false,
+            adult_level: adultLevel.value,
             conversation_mode: conversationMode && conversationMode.value ? conversationMode.value : undefined,
             narrative_separation: narrativeSeparation.checked,
             narrator_drive: narratorDrive ? narratorDrive.value : undefined,
@@ -1553,7 +1555,8 @@ if (applyCharactersBtn) {
             pace: storyPace ? storyPace.value : undefined,
             characters: characters,
             choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
-            choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined
+            choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined,
+            single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false
         });
         setTimeout(() => { applyCharactersBtn.disabled = false; }, 5000);
     });

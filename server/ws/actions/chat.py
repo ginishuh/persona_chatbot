@@ -42,7 +42,19 @@ async def chat(ctx: AppContext, websocket, data: dict):
     user_id, sess = sm.get_or_create_session(ctx, websocket, user_id)
     rid, room = sm.get_room(ctx, sess, data.get("room_id"))
     provider_sessions: dict[str, Any] = room.setdefault("provider_sessions", {})
-    provider_session_id = provider_sessions.get(provider)
+
+    speaker = data.get("speaker")
+
+    def get_provider_session_id():
+        # 캐릭터별 세션 지원: provider별 dict로 세션 분리
+        sess = provider_sessions.get(provider)
+        if speaker:
+            if isinstance(sess, dict):
+                return sess.get(speaker)
+            return None
+        return sess if not isinstance(sess, dict) else None
+
+    provider_session_id = get_provider_session_id()
 
     # 성인 동의 확인
     try:
@@ -85,6 +97,12 @@ async def chat(ctx: AppContext, websocket, data: dict):
 
     # 시스템 프롬프트
     system_prompt = ctx.context_handler.build_system_prompt(history_text)
+    if data.get("speaker"):
+        sp = data.get("speaker")
+        system_prompt = (
+            f"[현재 화자: {sp}. 이번 턴에는 {sp}만 발화합니다. 다른 캐릭터나 내레이터는 말하지 않습니다. 짧게 말하세요.]\n"
+            + system_prompt
+        )
 
     async def stream_callback(json_data):
         await websocket.send(json.dumps({"action": "chat_stream", "data": json_data}))
@@ -161,9 +179,18 @@ async def chat(ctx: AppContext, websocket, data: dict):
     # 프로바이더 세션ID 업데이트
     new_session_id = result.get("session_id")
     if new_session_id:
-        provider_sessions[provider] = new_session_id
+        if speaker:
+            # provider별 dict로 관리
+            if not isinstance(provider_sessions.get(provider), dict):
+                provider_sessions[provider] = {}
+            provider_sessions[provider][speaker] = new_session_id
+        else:
+            provider_sessions[provider] = new_session_id
     else:
-        provider_sessions.pop(provider, None)
+        if speaker and isinstance(provider_sessions.get(provider), dict):
+            provider_sessions[provider].pop(speaker, None)
+        else:
+            provider_sessions.pop(provider, None)
 
     await websocket.send(
         json.dumps(
