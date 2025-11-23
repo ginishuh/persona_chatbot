@@ -68,6 +68,8 @@ function buildSetContextPayload(roomId) {
         narrator_description: narratorDescription ? narratorDescription.value.trim() : '',
         user_is_narrator: userIsNarrator ? !!userIsNarrator.checked : false,
         ai_provider: aiProvider ? aiProvider.value : 'claude',
+        model: modelSelect ? modelSelect.value : '',
+        session_retention: sessionRetentionToggle ? !!sessionRetentionToggle.checked : false,
         adult_level: adultLevel ? adultLevel.value : 'explicit',
         conversation_mode: conversationMode && conversationMode.value ? conversationMode.value : undefined,
         narrative_separation: narrativeSeparation ? !!narrativeSeparation.checked : false,
@@ -194,11 +196,19 @@ export function renderRoomsUI() {
 
     const hasCurrent = currentRoom && (rooms || []).some(x => (typeof x === 'string' ? x : x.room_id) === currentRoom);
     if (!hasCurrent && rooms && rooms.length > 0) {
-        // 방이 있지만 currentRoom이 없거나 유효하지 않으면 첫 번째 방 선택
+        // 방이 있지만 currentRoom이 없거나 유효하지 않으면 첫 번째 방 선택하고 즉시 로드
         const firstRoom = rooms[0];
         const extractedId = typeof firstRoom === 'string' ? firstRoom : (firstRoom.room_id || null);
         if (extractedId) {
             setCurrentRoom(extractedId);
+            persistRooms();
+            sendMessage({ action: 'room_load', room_id: extractedId });
+            sendMessage({ action: 'reset_sessions', room_id: extractedId });
+            try {
+                // 기본 히스토리/서사 요청
+                sendMessage({ action: 'get_history_snapshot', room_id: extractedId });
+                sendMessage({ action: 'get_narrative', room_id: extractedId });
+            } catch (_) {}
         }
         // room_id가 없으면 currentRoom을 null로 유지
     }
