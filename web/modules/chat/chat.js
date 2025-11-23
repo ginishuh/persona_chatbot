@@ -14,6 +14,9 @@ let tokenUsageDisplay = null;
 let tokenPrompt = null;
 let tokenCompletion = null;
 let tokenTotal = null;
+let autoTurnToggleEl = null;
+let autoTurnDelayEl = null;
+let autoTurnMaxEl = null;
 
 // State
 let currentAssistantMessage = null;
@@ -38,6 +41,9 @@ export function refreshChatRefs() {
     tokenPrompt = document.getElementById('tokenPrompt');
     tokenCompletion = document.getElementById('tokenCompletion');
     tokenTotal = document.getElementById('tokenTotal');
+    autoTurnToggleEl = document.getElementById('autoTurnToggle');
+    autoTurnDelayEl = document.getElementById('autoTurnDelay');
+    autoTurnMaxEl = document.getElementById('autoTurnMax');
 }
 
 function isSingleSpeakerModeEnabled() {
@@ -497,6 +503,28 @@ export function bindChatEvents() {
 
             chatInput.dataset.bound = '1';
         }
+        if (autoTurnToggleEl && !autoTurnToggleEl.dataset.bound) {
+            autoTurnToggleEl.addEventListener('change', syncAutoTurnState);
+            autoTurnToggleEl.dataset.bound = '1';
+        }
+        if (autoTurnDelayEl && !autoTurnDelayEl.dataset.bound) {
+            autoTurnDelayEl.addEventListener('change', syncAutoTurnState);
+            autoTurnDelayEl.dataset.bound = '1';
+        }
+        if (autoTurnMaxEl && !autoTurnMaxEl.dataset.bound) {
+            autoTurnMaxEl.addEventListener('change', syncAutoTurnState);
+            autoTurnMaxEl.dataset.bound = '1';
+        }
+
+        try {
+            window.addEventListener('autoTurn:updated', syncAutoTurnState);
+            window.addEventListener('participants:updated', () => {
+                nextSpeakerIndex = 0;
+                syncAutoTurnState();
+            });
+        } catch (_) {}
+
+        syncAutoTurnState();
     } catch (_) {}
 }
 
@@ -512,6 +540,21 @@ function canAutoTurn() {
     if (!isSingleSpeakerModeEnabled()) return false;
     if (!Array.isArray(participants) || participants.length === 0) return false;
     return true;
+}
+
+function syncAutoTurnState() {
+    if (!autoTurnToggleEl) return;
+    autoTurnEnabled = !!autoTurnToggleEl.checked;
+    autoTurnDelayMs = autoTurnDelayEl ? (parseInt(autoTurnDelayEl.value, 10) || 5000) : 5000;
+    autoTurnMax = autoTurnMaxEl ? (autoTurnMaxEl.value || '10') : '10';
+    autoTurnCount = 0;
+    if (!canAutoTurn()) {
+        stopAutoTurn();
+    } else if (autoTurnEnabled) {
+        stopAutoTurn();
+        autoTurnEnabled = true;
+        scheduleNextAutoTurn();
+    }
 }
 
 function stopAutoTurn(reason = '') {

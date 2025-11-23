@@ -36,6 +36,9 @@ let choiceCount = null;
 let narratorSettings = null;
 let conversationMode = null;
 let singleSpeakerMode = null;
+let autoTurnToggle = null;
+let autoTurnDelay = null;
+let autoTurnMax = null;
 let autoSaveTimer = null;
 let autoSaveBound = false;
 const AUTO_SAVE_DELAY_MS = 1500;
@@ -131,6 +134,9 @@ export function refreshRoomRefs() {
     autoTurnToggle = document.getElementById('autoTurnToggle');
     autoTurnDelay = document.getElementById('autoTurnDelay');
     autoTurnMax = document.getElementById('autoTurnMax');
+    autoTurnToggle = document.getElementById('autoTurnToggle');
+    autoTurnDelay = document.getElementById('autoTurnDelay');
+    autoTurnMax = document.getElementById('autoTurnMax');
     singleSpeakerMode = document.getElementById('singleSpeakerMode');
 
     bindAutoSaveInputs();
@@ -162,6 +168,9 @@ function bindAutoSaveInputs() {
     listen(choiceCount, ['input', 'change']);
     listen(conversationMode, ['change']);
     listen(singleSpeakerMode, ['change']);
+    listen(autoTurnToggle, ['change']);
+    listen(autoTurnDelay, ['change']);
+    listen(autoTurnMax, ['change']);
     listen(autoTurnToggle, ['change']);
     listen(autoTurnDelay, ['change']);
     listen(autoTurnMax, ['change']);
@@ -483,6 +492,11 @@ export function loadContext(context) {
     if (autoTurnDelay && context.auto_turn_delay) autoTurnDelay.value = String(context.auto_turn_delay);
     if (autoTurnMax && context.auto_turn_max !== undefined) autoTurnMax.value = String(context.auto_turn_max);
 
+    try { window.dispatchEvent(new Event('autoTurn:updated')); } catch (_) {}
+    if (autoTurnToggle) autoTurnToggle.checked = !!context.auto_turn_enabled;
+    if (autoTurnDelay && context.auto_turn_delay) autoTurnDelay.value = String(context.auto_turn_delay);
+    if (autoTurnMax && context.auto_turn_max !== undefined) autoTurnMax.value = String(context.auto_turn_max);
+
     // 진행자 설정 표시/숨김
     if (narratorEnabled && narratorEnabled.checked) {
         if (narratorSettings) narratorSettings.style.display = 'block';
@@ -531,14 +545,17 @@ export function collectRoomConfig(roomId) {
             session_retention: sessionRetentionToggle ? !!sessionRetentionToggle.checked : false,
             adult_level: adultLevel ? adultLevel.value : 'explicit',
             narrative_separation: narrativeSeparation ? !!narrativeSeparation.checked : false,
-            narrator_drive: narratorDrive ? narratorDrive.value : 'guide',
-            output_level: outputLevel ? outputLevel.value : 'normal',
-            pace: storyPace ? storyPace.value : 'normal',
-            choice_policy: forceChoices && forceChoices.checked ? 'require' : 'off',
-            choice_count: choiceCount ? parseInt(choiceCount.value, 10) : 3,
-            conversation_mode: conversationMode ? conversationMode.value : 'trpg_multi',
-            single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false
-        }
+        narrator_drive: narratorDrive ? narratorDrive.value : 'guide',
+        output_level: outputLevel ? outputLevel.value : 'normal',
+        pace: storyPace ? storyPace.value : 'normal',
+        choice_policy: forceChoices && forceChoices.checked ? 'require' : 'off',
+        choice_count: choiceCount ? parseInt(choiceCount.value, 10) : 3,
+        conversation_mode: conversationMode ? conversationMode.value : 'trpg_multi',
+        single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false,
+        auto_turn_enabled: autoTurnToggle ? !!autoTurnToggle.checked : false,
+        auto_turn_delay: autoTurnDelay ? parseInt(autoTurnDelay.value, 10) || 5000 : 5000,
+        auto_turn_max: autoTurnMax ? autoTurnMax.value : '10'
+    }
     };
 }
 
