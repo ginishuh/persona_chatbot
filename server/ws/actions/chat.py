@@ -99,10 +99,35 @@ async def chat(ctx: AppContext, websocket, data: dict):
     system_prompt = ctx.context_handler.build_system_prompt(history_text)
     if data.get("speaker"):
         sp = data.get("speaker")
-        system_prompt = (
-            f"[현재 화자: {sp}. 이번 턴에는 {sp}만 발화합니다. 다른 캐릭터나 내레이터는 말하지 않습니다. 짧게 말하세요.]\n"
-            + system_prompt
-        )
+        # 화자 캐릭터 프로필을 찾아 추가
+        try:
+            char_profile = None
+            ctx_chars = ctx.context_handler.get_context().get("characters", [])
+            for ch in ctx_chars:
+                if isinstance(ch, dict) and ch.get("name") == sp:
+                    char_profile = ch
+                    break
+            profile_str = ""
+            if char_profile:
+                desc = char_profile.get("description") or ""
+                gender = char_profile.get("gender") or ""
+                age = char_profile.get("age") or ""
+                meta = ", ".join(filter(None, [gender, age]))
+                if meta:
+                    profile_str += f"{meta}. "
+                if desc:
+                    profile_str += desc
+            system_prompt = (
+                f"[현재 화자: {sp}. 이번 턴에는 {sp}만 발화합니다. 다른 캐릭터나 내레이터는 말하지 않습니다. 짧게 말하세요."
+                + (f" {profile_str}" if profile_str else "")
+                + "]\n"
+                + system_prompt
+            )
+        except Exception:
+            system_prompt = (
+                f"[현재 화자: {sp}. 이번 턴에는 {sp}만 발화합니다. 다른 캐릭터나 내레이터는 말하지 않습니다. 짧게 말하세요.]\n"
+                + system_prompt
+            )
 
     async def stream_callback(json_data):
         await websocket.send(json.dumps({"action": "chat_stream", "data": json_data}))
