@@ -179,6 +179,7 @@ const registerError = document.getElementById('registerError');
 const loginBtn = document.getElementById('loginBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const backupBtn = document.getElementById('backupBtn');
+const participantsBtn = document.getElementById('participantsBtn');
 
 // 모바일 더보기 메뉴의 로그인/로그아웃/관리 버튼
 const moreLoginBtn = document.getElementById('moreLoginBtn');
@@ -1741,6 +1742,22 @@ function navigateToBackupScreen() {
 if (backupBtn) {
     backupBtn.addEventListener('click', () => {
         navigateToBackupScreen();
+    });
+}
+
+if (participantsBtn) {
+    participantsBtn.addEventListener('click', () => {
+        // 로그인 필요 시 로그인 모달 우선
+        if (appConfig.login_required && !isAuthenticated) {
+            showLoginModal();
+            return;
+        }
+        const modal = document.getElementById('participantsModal');
+        if (!modal) return;
+        loadCharTemplateList(document.getElementById('pmTemplateSelect'));
+        renderParticipantsManagerList();
+        modal.classList.remove('hidden');
+        enableFocusTrap(modal);
     });
 }
 if (moreBackupBtn) {
