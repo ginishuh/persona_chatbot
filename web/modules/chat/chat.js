@@ -323,9 +323,11 @@ export function handleChatComplete(response) {
         }
 
         // 토큰 사용량 업데이트
-        console.log('Token usage:', data.token_usage); // 디버그
+        const provider = data.provider_used || currentProvider || 'claude';
         if (data.token_usage) {
-            updateTokenDisplay(data.token_usage);
+            updateTokenDisplay(data.token_usage, provider);
+        } else {
+            updateTokenDisplay(null, provider);
         }
 
         // 서사 업데이트
@@ -336,15 +338,41 @@ export function handleChatComplete(response) {
     }
 }
 
-export function updateTokenDisplay(tokenUsage) {
+export function updateTokenDisplay(tokenUsage, provider = 'claude') {
     if (!tokenUsageDisplay) refreshChatRefs();
 
-    if (tokenUsageDisplay) {
-        tokenUsageDisplay.classList.remove('hidden');
-        if (tokenPrompt) tokenPrompt.textContent = tokenUsage.input_tokens || 0;
-        if (tokenCompletion) tokenCompletion.textContent = tokenUsage.output_tokens || 0;
-        if (tokenTotal) tokenTotal.textContent = tokenUsage.total_tokens || 0;
+    if (!tokenUsageDisplay) return;
+
+    // tokenUsage 형식: { providers: { claude: {...} } } 또는 legacy {input_tokens, output_tokens, ...}
+    let entry = tokenUsage;
+    if (tokenUsage && tokenUsage.providers) {
+        entry = tokenUsage.providers[provider] || null;
     }
+
+    if (!entry || entry.supported === false) {
+        tokenUsageDisplay.classList.add('hidden');
+        return;
+    }
+
+    const promptTok =
+        entry.last_input_tokens ??
+        entry.total_input_tokens ??
+        entry.input_tokens ??
+        0;
+    const completionTok =
+        entry.last_output_tokens ??
+        entry.total_output_tokens ??
+        entry.output_tokens ??
+        0;
+    const totalTok =
+        entry.last_total_tokens ??
+        entry.total_tokens ??
+        promptTok + completionTok;
+
+    tokenUsageDisplay.classList.remove('hidden');
+    if (tokenPrompt) tokenPrompt.textContent = promptTok;
+    if (tokenCompletion) tokenCompletion.textContent = completionTok;
+    if (tokenTotal) tokenTotal.textContent = totalTok;
 }
 
 export function bindChatEvents() {
