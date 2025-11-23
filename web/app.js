@@ -2430,6 +2430,14 @@ window.addEventListener('load', async () => {
             moreAdminBtn.style.display = 'block';
         }
     } else {
+        clearAuthToken();
+        setRefreshToken('', '');
+        try {
+            localStorage.removeItem(AUTH_TOKEN_KEY);
+            localStorage.removeItem(AUTH_EXP_KEY);
+            localStorage.removeItem(REFRESH_TOKEN_KEY);
+            localStorage.removeItem(REFRESH_EXP_KEY);
+        } catch (_) {}
         loginBtn.style.display = 'block';
         moreLoginBtn.style.display = 'block';
         logoutBtn.style.display = 'none';
