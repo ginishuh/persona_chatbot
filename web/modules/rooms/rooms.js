@@ -492,6 +492,7 @@ export function collectRoomConfig(roomId) {
             world: worldInput ? worldInput.value.trim() : '',
             situation: situationInput ? situationInput.value.trim() : '',
             user_character: userCharacterData,
+            characters: Array.isArray(participants) ? [...participants] : [],
             narrator_enabled: narratorEnabled ? !!narratorEnabled.checked : false,
             narrator_mode: narratorMode ? narratorMode.value : 'moderate',
             narrator_description: narratorDescription ? narratorDescription.value.trim() : '',
