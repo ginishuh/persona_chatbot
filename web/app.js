@@ -472,6 +472,26 @@ function startWebSocket() {
 if (aiProvider) {
     updateModelOptions(aiProvider.value || 'claude');
     aiProvider.addEventListener('change', () => updateModelOptions(aiProvider.value));
+    // Gemini일 때 단일 화자 모드 비활성화
+    aiProvider.addEventListener('change', () => {
+        if (!singleSpeakerMode) return;
+        if (aiProvider.value === 'gemini') {
+            singleSpeakerMode.checked = false;
+            singleSpeakerMode.disabled = true;
+            singleSpeakerMode.parentElement?.classList.add('disabled');
+        } else {
+            singleSpeakerMode.disabled = false;
+            singleSpeakerMode.parentElement?.classList.remove('disabled');
+        }
+    });
+    // 초기 상태 적용
+    if (singleSpeakerMode) {
+        if (aiProvider.value === 'gemini') {
+            singleSpeakerMode.checked = false;
+            singleSpeakerMode.disabled = true;
+            singleSpeakerMode.parentElement?.classList.add('disabled');
+        }
+    }
 }
 
 // 주도권 ↔ 선택지 연동: describe=선택지X, guide=선택지ON, direct=선택지X(강제)
