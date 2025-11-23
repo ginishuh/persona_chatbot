@@ -88,12 +88,8 @@ async def chat(ctx: AppContext, websocket, data: dict):
     except Exception:
         pass
 
-    # 히스토리 텍스트 (프로바이더 세션 사용 시 생략)
-    provider_supports_session = provider in ("claude", "droid")
-    if provider_supports_session and provider_session_id:
-        history_text = ""
-    else:
-        history_text = room["history"].get_history_text()
+    # 히스토리 텍스트: 세션이 있어도 최근 윈도우를 항상 포함
+    history_text = room["history"].get_history_text()
 
     # 시스템 프롬프트
     system_prompt = ctx.context_handler.build_system_prompt(history_text)
