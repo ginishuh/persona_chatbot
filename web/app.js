@@ -2549,7 +2549,7 @@ window.addEventListener('load', async () => {
         onClearHistory: () => document.getElementById('clearHistoryBtn')?.click(),
         onResetSessions: () => document.getElementById('resetSessionsBtn')?.click(),
         onLogout: handleLogout,
-        onOpenBackup: navigateToBackupScreen
+        onOpenBackup: openBackupModalInline
     });
     // UI 초기 상태 강제 정리 (헤더 가려짐 방지)
     document.getElementById('settingsModal')?.classList.add('hidden');
