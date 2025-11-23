@@ -965,6 +965,7 @@ async function submitLogin() {
                 localStorage.removeItem(LOGIN_SAVED_PW_KEY);
             }
 
+            setAuthRequired(false);
             setIsAuthenticated(true);
             hideLoginModal();
             log(`${username}님 로그인 성공`, 'success');
@@ -980,12 +981,12 @@ async function submitLogin() {
             }
             console.log('[LOGIN] 버튼 가시성:', { loginBtn: loginBtn.style.display, logoutBtn: logoutBtn.style.display, adminBtn: adminBtn.style.display, userRole });
 
-            // WebSocket 재연결 (토큰 포함)
+            // WebSocket 재연결은 불필요: 토큰은 메시지에 포함되므로 바로 초기 데이터 요청
             if (ws && ws.readyState === WebSocket.OPEN) {
-                setIsReconnecting(true); // 의도적인 재연결 표시
-                ws.close();
+                initializeAppData();
+            } else {
+                startWebSocket();
             }
-            startWebSocket();
         } else {
             loginError.textContent = data.error || '로그인 실패';
         }
