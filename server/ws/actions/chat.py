@@ -113,15 +113,19 @@ async def chat(ctx: AppContext, websocket, data: dict):
                     profile_str += f"{meta}. "
                 if desc:
                     profile_str += desc
-            system_prompt = (
-                f"[현재 화자: {sp}. 이번 턴에는 {sp}만 발화합니다. 다른 캐릭터나 내레이터는 말하지 않습니다. 짧게 말하세요."
-                + (f" {profile_str}" if profile_str else "")
-                + "]\n"
-                + system_prompt
+
+            single_speaker_guard = (
+                f"[현재 화자: {sp}. 이번 턴에는 {sp}만 발화합니다. 다른 캐릭터나 내레이터는 말하지 않습니다. "
+                "반드시 한 캐릭터 한 줄만 말하세요. 다른 사람 이름이나 대사를 쓰지 말고, 대괄호/콜론 없이 순수 대사만 출력하세요."
             )
+            if profile_str:
+                single_speaker_guard += f" {profile_str}"
+            single_speaker_guard += "]\n"
+
+            system_prompt = single_speaker_guard + system_prompt
         except Exception:
             system_prompt = (
-                f"[현재 화자: {sp}. 이번 턴에는 {sp}만 발화합니다. 다른 캐릭터나 내레이터는 말하지 않습니다. 짧게 말하세요.]\n"
+                f"[현재 화자: {sp}. 이번 턴에는 {sp}만 발화합니다. 다른 캐릭터나 내레이터는 말하지 않습니다. 한 줄만, 다른 이름 없이 말하세요.]\n"
                 + system_prompt
             )
 
