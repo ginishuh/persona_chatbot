@@ -539,7 +539,16 @@ function canAutoTurn() {
     if (aiProvider && aiProvider.value === 'gemini') return false;
     if (!isSingleSpeakerModeEnabled()) return false;
     if (!Array.isArray(participants) || participants.length === 0) return false;
+    if (!hasConversationHistory()) return false;
     return true;
+}
+
+function hasConversationHistory() {
+    if (!chatMessages) refreshChatRefs();
+    if (!chatMessages) return false;
+    const msgs = chatMessages.querySelectorAll('.chat-message');
+    // 시스템 안내만 있고 사용자/assistant가 없으면 false
+    return Array.from(msgs).some(m => !m.classList.contains('system'));
 }
 
 function syncAutoTurnState() {
@@ -560,6 +569,7 @@ function syncAutoTurnState() {
             if (aiProvider && aiProvider.value === 'gemini') reason += 'Gemini는 지원 안 함';
             else if (!isSingleSpeakerModeEnabled()) reason += '단일 화자 모드가 꺼져 있음';
             else if (!participants || participants.length === 0) reason += '참여자가 없음';
+            else if (!hasConversationHistory()) reason += '먼저 한 번 대화를 시작해주세요';
             else reason += '조건 미충족';
             log(reason, 'warning');
         }
