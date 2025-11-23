@@ -31,7 +31,6 @@ let narrativeSeparation = null;
 let narratorDrive = null;
 let outputLevel = null;
 let storyPace = null;
-let adultConsent = null;
 let forceChoices = null;
 let choiceCount = null;
 let narratorSettings = null;
@@ -71,7 +70,6 @@ function buildSetContextPayload(roomId) {
         ai_provider: aiProvider ? aiProvider.value : 'claude',
         adult_level: adultLevel ? adultLevel.value : 'explicit',
         conversation_mode: conversationMode && conversationMode.value ? conversationMode.value : undefined,
-        adult_consent: adultConsent ? !!adultConsent.checked : undefined,
         narrative_separation: narrativeSeparation ? !!narrativeSeparation.checked : false,
         narrator_drive: narratorDrive ? narratorDrive.value : undefined,
         output_level: outputLevel ? outputLevel.value : undefined,
@@ -118,7 +116,6 @@ export function refreshRoomRefs() {
     narratorDrive = document.getElementById('narratorDrive');
     outputLevel = document.getElementById('outputLevel');
     storyPace = document.getElementById('storyPace');
-    adultConsent = document.getElementById('adultConsent');
     forceChoices = document.getElementById('forceChoices');
     choiceCount = document.getElementById('choiceCount');
     narratorSettings = document.getElementById('narratorSettings');
@@ -149,7 +146,6 @@ function bindAutoSaveInputs() {
     listen(narratorDrive, ['change']);
     listen(outputLevel, ['change']);
     listen(storyPace, ['change']);
-    listen(adultConsent, ['change']);
     listen(forceChoices, ['change']);
     listen(choiceCount, ['input', 'change']);
     listen(conversationMode, ['change']);
@@ -454,7 +450,6 @@ export function loadContext(context) {
     if (narratorDrive) narratorDrive.value = context.narrator_drive || 'guide';
     if (outputLevel) outputLevel.value = context.output_level || 'normal';
     if (storyPace) storyPace.value = context.pace || 'normal';
-    if (adultConsent) adultConsent.checked = false; // 세션 보관값은 서버 측, UI는 기본 해제
     if (forceChoices) forceChoices.checked = (context.choice_policy || 'off') === 'require';
     if (choiceCount) choiceCount.value = String(context.choice_count || 3);
     if (conversationMode) conversationMode.value = context.conversation_mode || 'trpg_multi';
@@ -596,20 +591,4 @@ export function renderSettingsScreenView(roomId) {
         sendMessage({ action: 'room_save', room_id: roomId, config });
         navigate(`/rooms/${encodeURIComponent(roomId)}`);
     });
-}
-
-export function bindRoomEvents() {
-    refreshRoomRefs();
-    if (roomSearch) {
-        roomSearch.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.isComposing) {
-                renderRoomsRightPanelList();
-            }
-        });
-    }
-    if (roomSearchBtn) {
-        roomSearchBtn.addEventListener('click', () => {
-            renderRoomsRightPanelList();
-        });
-    }
 }

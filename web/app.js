@@ -64,7 +64,7 @@ import {
 } from './modules/chat/chat.js';
 import {
     refreshRoomRefs, renderRoomsUI, renderRoomsRightPanelList, renderRoomsScreen,
-    loadContext, collectRoomConfig, bindRoomEvents, populateRoomsModal, openRoomsModal, closeRoomsModal,
+    loadContext, collectRoomConfig, populateRoomsModal, openRoomsModal, closeRoomsModal,
     persistRooms, sanitizeRoomName, applyContextToSettingsScreen
 } from './modules/rooms/rooms.js';
 import {
@@ -111,8 +111,6 @@ const saveMyCharacterBtn = document.getElementById('saveMyCharacterBtn');
 const deleteMyCharacterBtn = document.getElementById('deleteMyCharacterBtn');
 const userCharacterAgeInput = document.getElementById('userCharacterAge');
 const userCharacterInput = document.getElementById('userCharacterInput');
-const loadProfileJsonBtn = document.getElementById('loadProfileJsonBtn');
-const saveProfileJsonBtn = document.getElementById('saveProfileJsonBtn');
 
 // 채팅/세션 제어 요소
 const chatMessages = document.getElementById('chatMessages');
@@ -132,7 +130,6 @@ const narrativeSeparation = document.getElementById('narrativeSeparation');
 const narratorSettings = document.getElementById('narratorSettings');
 const outputLevel = document.getElementById('outputLevel');
 const storyPace = document.getElementById('storyPace');
-const adultConsent = document.getElementById('adultConsent');
 const sessionRetentionToggle = document.getElementById('sessionRetentionToggle');
 
 // 프리셋 관리 요소
@@ -209,7 +206,6 @@ let pendingConsentResend = false; // 성인 동의 직후 직전 요청 재전�
 const LOGIN_USER_KEY = 'persona_login_user';
 const LOGIN_AUTOLOGIN_KEY = 'persona_login_auto';
 const LOGIN_SAVED_PW_KEY = 'persona_login_pw';
-const LOGIN_ADULT_KEY = 'persona_login_adult';
 // Tokens initialized in core/state.js
 
 
@@ -807,7 +803,6 @@ function showLoginModal() {
         const auto = localStorage.getItem(LOGIN_AUTOLOGIN_KEY) === '1';
         if (rememberIdCheckbox) rememberIdCheckbox.checked = !!savedUser;
         if (autoLoginCheckbox) autoLoginCheckbox.checked = auto;
-        if (adultConsent) adultConsent.checked = (localStorage.getItem(LOGIN_ADULT_KEY) === '1');
     } catch (_) {}
     if (loginPasswordInput) loginPasswordInput.value = '';
     loginError.textContent = '';
@@ -1107,10 +1102,6 @@ function handleMessage(msg) {
                     } else {
                         localStorage.removeItem(LOGIN_AUTOLOGIN_KEY);
                         localStorage.removeItem(LOGIN_SAVED_PW_KEY);
-                    }
-                    // 성인 동의 저장(선택)
-                    if (adultConsent && adultConsent.checked) {
-                        localStorage.setItem(LOGIN_ADULT_KEY, '1');
                     }
                 } catch (_) {}
                 // 직전 사용자 액션이 있었다면 우선 재전송
@@ -1485,7 +1476,6 @@ saveContextBtn.addEventListener('click', () => {
         ai_provider: aiProvider.value,
         adult_level: adultLevel.value,
         conversation_mode: conversationMode && conversationMode.value ? conversationMode.value : undefined,
-        adult_consent: adultConsent ? !!adultConsent.checked : undefined,
         narrative_separation: narrativeSeparation.checked,
         narrator_drive: narratorDrive ? narratorDrive.value : undefined,
         output_level: outputLevel ? outputLevel.value : undefined,
@@ -1542,7 +1532,6 @@ if (applyCharactersBtn) {
             ai_provider: aiProvider.value,
             adult_level: adultLevel.value,
             conversation_mode: conversationMode && conversationMode.value ? conversationMode.value : undefined,
-            adult_consent: adultConsent ? !!adultConsent.checked : undefined,
             narrative_separation: narrativeSeparation.checked,
             narrator_drive: narratorDrive ? narratorDrive.value : undefined,
             output_level: outputLevel ? outputLevel.value : undefined,
@@ -2052,35 +2041,6 @@ myCharacterSelect.addEventListener('change', () => {
 deleteMyCharacterBtn.addEventListener('click', () => {
     deleteFile('my_character', myCharacterSelect);
 });
-
-// 내 프로필(JSON) 저장/불러오기
-if (saveProfileJsonBtn) {
-    saveProfileJsonBtn.addEventListener('click', () => {
-        const name = document.getElementById('userCharacterName').value.trim();
-        const gender = document.getElementById('userCharacterGender').value.trim();
-        const age = userCharacterAgeInput ? userCharacterAgeInput.value.trim() : '';
-        const description = userCharacterInput.value.trim();
-        const payload = { name, role: 'user', gender, age, description };
-        sendMessage({
-            action: 'save_workspace_file',
-            file_type: 'my_profile',
-            filename: 'my_profile',
-            content: JSON.stringify(payload, null, 2)
-        });
-        log('내 프로필(JSON) 저장 요청', 'info');
-    });
-}
-
-if (loadProfileJsonBtn) {
-    loadProfileJsonBtn.addEventListener('click', () => {
-        setPendingLoadType('my_profile');
-        sendMessage({
-            action: 'load_workspace_file',
-            file_type: 'my_profile',
-            filename: 'my_profile'
-        });
-    });
-}
 
 // ===== 캐릭터 편집 모달 =====
 
