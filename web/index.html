@@ -261,8 +261,10 @@
                 <button id="clearHistoryBtn" class="btn btn-sm btn-warning">🗑️ 대화 초기화</button>
                 <button id="resetSessionsBtn" class="btn btn-sm" title="AI 세션 리셋">♻️ 세션</button>
                 <span id="sessionStatusBadge" class="session-status-badge" title="세션 유지 상태">OFF</span>
-                <div class="token-info" id="tokenInfo" title="토큰 사용량">
-                    <span id="tokenText">토큰: - / 200K</span>
+                <div class="token-info hidden" id="tokenUsageDisplay" title="토큰 사용량">
+                    <span>입력</span><span id="tokenPrompt">-</span>
+                    <span style="margin-left:0.4rem;">출력</span><span id="tokenCompletion">-</span>
+                    <span style="margin-left:0.4rem;">합계</span><span id="tokenTotal">-</span>
                 </div>
                 <div class="connection-status">
                     <span class="status-indicator" id="statusIndicator"></span>

@@ -141,7 +141,6 @@ const deletePresetBtn = document.getElementById('deletePresetBtn');
 // 헤더 버튼
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 const resetSessionsBtn = document.getElementById('resetSessionsBtn');
-const tokenText = document.getElementById('tokenText');
 const sessionStatusBadge = document.getElementById('sessionStatusBadge');
 
 // 서사 패널 요소
