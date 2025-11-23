@@ -179,8 +179,16 @@ const registerError = document.getElementById('registerError');
 const loginBtn = document.getElementById('loginBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const backupBtn = document.getElementById('backupBtn');
-const bkCloseBtn = document.getElementById('bkCloseBtn');
 const participantsBtn = document.getElementById('participantsBtn');
+const backupModal = document.getElementById('backupModal');
+const bkCloseBtn = document.getElementById('bkCloseBtn');
+const bkRoomsWrap = document.getElementById('bkRoomsWrap');
+const bkRoomsActions = document.getElementById('bkRoomsActions');
+const bkSelectAllBtn = document.getElementById('bkSelectAll');
+const bkSelectNoneBtn = document.getElementById('bkSelectNone');
+const bkScopeSingle = document.getElementById('bkScopeSingle');
+const bkScopeSelected = document.getElementById('bkScopeSelected');
+const bkScopeFull = document.getElementById('bkScopeFull');
 
 // 모바일 더보기 메뉴의 로그인/로그아웃/관리 버튼
 const moreLoginBtn = document.getElementById('moreLoginBtn');
@@ -270,6 +278,7 @@ document.addEventListener('keydown', (e) => {
     const login = document.getElementById('loginModal');
     const settings = document.getElementById('settingsModal');
     const participants = document.getElementById('participantsModal');
+    const backup = document.getElementById('backupModal');
     const editor = document.getElementById('characterEditorModal');
     const tryClose = (el) => {
         if (el && !el.classList.contains('hidden')) {
@@ -282,6 +291,7 @@ document.addEventListener('keydown', (e) => {
     // 로그인 모달은 ESC로 닫지 않음(정책상 로그인 필요 환경 고려)
     if (tryClose(editor)) return;
     if (tryClose(participants)) return;
+    if (tryClose(backup)) return;
     if (tryClose(settings)) return;
 });
 
@@ -1743,6 +1753,7 @@ function openBackupModalInline() {
     // 선택한 방 목록 채우기 (rooms 모듈에서 관리하는 rooms 사용)
     try {
         const wrap = document.getElementById('bkRoomsWrap');
+        const actions = document.getElementById('bkRoomsActions');
         const scopeSelected = document.getElementById('bkScopeSelected');
         const scopeSingle = document.getElementById('bkScopeSingle');
         const scopeFull = document.getElementById('bkScopeFull');
@@ -1765,12 +1776,21 @@ function openBackupModalInline() {
                 wrap.appendChild(row);
             });
             wrap.style.display = 'block';
+            if (actions) actions.style.display = 'flex';
         }
         // 기본 스코프는 현재 방
         if (scopeSingle) scopeSingle.checked = true;
-        if (scopeSelected && wrap) scopeSelected.onclick = () => (wrap.style.display = 'block');
-        if (scopeSingle && wrap) scopeSingle.onclick = () => (wrap.style.display = 'none');
-        if (scopeFull && wrap) scopeFull.onclick = () => (wrap.style.display = 'none');
+        const hideRooms = () => {
+            if (wrap) wrap.style.display = 'none';
+            if (actions) actions.style.display = 'none';
+        };
+        const showRooms = () => {
+            if (wrap) wrap.style.display = 'block';
+            if (actions) actions.style.display = 'flex';
+        };
+        if (scopeSelected) scopeSelected.onclick = showRooms;
+        if (scopeSingle) scopeSingle.onclick = hideRooms;
+        if (scopeFull) scopeFull.onclick = hideRooms;
     } catch (_) {}
     modal.classList.remove('hidden');
     enableFocusTrap(modal);
@@ -1804,10 +1824,38 @@ if (participantsBtn) {
         enableFocusTrap(modal);
     });
 }
+document.getElementById('pmCloseBtn')?.addEventListener('click', () => {
+    const modal = document.getElementById('participantsModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    disableFocusTrap(modal);
+});
+document.querySelector('#participantsModal .settings-modal-overlay')?.addEventListener('click', () => {
+    const modal = document.getElementById('participantsModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    disableFocusTrap(modal);
+});
 if (moreBackupBtn) {
     moreBackupBtn.addEventListener('click', () => {
         closeMoreMenu();
         openBackupModalInline();
+    });
+}
+
+// 백업 모달 방 선택 전체선택/해제
+if (bkSelectAllBtn) {
+    bkSelectAllBtn.addEventListener('click', () => {
+        document.querySelectorAll('#bkRoomsWrap input[type=\"checkbox\"]').forEach(cb => {
+            cb.checked = true;
+        });
+    });
+}
+if (bkSelectNoneBtn) {
+    bkSelectNoneBtn.addEventListener('click', () => {
+        document.querySelectorAll('#bkRoomsWrap input[type=\"checkbox\"]').forEach(cb => {
+            cb.checked = false;
+        });
     });
 }
 
