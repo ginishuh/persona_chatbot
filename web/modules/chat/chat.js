@@ -22,6 +22,11 @@ let isComposing = false;
 let streamingText = '';
 let nextSpeakerIndex = 0;
 let currentTurnSpeaker = null;
+let autoTurnEnabled = false;
+let autoTurnDelayMs = 5000;
+let autoTurnMax = '10';
+let autoTurnCount = 0;
+let autoTurnTimer = null;
 
 export function refreshChatRefs() {
     chatMessages = document.getElementById('chatMessages');
@@ -399,9 +404,15 @@ export function handleChatComplete(response) {
         // 서사 업데이트
         sendMessage({ action: 'get_narrative' });
         currentTurnSpeaker = null;
+
+        // 자동턴 진행 중이면 다음 턴 예약
+        if (canAutoTurn()) {
+            scheduleNextAutoTurn();
+        }
     } else {
         log('채팅 에러: ' + data.error, 'error');
         addChatMessage('system', '에러: ' + data.error);
+        stopAutoTurn('오류로 자동턴을 중단합니다.');
     }
 }
 
@@ -493,4 +504,69 @@ export function updateChatInputState(enabled) {
     if (!chatInput) refreshChatRefs();
     if (chatInput) chatInput.disabled = !enabled;
     if (sendChatBtn) sendChatBtn.disabled = !enabled;
+}
+function canAutoTurn() {
+    if (!autoTurnEnabled) return false;
+    // Gemini는 지원 안 함
+    if (aiProvider && aiProvider.value === 'gemini') return false;
+    if (!isSingleSpeakerModeEnabled()) return false;
+    if (!Array.isArray(participants) || participants.length === 0) return false;
+    return true;
+}
+
+function stopAutoTurn(reason = '') {
+    autoTurnEnabled = false;
+    autoTurnCount = 0;
+    if (autoTurnTimer) {
+        clearTimeout(autoTurnTimer);
+        autoTurnTimer = null;
+    }
+    if (reason) log(reason, 'info');
+}
+
+function scheduleNextAutoTurn() {
+    if (!canAutoTurn()) return;
+    if (autoTurnMax !== 'unlimited' && autoTurnCount >= parseInt(autoTurnMax, 10)) {
+        stopAutoTurn('자동턴이 설정된 최대 턴에 도달해 중단되었습니다.');
+        return;
+    }
+    autoTurnTimer = setTimeout(() => {
+        sendAutoTurn();
+    }, autoTurnDelayMs);
+}
+
+function sendAutoTurn() {
+    if (!canAutoTurn()) return;
+
+    // 라운드로빈 화자 선택
+    const idx = nextSpeakerIndex % participants.length;
+    const chosen = participants[idx];
+    const payloadSpeaker = (chosen && chosen.name) ? chosen.name : `캐릭터${idx + 1}`;
+    nextSpeakerIndex += 1;
+    currentTurnSpeaker = payloadSpeaker;
+
+    // 타이핑 인디케이터 표시
+    addTypingIndicator();
+    if (sendChatBtn) sendChatBtn.disabled = true;
+
+    const provider = (aiProvider && aiProvider.value) ? aiProvider.value : 'claude';
+    currentProvider = provider;
+
+    const prompt = '대화를 자연스럽게 이어서 한 줄만 말하세요.';
+
+    const success = sendMessage({
+        action: 'chat',
+        prompt,
+        provider,
+        model: (modelSelect && modelSelect.value) ? modelSelect.value : '',
+        speaker: payloadSpeaker,
+        auto_turn: true
+    });
+
+    if (success) {
+        autoTurnCount += 1;
+        log(`자동턴 진행 (${autoTurnCount}${autoTurnMax === 'unlimited' ? '' : '/' + autoTurnMax})`, 'info');
+    } else {
+        stopAutoTurn('WebSocket 연결이 끊어져 자동턴을 중단합니다.');
+    }
 }

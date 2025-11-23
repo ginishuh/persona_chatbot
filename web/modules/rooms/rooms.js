@@ -74,6 +74,9 @@ function buildSetContextPayload(roomId) {
         adult_level: adultLevel ? adultLevel.value : 'explicit',
         conversation_mode: conversationMode && conversationMode.value ? conversationMode.value : undefined,
         single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false,
+        auto_turn_enabled: autoTurnToggle ? !!autoTurnToggle.checked : false,
+        auto_turn_delay: autoTurnDelay ? parseInt(autoTurnDelay.value, 10) || 5000 : 5000,
+        auto_turn_max: autoTurnMax ? autoTurnMax.value : '10',
         narrative_separation: narrativeSeparation ? !!narrativeSeparation.checked : false,
         narrator_drive: narratorDrive ? narratorDrive.value : undefined,
         output_level: outputLevel ? outputLevel.value : undefined,
@@ -125,6 +128,9 @@ export function refreshRoomRefs() {
     narratorSettings = document.getElementById('narratorSettings');
     conversationMode = document.getElementById('conversationMode');
     singleSpeakerMode = document.getElementById('singleSpeakerMode');
+    autoTurnToggle = document.getElementById('autoTurnToggle');
+    autoTurnDelay = document.getElementById('autoTurnDelay');
+    autoTurnMax = document.getElementById('autoTurnMax');
     singleSpeakerMode = document.getElementById('singleSpeakerMode');
 
     bindAutoSaveInputs();
@@ -156,6 +162,9 @@ function bindAutoSaveInputs() {
     listen(choiceCount, ['input', 'change']);
     listen(conversationMode, ['change']);
     listen(singleSpeakerMode, ['change']);
+    listen(autoTurnToggle, ['change']);
+    listen(autoTurnDelay, ['change']);
+    listen(autoTurnMax, ['change']);
     listen(singleSpeakerMode, ['change']);
 
     // 캐릭터 목록 변경 시 자동 저장 (전역 이벤트)
@@ -470,6 +479,9 @@ export function loadContext(context) {
     if (choiceCount) choiceCount.value = String(context.choice_count || 3);
     if (conversationMode) conversationMode.value = context.conversation_mode || 'trpg_multi';
     if (singleSpeakerMode) singleSpeakerMode.checked = !!context.single_speaker_mode;
+    if (autoTurnToggle) autoTurnToggle.checked = !!context.auto_turn_enabled;
+    if (autoTurnDelay && context.auto_turn_delay) autoTurnDelay.value = String(context.auto_turn_delay);
+    if (autoTurnMax && context.auto_turn_max !== undefined) autoTurnMax.value = String(context.auto_turn_max);
 
     // 진행자 설정 표시/숨김
     if (narratorEnabled && narratorEnabled.checked) {

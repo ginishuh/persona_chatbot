@@ -132,6 +132,9 @@ const outputLevel = document.getElementById('outputLevel');
 const storyPace = document.getElementById('storyPace');
 const sessionRetentionToggle = document.getElementById('sessionRetentionToggle');
 const singleSpeakerMode = document.getElementById('singleSpeakerMode');
+const autoTurnToggle = document.getElementById('autoTurnToggle');
+const autoTurnDelay = document.getElementById('autoTurnDelay');
+const autoTurnMax = document.getElementById('autoTurnMax');
 
 // 프리셋 관리 요소
 const presetSelect = document.getElementById('presetSelect');
@@ -1517,7 +1520,10 @@ saveContextBtn.addEventListener('click', () => {
         characters: characters,
         choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
         choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined,
-        single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false
+        single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false,
+        auto_turn_enabled: autoTurnToggle ? !!autoTurnToggle.checked : false,
+        auto_turn_delay: autoTurnDelay ? parseInt(autoTurnDelay.value, 10) || 5000 : 5000,
+        auto_turn_max: autoTurnMax ? autoTurnMax.value : '10'
     });
     // 방 설정도 함께 저장(room.json)
         try {
@@ -1576,7 +1582,10 @@ if (applyCharactersBtn) {
             characters: characters,
             choice_policy: (forceChoices && forceChoices.checked) ? 'require' : 'off',
             choice_count: choiceCount ? parseInt(choiceCount.value, 10) || 3 : undefined,
-            single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false
+            single_speaker_mode: singleSpeakerMode ? !!singleSpeakerMode.checked : false,
+            auto_turn_enabled: autoTurnToggle ? !!autoTurnToggle.checked : false,
+            auto_turn_delay: autoTurnDelay ? parseInt(autoTurnDelay.value, 10) || 5000 : 5000,
+            auto_turn_max: autoTurnMax ? autoTurnMax.value : '10'
         });
         setTimeout(() => { applyCharactersBtn.disabled = false; }, 5000);
     });
