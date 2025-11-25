@@ -54,3 +54,18 @@ export function slugify(str) {
         .replace(/[\s_-]+/g, '-')
         .replace(/^-+|-+$/g, '') || 'character'; // 변환 후에도 빈 문자열이면 기본값
 }
+
+/**
+ * 사용자 캐릭터 데이터 문자열 생성
+ * @param {string} name - 캐릭터 이름
+ * @param {string} description - 캐릭터 설명
+ * @returns {string} - "이름: {name}\n{description}" 형식 문자열
+ */
+export function buildUserCharacterData(name, description) {
+    const n = (name || '').trim();
+    const d = (description || '').trim();
+    if (n) {
+        return d ? `이름: ${n}\n${d}` : `이름: ${n}`;
+    }
+    return d;
+}

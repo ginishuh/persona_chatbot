@@ -82,6 +82,7 @@ import {
     USER_ROLE_KEY, SESSION_KEY_KEY, ROOMS_KEY, CURRENT_ROOM_KEY,
     RETRY_ACTIONS, MAX_REFRESH_RETRIES, HISTORY_LIMIT_DEFAULT
 } from './modules/core/constants.js';
+import { buildUserCharacterData } from './modules/utils/utils.js';
 
 // router.js가 접근할 수 있도록 window에도 바인딩
 // `appConfig` is exported from modules/core/state and centrally bound in `web/modules/main.js`.
@@ -1481,14 +1482,7 @@ saveContextBtn.addEventListener('click', () => {
     const userName = document.getElementById('userCharacterName').value.trim();
     const userDesc = userCharacterInput.value.trim();
 
-    // 사용자 캐릭터 정보를 하나의 문자열로 결합
-    let userCharacterData = '';
-    if (userName) {
-        userCharacterData = `이름: ${userName}`;
-        if (userDesc) userCharacterData += `\n${userDesc}`;
-    } else if (userDesc) {
-        userCharacterData = userDesc;
-    }
+    const userCharacterData = buildUserCharacterData(userName, userDesc);
 
     sendMessage({
         action: 'set_context',
@@ -1540,14 +1534,7 @@ if (applyCharactersBtn) {
         const userName = document.getElementById('userCharacterName').value.trim();
         const userDesc = userCharacterInput.value.trim();
 
-        // 사용자 캐릭터 정보를 하나의 문자열로 결합
-        let userCharacterData = '';
-        if (userName) {
-            userCharacterData = `이름: ${userName}`;
-            if (userDesc) userCharacterData += `\n${userDesc}`;
-        } else if (userDesc) {
-            userCharacterData = userDesc;
-        }
+        const userCharacterData = buildUserCharacterData(userName, userDesc);
 
         sendMessage({
             action: 'set_context',

@@ -7,6 +7,7 @@ import { enableFocusTrap, disableFocusTrap } from '../ui/a11y.js';
 import { updateChatInputState } from '../chat/chat.js';
 import { renderParticipantsLeftPanel, renderParticipantsManagerList } from '../chat/characters.js';
 import { ROOMS_KEY, CURRENT_ROOM_KEY } from '../core/constants.js';
+import { buildUserCharacterData } from '../utils/utils.js';
 
 // DOM Elements
 let roomSelect = null;
@@ -44,14 +45,7 @@ const AUTO_SAVE_DELAY_MS = 1500;
 function buildSetContextPayload(roomId) {
     const userName = userCharacterName ? userCharacterName.value.trim() : '';
     const userDesc = userCharacterInput ? userCharacterInput.value.trim() : '';
-
-    let userCharacterData = '';
-    if (userName) {
-        userCharacterData = `이름: ${userName}`;
-        if (userDesc) userCharacterData += `\n${userDesc}`;
-    } else if (userDesc) {
-        userCharacterData = userDesc;
-    }
+    const userCharacterData = buildUserCharacterData(userName, userDesc);
 
     const characters = Array.isArray(participants) ? participants : [];
 
@@ -503,14 +497,7 @@ export function collectRoomConfig(roomId) {
 
     const userName = userCharacterName ? userCharacterName.value.trim() : '';
     const userDesc = userCharacterInput ? userCharacterInput.value.trim() : '';
-
-    let userCharacterData = '';
-    if (userName) {
-        userCharacterData = `이름: ${userName}`;
-        if (userDesc) userCharacterData += `\n${userDesc}`;
-    } else if (userDesc) {
-        userCharacterData = userDesc;
-    }
+    const userCharacterData = buildUserCharacterData(userName, userDesc);
 
     return {
         room_id: roomId,
