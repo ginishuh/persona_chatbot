@@ -618,32 +618,8 @@ header h1 {
     box-shadow: 0 0 0 3px rgba(92, 135, 255, 0.1);
 }
 
-/* 캐릭터 이름/성별 필드 */
-.character-name-field,
-.character-gender-field {
-    background: #ffffff;
-    color: #2c3e50;
-    border: 2px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 0.6rem;
-    font-family: inherit;
-    font-size: 0.9rem;
-    outline: none;
-    transition: all 0.2s;
-}
-
+/* 캐릭터 이름 필드 */
 .character-name-field {
-    flex: 2;
-}
-
-.character-gender-field {
-    flex: 1;
-    min-width: 100px;
-    cursor: pointer;
-}
-
-/* 나이 필드 */
-.character-age-field {
     background: #ffffff;
     color: #2c3e50;
     border: 2px solid #e2e8f0;
@@ -653,15 +629,9 @@ header h1 {
     font-size: 0.9rem;
     outline: none;
     transition: all 0.2s;
-    width: 120px;
-}
-.character-age-field:focus {
-    border-color: #5c87ff;
-    box-shadow: 0 0 0 3px rgba(92, 135, 255, 0.1);
 }
 
-.character-name-field:focus,
-.character-gender-field:focus {
+.character-name-field:focus {
     border-color: #5c87ff;
     box-shadow: 0 0 0 3px rgba(92, 135, 255, 0.1);
 }
