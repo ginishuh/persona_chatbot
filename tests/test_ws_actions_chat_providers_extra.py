@@ -52,7 +52,8 @@ def make_ctx(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_droid_skips_history_when_provider_session_present(tmp_path, monkeypatch):
+async def test_droid_includes_history_even_with_provider_session(tmp_path, monkeypatch):
+    """provider_session이 있어도 히스토리는 항상 포함됨 (세션 있어도 최근 윈도우 포함 정책)"""
     ctx = make_ctx(tmp_path)
     ws = FakeWS()
     monkeypatch.setattr(sm, "get_user_id_from_token", lambda c, d: 101)
@@ -75,8 +76,8 @@ async def test_droid_skips_history_when_provider_session_present(tmp_path, monke
     ctx.droid_handler = DH()
 
     await chat_actions.chat(ctx, ws, {"prompt": "p", "provider": "droid"})
-    # since provider_session existed, system_prompt should be SP:
-    assert captured and captured[0] == "SP:"
+    # 세션이 있어도 히스토리 텍스트가 항상 포함됨
+    assert captured and captured[0].startswith("SP:")
     last = json.loads(ws.sent[-1])
     assert last["action"] == "chat_complete"
 

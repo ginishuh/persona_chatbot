@@ -7,6 +7,7 @@ import { enableFocusTrap, disableFocusTrap } from '../ui/a11y.js';
 import { updateChatInputState } from '../chat/chat.js';
 import { renderParticipantsLeftPanel, renderParticipantsManagerList } from '../chat/characters.js';
 import { ROOMS_KEY, CURRENT_ROOM_KEY } from '../core/constants.js';
+import { buildUserCharacterData } from '../utils/utils.js';
 
 // DOM Elements
 let roomSelect = null;
@@ -17,8 +18,6 @@ let worldInput = null;
 let situationInput = null;
 let userCharacterInput = null;
 let userCharacterName = null;
-let userCharacterGender = null;
-let userCharacterAge = null;
 let narratorEnabled = null;
 let narratorMode = null;
 let narratorDescription = null;
@@ -45,19 +44,8 @@ const AUTO_SAVE_DELAY_MS = 1500;
 
 function buildSetContextPayload(roomId) {
     const userName = userCharacterName ? userCharacterName.value.trim() : '';
-    const userGender = userCharacterGender ? userCharacterGender.value.trim() : '';
-    const userAge = userCharacterAge ? userCharacterAge.value.trim() : '';
     const userDesc = userCharacterInput ? userCharacterInput.value.trim() : '';
-
-    let userCharacterData = '';
-    if (userName) {
-        userCharacterData = `이름: ${userName}`;
-        if (userGender) userCharacterData += `, 성별: ${userGender}`;
-        if (userAge) userCharacterData += `, 나이: ${userAge}`;
-        if (userDesc) userCharacterData += `\n${userDesc}`;
-    } else if (userDesc) {
-        userCharacterData = userDesc;
-    }
+    const userCharacterData = buildUserCharacterData(userName, userDesc);
 
     const characters = Array.isArray(participants) ? participants : [];
 
@@ -112,8 +100,6 @@ export function refreshRoomRefs() {
     situationInput = document.getElementById('situationInput');
     userCharacterInput = document.getElementById('userCharacterInput');
     userCharacterName = document.getElementById('userCharacterName');
-    userCharacterGender = document.getElementById('userCharacterGender');
-    userCharacterAge = document.getElementById('userCharacterAge');
     narratorEnabled = document.getElementById('narratorEnabled');
     narratorMode = document.getElementById('narratorMode');
     narratorDescription = document.getElementById('narratorDescription');
@@ -151,7 +137,7 @@ function bindAutoSaveInputs() {
         events.forEach((ev) => el.addEventListener(ev, () => triggerAutoSave(ev)));
     };
 
-    [worldInput, situationInput, userCharacterInput, userCharacterName, userCharacterGender, userCharacterAge].forEach(el => listen(el));
+    [worldInput, situationInput, userCharacterInput, userCharacterName].forEach(el => listen(el));
     [narratorDescription].forEach(el => listen(el));
     listen(narratorEnabled, ['change']);
     listen(narratorMode, ['change']);
@@ -443,12 +429,8 @@ export function loadContext(context) {
         if (lines.length && /^\s*이름\s*:\s*/.test(lines[0])) {
             const meta = lines[0];
             body = lines.slice(1).join('\n');
-            const mName = meta.match(/이름\s*:\s*([^,]+)/);
-            const mGender = meta.match(/성별\s*:\s*([^,]+)/);
-            const mAge = meta.match(/나이\s*:\s*([^,]+)/);
+            const mName = meta.match(/이름\s*:\s*([^,\n]+)/);
             if (userCharacterName) userCharacterName.value = mName ? mName[1].trim() : '';
-            if (userCharacterGender) userCharacterGender.value = mGender ? mGender[1].trim() : '';
-            if (userCharacterAge) userCharacterAge.value = mAge ? mAge[1].trim() : '';
         }
         if (userCharacterInput) userCharacterInput.value = (body || '').trim();
     } catch (_) {
@@ -514,19 +496,8 @@ export function collectRoomConfig(roomId) {
     if (!userCharacterName) refreshRoomRefs();
 
     const userName = userCharacterName ? userCharacterName.value.trim() : '';
-    const userGender = userCharacterGender ? userCharacterGender.value.trim() : '';
-    const userAge = userCharacterAge ? userCharacterAge.value.trim() : '';
     const userDesc = userCharacterInput ? userCharacterInput.value.trim() : '';
-
-    let userCharacterData = '';
-    if (userName) {
-        userCharacterData = `이름: ${userName}`;
-        if (userGender) userCharacterData += `, 성별: ${userGender}`;
-        if (userAge) userCharacterData += `, 나이: ${userAge}`;
-        if (userDesc) userCharacterData += `\n${userDesc}`;
-    } else if (userDesc) {
-        userCharacterData = userDesc;
-    }
+    const userCharacterData = buildUserCharacterData(userName, userDesc);
 
     return {
         room_id: roomId,

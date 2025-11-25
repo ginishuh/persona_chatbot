@@ -320,21 +320,10 @@
                             <button id="saveMyCharacterBtn" class="btn btn-sm" title="저장">💾</button>
                             <button id="deleteMyCharacterBtn" class="btn btn-sm btn-remove" title="삭제">🗑️</button>
                         </div>
-                        <!-- 1행: 이름만 단독 배치 (가로 전체) -->
-                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;">
-                            <input type="text" id="userCharacterName" class="character-name-field" placeholder="이름" style="flex:1;" />
+                        <div style="margin-bottom: 0.5rem;">
+                            <input type="text" id="userCharacterName" class="character-name-field" placeholder="이름" style="width:100%;" />
                         </div>
-                        <!-- 2행: 성별 + 나이 (간결 배치) -->
-                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;">
-                            <select id="userCharacterGender" class="character-gender-field">
-                                <option value="">성별</option>
-                                <option value="남성">남성</option>
-                                <option value="여성">여성</option>
-                                <option value="기타">기타</option>
-                            </select>
-                            <input type="text" id="userCharacterAge" class="character-age-field" placeholder="나이" />
-                        </div>
-                        <textarea id="userCharacterInput" placeholder="성격, 배경, 외모 등..." rows="3"></textarea>
+                        <textarea id="userCharacterInput" placeholder="성별, 나이, 성격, 배경, 외모 등..." rows="3"></textarea>
                     </div>
                     <div class="context-section">
                         <label>👥 현재 참여자</label>
@@ -456,29 +445,14 @@
             </div>
             <div class="settings-modal-body">
                 <!-- 기본 정보 -->
-                <div style="display:grid; grid-template-columns: 1fr 120px 100px; gap:0.75rem; margin-bottom:0.5rem; align-items:start;">
-                    <div>
-                        <label for="ceName" class="field-label">이름</label>
-                        <input id="ceName" type="text" class="input" placeholder="예) 브론" />
-                    </div>
-                    <div>
-                        <label for="ceGender" class="field-label">성별</label>
-                        <select id="ceGender" class="select-input">
-                            <option value="">선택</option>
-                            <option value="남성">남성</option>
-                            <option value="여성">여성</option>
-                            <option value="기타">기타</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="ceAge" class="field-label">나이</label>
-                        <input id="ceAge" type="text" class="input" placeholder="예) 34 또는 20대" />
-                    </div>
+                <div style="margin-bottom:0.5rem;">
+                    <label for="ceName" class="field-label">이름</label>
+                    <input id="ceName" type="text" class="input" placeholder="예) 브론" style="width:100%;" />
                 </div>
 
                 <div style="margin-bottom:0.5rem;">
-                    <label for="ceSummary" class="field-label">요약(설명)</label>
-                    <textarea id="ceSummary" rows="4" placeholder="예) 무뚝뚝한 대장장이. 말수 적고 실용적이며 고객에게 솔직하다." style="width:100%;"></textarea>
+                    <label for="ceSummary" class="field-label">설명</label>
+                    <textarea id="ceSummary" rows="4" placeholder="예) 34세 남성. 무뚝뚝한 대장장이. 말수 적고 실용적이며 고객에게 솔직하다." style="width:100%;"></textarea>
                 </div>
 
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-top:0.5rem;">
