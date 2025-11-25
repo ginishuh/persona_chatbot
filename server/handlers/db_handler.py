@@ -48,15 +48,27 @@ class DBHandler:
         # 최신 버전: v4 (user_id 기반 재설계)
         TARGET_VERSION = 4
 
-        # user_version == 0이지만 테이블이 존재하면 레거시 DB로 처리
+        # user_version == 0이지만 테이블이 존재하면 스키마 검사
         if current_version == 0:
-            cur = await self._conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='rooms'"
-            )
-            if await cur.fetchone():
-                # 레거시 DB: v4로 마이그레이션 필요
-                logger.info("Legacy DB detected (user_version=0 but tables exist)")
-                current_version = 1  # 강제로 구버전으로 설정
+            cur = await self._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            existing_tables = {row[0] for row in await cur.fetchall()}
+
+            if existing_tables - {"sqlite_sequence"}:  # 테이블이 존재하면
+                # rooms 테이블에 user_id 컬럼이 있는지 확인 (v4 스키마 여부)
+                is_v4_schema = False
+                if "rooms" in existing_tables:
+                    cur = await self._conn.execute("PRAGMA table_info(rooms)")
+                    columns = {row[1] for row in await cur.fetchall()}
+                    is_v4_schema = "user_id" in columns
+
+                if is_v4_schema:
+                    # 이미 v4 스키마지만 user_version만 안 올라간 경우
+                    logger.info("v4 schema detected, updating user_version only")
+                    current_version = 4
+                else:
+                    # 레거시 스키마: 마이그레이션 필요
+                    logger.info("Legacy DB detected (old schema without user_id)")
+                    current_version = 1  # 강제로 구버전으로 설정
 
         if current_version == 0:
             # 진짜 새 DB: v4 스키마로 바로 생성

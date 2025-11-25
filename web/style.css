@@ -93,7 +93,7 @@ header {
     display: block;
     width: 24px;
     height: 3px;
-    background: #475569;
+    background: var(--color-text-muted);
     border-radius: 2px;
     transition: all 0.3s;
 }
@@ -141,7 +141,7 @@ header {
     cursor: pointer;
     z-index: 1001;
     transition: transform 0.2s;
-    color: #475569;
+    color: var(--color-text-muted);
 }
 
 .more-menu-btn:hover {
@@ -149,7 +149,7 @@ header {
 }
 
 .more-menu-btn.active {
-    background: #e2e8f0;
+    background: var(--color-border);
     border-radius: 6px;
 }
 
@@ -185,19 +185,19 @@ header {
     text-align: left;
     cursor: pointer;
     font-size: 0.9rem;
-    color: #2c3e50;
+    color: var(--color-text);
     border-radius: 6px;
     transition: background 0.2s;
 }
 
 .more-menu-item:hover {
-    background: #f1f5f9;
+    background: var(--color-muted);
 }
 
 .more-menu-item-static {
     padding: 0.75rem 1rem;
     font-size: 0.85rem;
-    color: #64748b;
+    color: var(--color-text-muted);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -210,7 +210,7 @@ header {
 }
 
 .logout-btn {
-    color: #ef4444 !important;
+    color: var(--color-error) !important;
     font-weight: 600;
 }
 
@@ -264,7 +264,7 @@ header h1 {
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: #cbd5e0;
+    background: var(--color-border);
     animation: pulse 2s infinite;
 }
 
@@ -294,8 +294,8 @@ header h1 {
 /* Left Panel - Context Settings */
 .left-panel {
     width: 320px;
-    background: #ffffff;
-    border-right: 2px solid #e8ecef;
+    background: var(--color-surface);
+    border-right: 2px solid var(--color-border);
     display: flex;
     flex-direction: column;
     transition: width 0.3s ease;
@@ -311,15 +311,15 @@ header h1 {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: #fafbfc;
+    background: var(--color-bg);
     min-width: 400px;
 }
 
 /* Right Panel - Narrative */
 .right-panel {
     width: 380px;
-    background: #ffffff;
-    border-left: 2px solid #e8ecef;
+    background: var(--color-surface);
+    border-left: 2px solid var(--color-border);
     display: flex;
     flex-direction: column;
 }
@@ -330,18 +330,18 @@ header h1 {
     justify-content: space-between;
     align-items: center;
     padding: 1rem;
-    border-bottom: 2px solid #e8ecef;
-    background: #f8f9fa;
+    border-bottom: 2px solid var(--color-border);
+    background: var(--color-bg);
 }
 
 .panel-header h2 {
     font-size: 1rem;
     font-weight: 600;
-    color: #2c3e50;
+    color: var(--color-text);
 }
 
 .narrative-controls {
-    background: #ffffff;
+    background: var(--color-surface);
 }
 
 .btn-icon {
@@ -351,20 +351,20 @@ header h1 {
     cursor: pointer;
     padding: 0.25rem 0.5rem;
     border-radius: 6px;
-    color: #64748b;
+    color: var(--color-text-muted);
     transition: all 0.2s;
 }
 
 .btn-icon:hover {
-    background: #e2e8f0;
-    color: #2c3e50;
+    background: var(--color-border);
+    color: var(--color-text);
 }
 
 /* Tabs */
 .tabs {
     display: flex;
-    border-bottom: 2px solid #e8ecef;
-    background: #ffffff;
+    border-bottom: 2px solid var(--color-border);
+    background: var(--color-surface);
 }
 
 .tab-button {
@@ -372,7 +372,7 @@ header h1 {
     padding: 0.75rem 1rem;
     background: none;
     border: none;
-    color: #64748b;
+    color: var(--color-text-muted);
     cursor: pointer;
     font-size: 0.9rem;
     font-weight: 500;
@@ -381,14 +381,14 @@ header h1 {
 }
 
 .tab-button:hover {
-    color: #2c3e50;
-    background: #f8f9fa;
+    color: var(--color-text);
+    background: var(--color-bg);
 }
 
 .tab-button.active {
     color: var(--color-primary);
     border-bottom-color: var(--color-primary);
-    background: #f8f9fa;
+    background: var(--color-bg);
 }
 
 .tab-content {
@@ -401,7 +401,7 @@ header h1 {
 
 .hint {
     font-size: 0.8rem;
-    color: #94a3b8;
+    color: var(--color-text-muted);
     margin-top: 0.25rem;
     font-style: italic;
 }
@@ -422,14 +422,14 @@ header h1 {
     display: block;
     margin-bottom: 0.5rem;
     font-weight: 600;
-    color: #334155;
+    color: var(--color-text);
 }
 
 .context-section textarea {
     width: 100%;
-    background: #ffffff;
-    color: #2c3e50;
-    border: 2px solid #e2e8f0;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     padding: 0.75rem;
     font-family: inherit;
@@ -450,7 +450,7 @@ header h1 {
     gap: 0.5rem;
     margin-bottom: 0.5rem;
     cursor: pointer;
-    color: #475569;
+    color: var(--color-text-muted);
 }
 
 .checkbox-label input[type="checkbox"] {
@@ -471,7 +471,7 @@ header h1 {
     appearance: none;
     height: 6px;
     border-radius: 3px;
-    background: #e2e8f0;
+    background: var(--color-border);
     outline: none;
 }
 
@@ -516,9 +516,9 @@ header h1 {
     border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 600;
-    background: #e2e8f0;
-    color: #64748b;
-    border: 2px solid #cbd5e0;
+    background: var(--color-border);
+    color: var(--color-text-muted);
+    border: 2px solid var(--color-border);
 }
 
 .session-status-badge.on {
@@ -534,9 +534,9 @@ header h1 {
 
 .select-input {
     width: 100%;
-    background: #ffffff;
-    color: #2c3e50;
-    border: 2px solid #e2e8f0;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     padding: 0.6rem;
     font-family: inherit;
@@ -554,8 +554,8 @@ header h1 {
 
 /* Character Items */
 .character-item {
-    background: #f8f9fa;
-    border: 2px solid #e2e8f0;
+    background: var(--color-bg);
+    border: 2px solid var(--color-border);
     border-radius: 10px;
     padding: 1rem;
     margin-bottom: 0.75rem;
@@ -571,7 +571,7 @@ header h1 {
 #saveNarrativeBtn { display: none !important; }
 
 .character-item:hover {
-    border-color: #cbd5e0;
+    border-color: var(--color-border);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
@@ -583,9 +583,9 @@ header h1 {
 }
 
 .character-item input {
-    background: #ffffff;
-    color: #2c3e50;
-    border: 2px solid #e2e8f0;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 2px solid var(--color-border);
     border-radius: 6px;
     padding: 0.4rem 0.6rem;
     font-size: 0.9rem;
@@ -600,9 +600,9 @@ header h1 {
 
 .character-item textarea {
     width: 100%;
-    background: #ffffff;
-    color: #2c3e50;
-    border: 2px solid #e2e8f0;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 2px solid var(--color-border);
     border-radius: 6px;
     padding: 0.6rem;
     font-family: inherit;
@@ -620,9 +620,9 @@ header h1 {
 
 /* 캐릭터 이름 필드 */
 .character-name-field {
-    background: #ffffff;
-    color: #2c3e50;
-    border: 2px solid #e2e8f0;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     padding: 0.6rem;
     font-family: inherit;
@@ -674,19 +674,19 @@ header h1 {
 
 .chat-message.user .message-content {
     background: var(--color-primary);
-    color: #ffffff;
+    color: var(--color-surface);
 }
 
 .chat-message.assistant .message-content {
-    background: #ffffff;
-    color: #2c3e50;
-    border: 2px solid #e2e8f0;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 2px solid var(--color-border);
 }
 
 .chat-message.system .message-content,
 .chat-message.system p {
     background: transparent;
-    color: #94a3b8;
+    color: var(--color-text-muted);
     font-size: 0.9rem;
     text-align: center;
 }
@@ -699,7 +699,7 @@ header h1 {
 
 .chat-message .message-time {
     font-size: 0.75rem;
-    color: #94a3b8;
+    color: var(--color-text-muted);
 }
 
 /* Character-specific colors */
@@ -780,8 +780,8 @@ header h1 {
 /* Chat Input */
 .chat-input-container {
     padding: 1rem 1.5rem;
-    border-top: 2px solid #e8ecef;
-    background: #ffffff;
+    border-top: 2px solid var(--color-border);
+    background: var(--color-surface);
     display: flex;
     gap: 0.75rem;
     align-items: flex-end;
@@ -789,9 +789,9 @@ header h1 {
 
 .chat-input-container textarea {
     flex: 1;
-    background: #ffffff;
-    color: #2c3e50;
-    border: 2px solid #e2e8f0;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 2px solid var(--color-border);
     border-radius: 10px;
     padding: 0.875rem;
     font-family: inherit;
@@ -824,23 +824,23 @@ header h1 {
     font-size: 1.1rem;
     margin-top: 1.5rem;
     margin-bottom: 0.5rem;
-    color: #334155;
+    color: var(--color-text);
     font-weight: 600;
 }
 
 .narrative-markdown p {
     margin-bottom: 1rem;
-    color: #475569;
+    color: var(--color-text-muted);
 }
 
 .narrative-markdown hr {
     border: none;
-    border-top: 2px solid #e8ecef;
+    border-top: 2px solid var(--color-border);
     margin: 1.5rem 0;
 }
 
 .narrative-markdown .placeholder {
-    color: #94a3b8;
+    color: var(--color-text-muted);
     font-style: italic;
     text-align: center;
     padding: 2rem;
@@ -884,14 +884,14 @@ header h1 {
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    background: #f1f5f9;
-    color: #475569;
+    background: var(--color-muted);
+    color: var(--color-text-muted);
     border: 1px solid #e2e8f0;
 }
 
 .btn-sm:hover:not(:disabled) {
-    background: #e2e8f0;
-    color: #334155;
+    background: var(--color-border);
+    color: var(--color-text);
 }
 
 .btn-warning {
@@ -905,7 +905,7 @@ header h1 {
 }
 
 .btn-remove {
-    background: #ef4444;
+    background: var(--color-error);
     color: white;
     border: none;
     border-radius: 6px;
@@ -922,14 +922,14 @@ header h1 {
 
 /* Footer */
 footer {
-    background: #ffffff;
-    border-top: 2px solid #e8ecef;
+    background: var(--color-surface);
+    border-top: 2px solid var(--color-border);
 }
 
 .log-area {
     padding: 0.5rem 1.5rem;
     font-size: 0.85rem;
-    color: #64748b;
+    color: var(--color-text-muted);
     max-height: 80px;
     overflow-y: auto;
 }
@@ -939,12 +939,12 @@ footer {
 }
 
 .log-error {
-    color: #ef4444;
+    color: var(--color-error);
     font-weight: 500;
 }
 
 .log-success {
-    color: #10b981;
+    color: var(--color-success);
     font-weight: 500;
 }
 
@@ -953,16 +953,16 @@ footer {
     display: inline-flex;
     gap: 4px;
     padding: 0.75rem 1rem;
-    background: #f1f5f9;
+    background: var(--color-muted);
     border-radius: 12px;
-    border: 2px solid #e2e8f0;
+    border: 2px solid var(--color-border);
 }
 
 .chat-message.assistant .typing span {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #94a3b8;
+    background: var(--color-text-muted);
     animation: typing 1.4s infinite;
 }
 
@@ -992,17 +992,17 @@ footer {
 }
 
 ::-webkit-scrollbar-track {
-    background: #f1f5f9;
+    background: var(--color-muted);
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #cbd5e0;
+    background: var(--color-border);
     border-radius: 5px;
     transition: background 0.2s;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: var(--color-text-muted);
 }
 
 /* Responsive adjustments */
@@ -1083,7 +1083,7 @@ footer {
         left: auto;
         transform: translateX(100%);
         border-left: none;
-        border-right: 2px solid #e8ecef;
+        border-right: 2px solid var(--color-border);
     }
 
     .right-panel.mobile-visible {
@@ -1153,8 +1153,8 @@ footer {
 
 /* 파일 미리보기 */
 .file-preview {
-    background: #f8f9fa;
-    border: 2px solid #e2e8f0;
+    background: var(--color-bg);
+    border: 2px solid var(--color-border);
     border-radius: 8px;
     padding: 0.75rem;
     margin-top: 0.5rem;
@@ -1162,8 +1162,8 @@ footer {
 
 .file-preview-item {
     padding: 0.3rem 0;
-    border-bottom: 1px solid #e8ecef;
-    color: #475569;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-muted);
 }
 
 .file-preview-item:last-child {
@@ -1190,17 +1190,17 @@ footer {
 }
 
 .login-modal-content {
-    background: #ffffff;
+    background: var(--color-surface);
     padding: 2.5rem;
     border-radius: 16px;
     width: min(90%, 400px);
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    border: 2px solid #e8ecef;
+    border: 2px solid var(--color-border);
     text-align: center;
 }
 
 .login-modal-content h2 {
-    color: #1e293b;
+    color: var(--color-text);
 }
 
 .login-logo {
@@ -1215,9 +1215,9 @@ footer {
     margin-top: 0.75rem;
     padding: 0.875rem;
     border-radius: 10px;
-    background: #f8f9fa;
-    border: 2px solid #e2e8f0;
-    color: #2c3e50;
+    background: var(--color-bg);
+    border: 2px solid var(--color-border);
+    color: var(--color-text);
     font-size: 1rem;
     transition: all 0.2s;
 }
@@ -1226,16 +1226,16 @@ footer {
     outline: none;
     border-color: var(--color-primary);
     box-shadow: 0 0 0 3px rgba(92, 135, 255, 0.1);
-    background: #ffffff;
+    background: var(--color-surface);
 }
 
 .login-description {
-    color: #64748b;
+    color: var(--color-text-muted);
     margin-bottom: 0.75rem;
 }
 
 .login-error {
-    color: #ef4444;
+    color: var(--color-error);
     margin-top: 0.75rem;
     min-height: 1.2rem;
     font-size: 0.9rem;
@@ -1295,7 +1295,7 @@ footer {
 .settings-modal-header h2 {
     font-size: 1.2rem;
     font-weight: 600;
-    color: #2c3e50;
+    color: var(--color-text);
 }
 
 .settings-modal-body {
@@ -1351,7 +1351,7 @@ input.input:focus, .select-input:focus, textarea:focus, select:focus {
 .field-label {
     display: block;
     margin: 0 0 0.25rem 0;
-    color: #475569;
+    color: var(--color-text-muted);
     font-weight: 600;
     font-size: 0.85rem;
 }
@@ -1378,13 +1378,13 @@ input.input:focus, .select-input:focus, textarea:focus, select:focus {
 }
 /* 입력 플레이스홀더 색상 통일(회색) */
 input::placeholder, textarea::placeholder {
-    color: #94a3b8;
+    color: var(--color-text-muted);
 }
 /* 에디터 필드 라벨 */
 .field-label {
     display: block;
     margin: 0 0 0.25rem 0;
-    color: #475569;
+    color: var(--color-text-muted);
     font-weight: 600;
     font-size: 0.85rem;
 }
@@ -1406,11 +1406,11 @@ input::placeholder, textarea::placeholder {
 :root {
     /* Colors - Light Theme */
     --color-bg: #f8fafc;
-    --color-surface: #ffffff;
-    --color-muted: #f1f5f9;
-    --color-border: #e2e8f0;
-    --color-text: #1e293b;
-    --color-text-muted: #64748b;
+    --color-surface: var(--color-surface);
+    --color-muted: var(--color-muted);
+    --color-border: var(--color-border);
+    --color-text: var(--color-text);
+    --color-text-muted: var(--color-text-muted);
 
     /* Primary - Indigo */
     --color-primary: #6366f1;
@@ -1421,9 +1421,9 @@ input::placeholder, textarea::placeholder {
     --color-accent: #8b5cf6;
 
     /* Semantic */
-    --color-success: #10b981;
+    --color-success: var(--color-success);
     --color-warning: #f59e0b;
-    --color-error: #ef4444;
+    --color-error: var(--color-error);
 
     /* Layout */
     --radius-sm: 6px;
@@ -1442,11 +1442,11 @@ input::placeholder, textarea::placeholder {
 /* Dark Theme */
 [data-theme="dark"] {
     --color-bg: #0f172a;
-    --color-surface: #1e293b;
-    --color-muted: #334155;
-    --color-border: #475569;
-    --color-text: #f1f5f9;
-    --color-text-muted: #94a3b8;
+    --color-surface: var(--color-text);
+    --color-muted: var(--color-text);
+    --color-border: var(--color-text-muted);
+    --color-text: var(--color-muted);
+    --color-text-muted: var(--color-text-muted);
 
     --color-primary: #818cf8;
     --color-primary-hover: #a5b4fc;
