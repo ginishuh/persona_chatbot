@@ -1321,6 +1321,7 @@ input.input, .select-input, textarea, input[type="text"], input[type="password"]
     padding: 10px 12px;
     outline: none;
     transition: border-color .15s ease, box-shadow .15s ease;
+    color: var(--color-text);
 }
 input.input:focus, .select-input:focus, textarea:focus, select:focus {
     border-color: var(--color-primary);
@@ -1455,3 +1456,7 @@ input::placeholder, textarea::placeholder {
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
 }
+/* Dark mode overrides for hardcoded colors */
+[data-theme="dark"] .btn:hover { background: #475569; }
+[data-theme="dark"] .btn-warning { background: #422006; border-color: #92400e; color: #fbbf24; }
+[data-theme="dark"] .btn-remove { background: #450a0a; border-color: #7f1d1d; color: #f87171; }
