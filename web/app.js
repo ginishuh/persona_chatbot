@@ -1853,6 +1853,20 @@ document.querySelector('#participantsModal .settings-modal-overlay')?.addEventLi
     modal.classList.add('hidden');
     disableFocusTrap(modal);
 });
+// 참여자 관리 모달 - 새 참여자 버튼
+document.getElementById('pmAddNewBtn')?.addEventListener('click', () => {
+    openParticipantEditor(-1);
+});
+// 참여자 관리 모달 - 템플릿에서 추가 버튼
+document.getElementById('pmAddFromTemplateBtn')?.addEventListener('click', () => {
+    const sel = document.getElementById('pmTemplateSelect');
+    if (!sel || !sel.value) {
+        alert('템플릿을 선택하세요');
+        return;
+    }
+    setPendingAddFromTemplate(true);
+    sendMessage({ action: 'load_workspace_file', file_type: 'char_template', filename: sel.value });
+});
 if (moreBackupBtn) {
     moreBackupBtn.addEventListener('click', () => {
         closeMoreMenu();
