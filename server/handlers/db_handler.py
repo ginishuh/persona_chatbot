@@ -48,12 +48,22 @@ class DBHandler:
         # 최신 버전: v4 (user_id 기반 재설계)
         TARGET_VERSION = 4
 
+        # user_version == 0이지만 테이블이 존재하면 레거시 DB로 처리
         if current_version == 0:
-            # 새 DB: v4 스키마로 바로 생성
+            cur = await self._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='rooms'"
+            )
+            if await cur.fetchone():
+                # 레거시 DB: v4로 마이그레이션 필요
+                logger.info("Legacy DB detected (user_version=0 but tables exist)")
+                current_version = 1  # 강제로 구버전으로 설정
+
+        if current_version == 0:
+            # 진짜 새 DB: v4 스키마로 바로 생성
             await self._conn.executescript(
                 """
                 -- users 테이블
-                CREATE TABLE users (
+                CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT NOT NULL UNIQUE,
                     email TEXT NOT NULL UNIQUE,
@@ -67,7 +77,7 @@ class DBHandler:
                 );
 
                 -- rooms 테이블 (user_id 기반)
-                CREATE TABLE rooms (
+                CREATE TABLE IF NOT EXISTS rooms (
                     user_id INTEGER NOT NULL,
                     room_id TEXT NOT NULL,
                     title TEXT NOT NULL,
@@ -77,11 +87,11 @@ class DBHandler:
                     PRIMARY KEY (user_id, room_id),
                     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
                 );
-                CREATE INDEX idx_rooms_user ON rooms(user_id);
-                CREATE INDEX idx_rooms_updated ON rooms(updated_at);
+                CREATE INDEX IF NOT EXISTS idx_rooms_user ON rooms(user_id);
+                CREATE INDEX IF NOT EXISTS idx_rooms_updated ON rooms(updated_at);
 
                 -- messages 테이블 (user_id 기반)
-                CREATE TABLE messages (
+                CREATE TABLE IF NOT EXISTS messages (
                     message_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
                     room_id TEXT NOT NULL,
@@ -90,11 +100,11 @@ class DBHandler:
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id, room_id) REFERENCES rooms(user_id, room_id) ON DELETE CASCADE
                 );
-                CREATE INDEX idx_messages_room ON messages(user_id, room_id);
-                CREATE INDEX idx_messages_ts ON messages(timestamp);
+                CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(user_id, room_id);
+                CREATE INDEX IF NOT EXISTS idx_messages_ts ON messages(timestamp);
 
                 -- token_usage 테이블 (user_id 기반)
-                CREATE TABLE token_usage (
+                CREATE TABLE IF NOT EXISTS token_usage (
                     usage_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
                     room_id TEXT,
@@ -103,8 +113,8 @@ class DBHandler:
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
                 );
-                CREATE INDEX idx_tok_user ON token_usage(user_id);
-                CREATE INDEX idx_tok_room ON token_usage(room_id);
+                CREATE INDEX IF NOT EXISTS idx_tok_user ON token_usage(user_id);
+                CREATE INDEX IF NOT EXISTS idx_tok_room ON token_usage(room_id);
                 """
             )
             await self._conn.commit()
