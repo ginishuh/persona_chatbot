@@ -20,39 +20,39 @@
         <div class="settings-modal-overlay"></div>
         <div class="settings-modal-content">
             <div class="settings-modal-header">
-                <h2 id="settingsModalTitle">⚙️ 설정</h2>
+                <h2 id="settingsModalTitle"><span data-icon="settings"></span> 설정</h2>
                 <button id="closeSettingsBtn" class="btn-icon" title="닫기">✕</button>
             </div>
                 <div class="settings-modal-body">
                 <!-- 세계관/배경 -->
                 <div class="context-section">
-                    <label>🌍 세계관/배경</label>
+                    <label><span data-icon="globe"></span> 세계관/배경</label>
                     <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
                         <select id="worldSelect" class="select-input" style="flex: 1;">
                             <option value="">새 세계관...</option>
                         </select>
-                        <button id="saveWorldBtn" class="btn btn-sm" title="세계관 저장">💾</button>
-                        <button id="deleteWorldBtn" class="btn btn-sm btn-remove" title="세계관 삭제">🗑️</button>
+                        <button id="saveWorldBtn" class="btn btn-sm" title="세계관 저장"><span data-icon="save"></span></button>
+                        <button id="deleteWorldBtn" class="btn btn-sm btn-remove" title="세계관 삭제"><span data-icon="trash"></span></button>
                     </div>
                     <textarea id="worldInput" placeholder="세계관, 시대적 배경 등..." rows="3"></textarea>
                 </div>
 
                 <!-- 현재 상황 -->
                 <div class="context-section">
-                    <label>📍 현재 상황</label>
+                    <label><span data-icon="mapPin"></span> 현재 상황</label>
                     <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
                         <select id="situationSelect" class="select-input" style="flex: 1;">
                             <option value="">새 상황...</option>
                         </select>
-                        <button id="saveSituationBtn" class="btn btn-sm" title="상황 저장">💾</button>
-                        <button id="deleteSituationBtn" class="btn btn-sm btn-remove" title="상황 삭제">🗑️</button>
+                        <button id="saveSituationBtn" class="btn btn-sm" title="상황 저장"><span data-icon="save"></span></button>
+                        <button id="deleteSituationBtn" class="btn btn-sm btn-remove" title="상황 삭제"><span data-icon="trash"></span></button>
                     </div>
                     <textarea id="situationInput" placeholder="현재 벌어지고 있는 상황..." rows="3"></textarea>
                 </div>
 
                 <!-- 진행자 설정 -->
                 <div class="context-section">
-                    <label>🎭 진행자 모드</label>
+                    <label><span data-icon="theater"></span> 진행자 모드</label>
                     <div style="margin-bottom: 0.5rem;">
                         <label class="checkbox-label">
                             <input type="checkbox" id="narratorEnabled" />
@@ -83,7 +83,7 @@
 
                 <!-- AI 제공자 선택 -->
                 <div class="context-section">
-                    <label>🤖 AI 제공자</label>
+                    <label><span data-icon="bot"></span> AI 제공자</label>
                     <select id="aiProvider" class="select-input">
                         <option value="claude">Claude (Anthropic)</option>
                         <option value="droid">Droid (Factory.ai)</option>
@@ -98,7 +98,7 @@
 
                 <!-- 대화 모드 -->
                 <div class="context-section">
-                    <label>💬 대화 모드</label>
+                    <label><span data-icon="messageSquare"></span> 대화 모드</label>
                     <select id="conversationMode" class="select-input">
                         <option value="trpg_multi">TRPG 멀티(기본)</option>
                         <option value="chat_plain">순수 채팅</option>
@@ -110,7 +110,7 @@
 
                 <!-- 맥락 길이 -->
                 <div class="context-section">
-                    <label>🧠 맥락 길이</label>
+                    <label><span data-icon="brain"></span> 맥락 길이</label>
                     <div class="slider-row">
                         <input type="range" id="historyLengthSlider" min="5" max="60" step="5" value="30">
                         <span id="historyLengthValue" class="slider-value">30턴</span>
@@ -124,7 +124,7 @@
 
                 <!-- 세션 유지 -->
                 <div class="context-section">
-                    <label>♻️ 세션 유지</label>
+                    <label><span data-icon="refresh"></span> 세션 유지</label>
                     <label class="checkbox-label" title="OFF로 전환 시 즉시 모든 세션이 초기화됩니다.">
                         <input type="checkbox" id="sessionRetentionToggle">
                         <span>Claude/Droid 대화 기억 (기본 꺼짐)</span>
@@ -134,7 +134,7 @@
 
                 <!-- 성인 콘텐츠 수위 -->
                 <div class="context-section">
-                    <label>🔞 성인 콘텐츠 수위</label>
+                    <label><span data-icon="shield"></span> 성인 콘텐츠 수위</label>
                     <select id="adultLevel" class="select-input">
                         <option value="explicit">명시적 표현 (기본)</option>
                         <option value="enhanced">묘사/효과음/신음 강화</option>
@@ -144,7 +144,7 @@
 
                 <!-- 출력량 -->
                 <div class="context-section">
-                    <label>📝 출력량</label>
+                    <label><span data-icon="fileText"></span> 출력량</label>
                     <select id="outputLevel" class="select-input">
                         <option value="less">적게</option>
                         <option value="normal" selected>보통</option>
@@ -155,7 +155,7 @@
 
                 <!-- 전개 속도(사건 밀도) -->
                 <div class="context-section">
-                    <label>⚡ 전개 속도</label>
+                    <label><span data-icon="zap"></span> 전개 속도</label>
                     <select id="storyPace" class="select-input">
                         <option value="slow">느리게 (씬에 머무르기)</option>
                         <option value="normal" selected>보통</option>
@@ -166,7 +166,7 @@
 
                 <!-- 선택지 강제 -->
                 <div class="context-section">
-                    <label>🎯 선택지</label>
+                    <label><span data-icon="target"></span> 선택지</label>
                     <div style="display:flex; gap:0.5rem; align-items:center;">
                         <label class="checkbox-label" style="flex: 0 0 auto;"><input type="checkbox" id="forceChoices"> <span>선택지 강제</span></label>
                         <select id="choiceCount" class="select-input" style="width: 120px;">
@@ -181,7 +181,7 @@
 
                 <!-- 대화/서술/효과음 분리 -->
                 <div class="context-section">
-                    <label>📝 표현 분리</label>
+                    <label><span data-icon="fileText"></span> 표현 분리</label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="narrativeSeparation" />
                         <span>대화/서술/효과음 분리</span>
@@ -189,7 +189,7 @@
                     <p class="hint">활성화 시: [캐릭터] 대사, *효과음*, 서술(태그없음)</p>
                 </div>
                 <div class="context-section">
-                    <label>🎙️ 발화 방식</label>
+                    <label><span data-icon="mic"></span> 발화 방식</label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="singleSpeakerMode" />
                         <span>한 번에 한 명씩 말하기(라운드 로빈)</span>
@@ -197,7 +197,7 @@
                     <p class="hint">다인 채팅에서 턴마다 한 캐릭터만 발화하도록 강제합니다.</p>
                 </div>
                 <div class="context-section">
-                    <label>⏱️ 자동 턴 진행</label>
+                    <label><span data-icon="clock"></span> 자동 턴 진행</label>
                     <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
                         <label class="checkbox-label"><input type="checkbox" id="autoTurnToggle"> <span>자동턴 ON</span></label>
                         <select id="autoTurnDelay" class="select-input" style="width:120px;">
@@ -218,35 +218,35 @@
 
                 <!-- 프리셋 관리 -->
                 <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e8ecef;">
-                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">📦 전체 프리셋</label>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;"><span data-icon="package"></span> 전체 프리셋</label>
                     <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
                         <select id="presetSelect" class="select-input" style="flex: 1;">
                             <option value="">프리셋 선택...</option>
                         </select>
-                        <button id="loadPresetBtn" class="btn btn-sm" title="프리셋 불러오기">📤</button>
-                        <button id="deletePresetBtn" class="btn btn-sm btn-remove" title="프리셋 삭제">🗑️</button>
+                        <button id="loadPresetBtn" class="btn btn-sm" title="프리셋 불러오기"><span data-icon="upload"></span></button>
+                        <button id="deletePresetBtn" class="btn btn-sm btn-remove" title="프리셋 삭제"><span data-icon="trash"></span></button>
                     </div>
-                    <button id="savePresetBtn" class="btn btn-primary" style="width: 100%;">💾 프리셋으로 저장</button>
+                    <button id="savePresetBtn" class="btn btn-primary" style="width: 100%;"><span data-icon="save"></span> 프리셋으로 저장</button>
                     <p class="hint" style="margin-top: 0.5rem;">프리셋: 현재 모든 설정을 하나의 파일로 저장/복원</p>
                 </div>
             </div>
             <div class="settings-modal-footer">
-                <button id="saveContextBtn" class="btn btn-primary" style="width: 100%;">💾 설정 적용</button>
+                <button id="saveContextBtn" class="btn btn-primary" style="width: 100%;"><span data-icon="save"></span> 설정 적용</button>
             </div>
         </div>
     </div>
 
     <!-- 모바일 더보기 메뉴 -->
     <div id="moreMenuDropdown" class="more-menu-dropdown hidden">
-        <button class="more-menu-item" id="moreLoginBtn" style="display: none;">🔐 로그인</button>
-        <button class="more-menu-item" id="moreLogoutBtn" style="display: none;">🚪 로그아웃</button>
-        <button class="more-menu-item" id="moreAdminBtn" style="display: none;">👤 관리</button>
-        <button class="more-menu-item" id="moreBackupBtn">💾 백업/내보내기</button>
+        <button class="more-menu-item" id="moreLoginBtn" style="display: none;"><span data-icon="key"></span> 로그인</button>
+        <button class="more-menu-item" id="moreLogoutBtn" style="display: none;"><span data-icon="logOut"></span> 로그아웃</button>
+        <button class="more-menu-item" id="moreAdminBtn" style="display: none;"><span data-icon="user"></span> 관리</button>
+        <button class="more-menu-item" id="moreBackupBtn"><span data-icon="save"></span> 백업/내보내기</button>
         <div class="more-menu-divider"></div>
-        <button class="more-menu-item" id="moreParticipantsBtn">👥 참여자</button>
-        <button class="more-menu-item" id="moreSettingsBtn">⚙️ 설정</button>
-        <button class="more-menu-item" id="moreClearHistoryBtn">🗑️ 대화 초기화</button>
-        <button class="more-menu-item" id="moreResetSessionsBtn">♻️ 세션 리셋</button>
+        <button class="more-menu-item" id="moreParticipantsBtn"><span data-icon="users"></span> 참여자</button>
+        <button class="more-menu-item" id="moreSettingsBtn"><span data-icon="settings"></span> 설정</button>
+        <button class="more-menu-item" id="moreClearHistoryBtn"><span data-icon="trash"></span> 대화 초기화</button>
+        <button class="more-menu-item" id="moreResetSessionsBtn"><span data-icon="refresh"></span> 세션 리셋</button>
         <div class="more-menu-divider"></div>
         <div class="more-menu-item-static" id="moreTokenInfo">토큰: - / 200K</div>
         <div class="more-menu-item-static" id="moreConnectionStatus">
@@ -271,20 +271,21 @@
                 <h1>Persona Chat</h1>
             </div>
             <button id="narrativeMenuBtn" class="narrative-menu-btn" aria-label="서사기록" title="서사기록">
-                📜
+                <span data-icon="scroll"></span>
             </button>
             <button id="moreMenuBtn" class="more-menu-btn" aria-label="더보기" title="더보기">
                 ⋮
             </button>
             <div class="header-actions">
-                <button id="loginBtn" class="btn btn-sm" title="로그인" style="background: #007bff; color: white;">🔐 로그인</button>
-                <button id="logoutBtn" class="btn btn-sm" title="로그아웃" style="display: none; background: #6c757d; color: white;">🚪 로그아웃</button>
-                <button id="adminBtn" class="btn btn-sm" title="관리자 페이지" style="display: none; background: #dc3545; color: white;">👤 관리</button>
-                <button id="backupBtn" class="btn btn-sm" title="백업/내보내기">💾 백업</button>
-                <button id="participantsBtn" class="btn btn-sm" title="참여자 관리">👥 참여자</button>
-                <button id="settingsBtn" class="btn btn-sm" title="설정">⚙️ 설정</button>
-                <button id="clearHistoryBtn" class="btn btn-sm btn-warning">🗑️ 대화 초기화</button>
-                <button id="resetSessionsBtn" class="btn btn-sm" title="AI 세션 리셋">♻️ 세션</button>
+                <button id="loginBtn" class="btn btn-sm" title="로그인" style="background: #007bff; color: white;"><span data-icon="key"></span> 로그인</button>
+                <button id="logoutBtn" class="btn btn-sm" title="로그아웃" style="display: none; background: #6c757d; color: white;"><span data-icon="logOut"></span> 로그아웃</button>
+                <button id="adminBtn" class="btn btn-sm" title="관리자 페이지" style="display: none; background: #dc3545; color: white;"><span data-icon="user"></span> 관리</button>
+                <button id="backupBtn" class="btn btn-sm" title="백업/내보내기"><span data-icon="save"></span> 백업</button>
+                <button id="participantsBtn" class="btn btn-sm" title="참여자 관리"><span data-icon="users"></span> 참여자</button>
+                <button id="themeToggleBtn" class="btn btn-sm" title="테마 전환">🌙</button>
+                <button id="settingsBtn" class="btn btn-sm" title="설정"><span data-icon="settings"></span> 설정</button>
+                <button id="clearHistoryBtn" class="btn btn-sm btn-warning"><span data-icon="trash"></span> 대화 초기화</button>
+                <button id="resetSessionsBtn" class="btn btn-sm" title="AI 세션 리셋"><span data-icon="refresh"></span> 세션</button>
                 <span id="sessionStatusBadge" class="session-status-badge" title="세션 유지 상태">OFF</span>
                 <div class="token-info hidden" id="tokenUsageDisplay" title="토큰 사용량">
                     <span>입력</span><span id="tokenPrompt">-</span>
@@ -306,19 +307,19 @@
             <!-- Left Panel: Characters -->
             <aside class="left-panel" aria-label="컨텍스트 설정 패널">
                 <div class="panel-header">
-                    <h2>👥 캐릭터</h2>
+                    <h2><span data-icon="users"></span> 캐릭터</h2>
                 </div>
 
                 <div id="contextContent" class="panel-content">
                     <!-- 캐릭터 섹션 -->
                     <div class="context-section">
-                        <label>🙋 나의 캐릭터</label>
+                        <label><span data-icon="hand"></span> 나의 캐릭터</label>
                         <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
                             <select id="myCharacterSelect" class="select-input" style="flex: 1;">
                                 <option value="">선택...</option>
                             </select>
-                            <button id="saveMyCharacterBtn" class="btn btn-sm" title="저장">💾</button>
-                            <button id="deleteMyCharacterBtn" class="btn btn-sm btn-remove" title="삭제">🗑️</button>
+                            <button id="saveMyCharacterBtn" class="btn btn-sm" title="저장"><span data-icon="save"></span></button>
+                            <button id="deleteMyCharacterBtn" class="btn btn-sm btn-remove" title="삭제"><span data-icon="trash"></span></button>
                         </div>
                         <div style="margin-bottom: 0.5rem;">
                             <input type="text" id="userCharacterName" class="character-name-field" placeholder="이름" style="width:100%;" />
@@ -326,14 +327,14 @@
                         <textarea id="userCharacterInput" placeholder="성별, 나이, 성격, 배경, 외모 등..." rows="3"></textarea>
                     </div>
                     <div class="context-section">
-                        <label>👥 현재 참여자</label>
+                        <label><span data-icon="users"></span> 현재 참여자</label>
                         <div id="charactersList"></div>
                         <button id="addCharacterBtn" class="btn btn-sm">+ 참여자 추가</button>
                     </div>
 
                     <!-- 캐릭터 설정 적용 -->
                     <div style="padding: 1rem; border-top: 2px solid #e8ecef;">
-                        <button id="applyCharactersBtn" class="btn btn-primary" style="width: 100%;">💾 캐릭터 적용</button>
+                        <button id="applyCharactersBtn" class="btn btn-primary" style="width: 100%;"><span data-icon="save"></span> 캐릭터 적용</button>
                     </div>
                 </div>
             </aside>
@@ -357,7 +358,7 @@
             <!-- Right Panel: Narrative -->
             <aside class="right-panel" aria-label="히스토리 패널">
                 <div class="panel-header narrative-header">
-                    <h2>💬 채팅방 (서사 기록)</h2>
+                    <h2><span data-icon="messageSquare"></span> 채팅방 (서사 기록)</h2>
                 </div>
                 <div class="narrative-controls">
                     <div style="padding: 0.75rem 1rem; border-bottom: 2px solid #e8ecef;">
@@ -366,22 +367,22 @@
                             <option value="">채팅방 선택...</option>
                         </select>
                         <div style="display:flex; gap:0.5rem; margin: 0.25rem 0 0.5rem 0; align-items:center;">
-                            <button id="roomSearchToggle" class="btn btn-sm" title="채팅방 검색 열기" style="flex:0 0 auto;">🔍 검색</button>
-                            <button id="roomAddBtn" class="btn btn-sm btn-primary" title="새 채팅방 추가" style="flex:1;">➕ 새 채팅방</button>
+                            <button id="roomSearchToggle" class="btn btn-sm" title="채팅방 검색 열기" style="flex:0 0 auto;"><span data-icon="search"></span> 검색</button>
+                            <button id="roomAddBtn" class="btn btn-sm btn-primary" title="새 채팅방 추가" style="flex:1;"><span data-icon="plus"></span> 새 채팅방</button>
                         </div>
                         <div id="roomSearchContainer" class="hidden" style="display:flex; gap:0.5rem; margin: 0 0 0.5rem 0;">
                             <input id="roomSearch" type="text" class="input" placeholder="채팅방 검색" style="flex:1;" />
                             <button id="roomSearchBtn" class="btn btn-sm" title="채팅방 검색">검색</button>
                         </div>
                         <div id="roomList" style="max-height: 180px; overflow:auto; border:1px solid #e8ecef; border-radius:6px; padding:0.5rem; background:#fff;"></div>
-                        <button id="roomSaveBtn" class="btn btn-sm" title="현재 채팅방 설정 저장" style="width: 100%; margin-top: 0.5rem;">💾 설정 저장</button>
+                        <button id="roomSaveBtn" class="btn btn-sm" title="현재 채팅방 설정 저장" style="width: 100%; margin-top: 0.5rem;"><span data-icon="save"></span> 설정 저장</button>
                         <!-- Stories 기능 비활성화: 관련 버튼들 숨김 -->
                         <div class="stories-only" style="display: none; gap: 0.5rem; flex-wrap: wrap;">
-                            <button id="loadStoryBtn" class="btn btn-sm" title="서사 불러오기">📤</button>
+                            <button id="loadStoryBtn" class="btn btn-sm" title="서사 불러오기"><span data-icon="upload"></span></button>
                             <button id="resumeStoryBtn" class="btn btn-sm" title="이 서사에서 이어하기">▶</button>
                             <button id="injectStoryBtn" class="btn btn-sm" title="이 서사를 컨텍스트에 주입">➡</button>
-                            <button id="deleteStoryBtn" class="btn btn-sm btn-remove" title="서사 삭제">🗑️</button>
-                            <button id="saveNarrativeBtn" class="btn btn-sm" title="서사 저장">💾</button>
+                            <button id="deleteStoryBtn" class="btn btn-sm btn-remove" title="서사 삭제"><span data-icon="trash"></span></button>
+                            <button id="saveNarrativeBtn" class="btn btn-sm" title="서사 저장"><span data-icon="save"></span></button>
                         </div>
                     </div>
                 </div>
@@ -403,7 +404,7 @@
     <div id="loginModal" class="login-modal hidden" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
         <div class="login-modal-content">
             <img src="/src/logo3.png" alt="Chorus AI 로고" class="login-logo" />
-            <h2 id="loginModalTitle">🔒 Persona Chat</h2>
+            <h2 id="loginModalTitle"><span data-icon="lock"></span> Persona Chat</h2>
 
             <!-- 탭 선택 -->
             <div class="auth-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid #e8ecef;">
@@ -440,7 +441,7 @@
         <div class="settings-modal-overlay"></div>
         <div class="settings-modal-content">
             <div class="settings-modal-header">
-                <h2 id="characterEditorTitle">🛠️ 캐릭터 편집</h2>
+                <h2 id="characterEditorTitle"><span data-icon="wrench"></span> 캐릭터 편집</h2>
                 <button id="ceCloseBtn" class="btn-icon" title="닫기">✕</button>
             </div>
             <div class="settings-modal-body">
@@ -481,9 +482,9 @@
             </div>
             <div class="settings-modal-footer" style="display:flex; gap:0.5rem; align-items:center;">
                 <select id="ceTemplateSelect" class="select-input" style="flex:1; min-width:160px;">
-                    <option value="">📂 템플릿 불러오기...</option>
+                    <option value="">템플릿 불러오기...</option>
                 </select>
-                <button id="ceSaveTemplateBtn" class="btn" title="현재 내용으로 템플릿 저장">💾 템플릿</button>
+                <button id="ceSaveTemplateBtn" class="btn" title="현재 내용으로 템플릿 저장"><span data-icon="save"></span> 템플릿</button>
                 <div style="flex:1"></div>
                 <button id="ceCancelBtn" class="btn">취소</button>
                 <button id="ceSaveBtn" class="btn btn-primary">저장</button>
@@ -496,7 +497,7 @@
         <div class="settings-modal-overlay"></div>
         <div class="settings-modal-content">
             <div class="settings-modal-header">
-                <h2 id="participantsTitle">👥 참여자 관리</h2>
+                <h2 id="participantsTitle"><span data-icon="users"></span> 참여자 관리</h2>
                 <button id="pmCloseBtn" class="btn-icon" title="닫기">✕</button>
             </div>
             <div class="settings-modal-body">
@@ -566,7 +567,7 @@
                 </div>
 
                 <div class="context-section">
-                    <button id="bkDownloadBtn" class="btn btn-primary" style="width:100%;">⬇️ 다운로드</button>
+                    <button id="bkDownloadBtn" class="btn btn-primary" style="width:100%;"><span data-icon="download"></span> 다운로드</button>
                     <p class="hint" style="margin-top:0.5rem;">로그인 환경에서는 토큰이 자동으로 쿼리에 포함됩니다.</p>
                 </div>
             </div>
@@ -578,7 +579,7 @@
         <div class="settings-modal-overlay"></div>
         <div class="settings-modal-content">
             <div class="settings-modal-header">
-                <h2 id="adminTitle">👤 관리자 페이지</h2>
+                <h2 id="adminTitle"><span data-icon="user"></span> 관리자 페이지</h2>
                 <button id="adminCloseBtn" class="btn-icon" title="닫기">✕</button>
             </div>
             <div class="settings-modal-body">
@@ -594,7 +595,7 @@
         <div class="settings-modal-overlay"></div>
         <div class="settings-modal-content" style="max-width: 400px;">
             <div class="settings-modal-header">
-                <h2 id="roomNameTitle">📝 새 채팅방 만들기</h2>
+                <h2 id="roomNameTitle"><span data-icon="pen"></span> 새 채팅방 만들기</h2>
                 <button id="roomNameCloseBtn" class="btn-icon" title="닫기">✕</button>
             </div>
             <div class="settings-modal-body">
@@ -619,7 +620,7 @@
         <div class="settings-modal-overlay"></div>
         <div class="settings-modal-content">
             <div class="settings-modal-header">
-                <h2 id="roomsTitle">💬 채팅방 목록</h2>
+                <h2 id="roomsTitle"><span data-icon="messageSquare"></span> 채팅방 목록</h2>
                 <button id="rmCloseBtn" class="btn-icon" title="닫기">✕</button>
             </div>
             <div class="settings-modal-body">
@@ -634,6 +635,10 @@
     <div id="ariaLive" class="sr-only" aria-live="polite" role="status"></div>
 
     <script type="module" src="/modules/main.js"></script>
+    <script type="module">
+        import { initializeIcons } from '/modules/icons.js';
+        document.addEventListener('DOMContentLoaded', initializeIcons);
+    </script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -642,6 +647,22 @@
                 .catch(function(err) { console.warn('ServiceWorker 등록 실패:', err); });
             });
         }
+
+        // 테마 토글
+        (function() {
+            const btn = document.getElementById('themeToggleBtn');
+            const saved = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', saved);
+            btn.textContent = saved === 'dark' ? '☀️' : '🌙';
+
+            btn.addEventListener('click', function() {
+                const current = document.documentElement.getAttribute('data-theme');
+                const next = current === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', next);
+                localStorage.setItem('theme', next);
+                btn.textContent = next === 'dark' ? '☀️' : '🌙';
+            });
+        })();
     </script>
 </body>
 </html>
