@@ -1406,11 +1406,11 @@ input::placeholder, textarea::placeholder {
 :root {
     /* Colors - Light Theme */
     --color-bg: #f8fafc;
-    --color-surface: var(--color-surface);
-    --color-muted: var(--color-muted);
-    --color-border: var(--color-border);
-    --color-text: var(--color-text);
-    --color-text-muted: var(--color-text-muted);
+    --color-surface: #ffffff;
+    --color-muted: #f1f5f9;
+    --color-border: #e2e8f0;
+    --color-text: #1e293b;
+    --color-text-muted: #64748b;
 
     /* Primary - Indigo */
     --color-primary: #6366f1;
@@ -1421,9 +1421,9 @@ input::placeholder, textarea::placeholder {
     --color-accent: #8b5cf6;
 
     /* Semantic */
-    --color-success: var(--color-success);
+    --color-success: #10b981;
     --color-warning: #f59e0b;
-    --color-error: var(--color-error);
+    --color-error: #ef4444;
 
     /* Layout */
     --radius-sm: 6px;
@@ -1442,11 +1442,11 @@ input::placeholder, textarea::placeholder {
 /* Dark Theme */
 [data-theme="dark"] {
     --color-bg: #0f172a;
-    --color-surface: var(--color-text);
-    --color-muted: var(--color-text);
-    --color-border: var(--color-text-muted);
-    --color-text: var(--color-muted);
-    --color-text-muted: var(--color-text-muted);
+    --color-surface: #1e293b;
+    --color-muted: #334155;
+    --color-border: #475569;
+    --color-text: #f1f5f9;
+    --color-text-muted: #94a3b8;
 
     --color-primary: #818cf8;
     --color-primary-hover: #a5b4fc;

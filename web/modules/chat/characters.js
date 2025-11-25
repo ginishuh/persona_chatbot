@@ -145,36 +145,19 @@ export function loadCharTemplateList(selectElement) {
 }
 
 /**
- * 캐릭터 설명 조합
+ * 캐릭터 설명 조합 (단순화: 이름 + 내용만)
  */
-export function composeDescription(base, traits, goals, boundaries, examples, tags) {
-    const lines = [];
-    if (base) lines.push(base);
-    if (traits) lines.push(`성격: ${traits}`);
-    if (goals) lines.push(`목표: ${goals}`);
-    if (boundaries) lines.push(`금지선: ${boundaries}`);
-    if (Array.isArray(examples) && examples.length) {
-        lines.push('예시 대사:');
-        examples.forEach(e => lines.push(`- ${e}`));
-    }
-    if (tags) lines.push(`태그: ${tags}`);
-    return lines.join('\n');
+export function composeDescription(base) {
+    return base || '';
 }
 
 /**
- * 캐릭터 아이템에서 데이터 수집
+ * 캐릭터 아이템에서 데이터 수집 (단순화: 이름 + 내용만)
  */
 export function collectCharacterFromItem(item) {
     const name = item.querySelector('.character-name-input').value.trim();
-    const base = item.querySelector('.character-description-input').value.trim();
-    if (!name || !base) return null;
-    const traits = (item.dataset.traits || '').trim();
-    const goals = (item.dataset.goals || '').trim();
-    const boundaries = (item.dataset.boundaries || '').trim();
-    const tags = (item.dataset.tags || '').trim();
-    let examples = [];
-    try { examples = JSON.parse(item.dataset.examples || '[]'); } catch (_) { examples = []; }
-    const description = composeDescription(base, traits, goals, boundaries, examples, tags);
+    const description = item.querySelector('.character-description-input').value.trim();
+    if (!name || !description) return null;
     return { name, description };
 }
 
@@ -184,22 +167,12 @@ export function openCharacterEditor(characterDiv) {
     currentEditingCharacterItem = characterDiv;
     const ceName = document.getElementById('ceName');
     const ceSummary = document.getElementById('ceSummary');
-    const ceTraits = document.getElementById('ceTraits');
-    const ceGoals = document.getElementById('ceGoals');
-    const ceBoundaries = document.getElementById('ceBoundaries');
-    const ceExamples = document.getElementById('ceExamples');
-    const ceTags = document.getElementById('ceTags');
     const nameInput = characterDiv.querySelector('.character-name-input');
     const descInput = characterDiv.querySelector('.character-description-input');
 
-    // 값 채우기
+    // 값 채우기 (이름 + 내용만)
     ceName.value = nameInput.value || '';
     ceSummary.value = descInput.value || '';
-    ceTraits.value = characterDiv.dataset.traits || '';
-    ceGoals.value = characterDiv.dataset.goals || '';
-    ceBoundaries.value = characterDiv.dataset.boundaries || '';
-    ceExamples.value = characterDiv.dataset.examples ? JSON.parse(characterDiv.dataset.examples).join('\n') : '';
-    ceTags.value = characterDiv.dataset.tags || '';
 
     // 템플릿 목록 갱신
     loadCharTemplateList(document.getElementById('ceTemplateSelect'));
@@ -218,25 +191,12 @@ export function applyCharacterEditorToItem() {
     if (!currentEditingCharacterItem) return;
     const ceName = document.getElementById('ceName');
     const ceSummary = document.getElementById('ceSummary');
-    const ceTraits = document.getElementById('ceTraits');
-    const ceGoals = document.getElementById('ceGoals');
-    const ceBoundaries = document.getElementById('ceBoundaries');
-    const ceExamples = document.getElementById('ceExamples');
-    const ceTags = document.getElementById('ceTags');
 
     const nameInput = currentEditingCharacterItem.querySelector('.character-name-input');
     const descInput = currentEditingCharacterItem.querySelector('.character-description-input');
 
     nameInput.value = ceName.value.trim();
     descInput.value = ceSummary.value.trim();
-
-    // 확장 필드 저장 (dataset)
-    currentEditingCharacterItem.dataset.traits = ceTraits.value.trim();
-    currentEditingCharacterItem.dataset.goals = ceGoals.value.trim();
-    currentEditingCharacterItem.dataset.boundaries = ceBoundaries.value.trim();
-    const examplesArr = ceExamples.value.split('\n').map(s => s.trim()).filter(Boolean);
-    currentEditingCharacterItem.dataset.examples = JSON.stringify(examplesArr);
-    currentEditingCharacterItem.dataset.tags = ceTags.value.trim();
 
     // 요약 갱신
     const summaryBar = currentEditingCharacterItem.querySelector('.character-summary');
@@ -251,16 +211,11 @@ export function applyCharacterEditorToItem() {
 
 export function saveCharacterTemplateFromModal() {
     const name = document.getElementById('ceName').value.trim();
-    const summary = document.getElementById('ceSummary').value.trim();
-    const traits = document.getElementById('ceTraits').value.trim();
-    const goals = document.getElementById('ceGoals').value.trim();
-    const boundaries = document.getElementById('ceBoundaries').value.trim();
-    const examples = document.getElementById('ceExamples').value.trim().split('\n').filter(Boolean);
-    const tags = document.getElementById('ceTags').value.split(',').map(s => s.trim()).filter(Boolean);
+    const description = document.getElementById('ceSummary').value.trim();
     if (!name) { alert('이름을 입력하세요'); return; }
     const filename = prompt('템플릿 파일명(확장자 제외):', slugify(name));
     if (!filename) return;
-    const payload = { name, role: 'npc', summary, traits, goals, boundaries, examples, tags };
+    const payload = { name, role: 'npc', description };
     sendMessage({ action: 'save_workspace_file', file_type: 'char_template', filename, content: JSON.stringify(payload, null, 2) });
     // 모달의 템플릿 목록 갱신
     setTimeout(() => {
@@ -347,15 +302,10 @@ export function renderParticipantsManagerList() {
 export function openParticipantEditor(index) {
     // 참여자 모달이 열려 있으면 닫고(오버레이 제거) 편집 모달을 연다
     closeParticipantsModal();
-    // 채우고 모달 오픈
-    const c = (index != null && index >=0) ? participants[index] : { name:'', description:'', traits:'', goals:'', boundaries:'', examples:[], tags:[] };
+    // 채우고 모달 오픈 (이름 + 내용만)
+    const c = (index != null && index >=0) ? participants[index] : { name:'', description:'' };
     document.getElementById('ceName').value = c.name || '';
     document.getElementById('ceSummary').value = c.description || '';
-    document.getElementById('ceTraits').value = c.traits || '';
-    document.getElementById('ceGoals').value = c.goals || '';
-    document.getElementById('ceBoundaries').value = c.boundaries || '';
-    document.getElementById('ceExamples').value = Array.isArray(c.examples)? c.examples.join('\n'): '';
-    document.getElementById('ceTags').value = Array.isArray(c.tags)? c.tags.join(', '): (c.tags || '');
     loadCharTemplateList(document.getElementById('ceTemplateSelect'));
     openModal('characterEditorModal', true);
 
@@ -363,14 +313,8 @@ export function openParticipantEditor(index) {
     const saveBtn = document.getElementById('ceSaveBtn');
     saveBtn.onclick = () => {
         const name = document.getElementById('ceName').value.trim();
-        const summary = document.getElementById('ceSummary').value.trim();
-        const traits = document.getElementById('ceTraits').value.trim();
-        const goals = document.getElementById('ceGoals').value.trim();
-        const boundaries = document.getElementById('ceBoundaries').value.trim();
-        const examples = document.getElementById('ceExamples').value.split('\n').map(s=>s.trim()).filter(Boolean);
-        const tags = document.getElementById('ceTags').value.split(',').map(s=>s.trim()).filter(Boolean);
-        const desc = composeDescription(summary, traits, goals, boundaries, examples, tags.join(', '));
-        const obj = { name, description: desc };
+        const description = document.getElementById('ceSummary').value.trim();
+        const obj = { name, description };
 
         const newParticipants = [...participants];
         if (index != null && index >= 0) newParticipants[index] = obj; else newParticipants.push(obj);
