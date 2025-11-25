@@ -378,7 +378,27 @@ class DBHandler:
         await self._conn.execute("DROP TABLE IF EXISTS sessions")
         await self._conn.execute("DROP TABLE IF EXISTS token_usage")
 
-        # users 테이블은 유지 (이미 존재)
+        # users 테이블이 없으면 생성
+        cur = await self._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='users'"
+        )
+        if not await cur.fetchone():
+            await self._conn.execute(
+                """
+                CREATE TABLE users (
+                    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    email TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP,
+                    is_approved INTEGER DEFAULT 0,
+                    role TEXT DEFAULT 'user',
+                    approved_by INTEGER,
+                    approved_at TIMESTAMP
+                )
+                """
+            )
 
         # 새 스키마로 테이블 생성
         await self._conn.executescript(
