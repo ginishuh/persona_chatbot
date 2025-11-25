@@ -1985,9 +1985,15 @@ function handleFileLoad(data) {
         // 템플릿(JSON) 로드 → 모달 또는 캐릭터 아이템에 반영
         try {
             const obj = JSON.parse(content || '{}');
+            // 기존 데이터 호환: gender/age가 있으면 설명에 통합
+            const legacyMeta = [];
+            if (obj.gender) legacyMeta.push(`성별: ${obj.gender}`);
+            if (obj.age) legacyMeta.push(`나이: ${obj.age}`);
+            const legacyPrefix = legacyMeta.length ? `${legacyMeta.join(', ')}\n` : '';
+
             if (isPendingAddFromTemplate()) {
                 const name = obj.name || '';
-                const summary = obj.summary || obj.description || '';
+                const summary = legacyPrefix + (obj.summary || obj.description || '');
                 const traits = obj.traits || '';
                 const goals = obj.goals || '';
                 const boundaries = obj.boundaries || '';
@@ -2006,7 +2012,7 @@ function handleFileLoad(data) {
                 const ceExamples = document.getElementById('ceExamples');
                 const ceTags = document.getElementById('ceTags');
                 ceName.value = obj.name || '';
-                ceSummary.value = obj.summary || obj.description || '';
+                ceSummary.value = legacyPrefix + (obj.summary || obj.description || '');
                 ceTraits.value = obj.traits || '';
                 ceGoals.value = obj.goals || '';
                 ceBoundaries.value = obj.boundaries || '';
@@ -2018,8 +2024,8 @@ function handleFileLoad(data) {
                     const nameInput = pendingItem.querySelector('.character-name-input');
                     const descInput = pendingItem.querySelector('.character-description-input');
                     if (obj.name) nameInput.value = obj.name;
-                    if (obj.description !== undefined) descInput.value = obj.description;
-                    else if (obj.summary !== undefined) descInput.value = obj.summary;
+                    const baseDesc = obj.description ?? obj.summary ?? '';
+                    descInput.value = legacyPrefix + baseDesc;
                 }
             }
         } catch (e) {
