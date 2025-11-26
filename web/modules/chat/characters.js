@@ -241,10 +241,6 @@ export function renderParticipantsLeftPanel() {
     if (!charactersListEl) return;
     charactersListEl.innerHTML = '';
     if (!Array.isArray(participants) || participants.length === 0) {
-        const p = document.createElement('p');
-        p.className = 'placeholder';
-        p.textContent = '현재 참여자가 없습니다.';
-        charactersListEl.appendChild(p);
         return;
     }
     participants.forEach((c, idx) => {
