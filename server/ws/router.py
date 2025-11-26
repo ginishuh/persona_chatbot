@@ -54,6 +54,8 @@ ACTION_TABLE: dict[str, Handler] = {
     "load_more_messages": rooms_actions.load_more_messages,
     # history
     "get_narrative": history_actions.get_narrative,
+    "load_more_narrative": history_actions.load_more_narrative,
+    "get_full_narrative": history_actions.get_full_narrative,
     "get_history_settings": history_actions.get_history_settings,
     "set_history_limit": history_actions.set_history_limit,
     "clear_history": history_actions.clear_history,

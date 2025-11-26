@@ -199,3 +199,20 @@ export function setChatOldestMessageId(id) {
 export function setChatLoadingMore(loading) {
     chatLoadingMore = loading;
 }
+
+// ===== 서사 페이지네이션 상태 =====
+export let narrativeHasMore = false;
+export let narrativeOldestId = null;
+export let narrativeLoadingMore = false;
+
+export function setNarrativeHasMore(hasMore) {
+    narrativeHasMore = hasMore;
+}
+
+export function setNarrativeOldestId(id) {
+    narrativeOldestId = id;
+}
+
+export function setNarrativeLoadingMore(loading) {
+    narrativeLoadingMore = loading;
+}
