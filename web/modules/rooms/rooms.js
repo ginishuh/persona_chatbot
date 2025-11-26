@@ -120,10 +120,6 @@ export function refreshRoomRefs() {
     autoTurnToggle = document.getElementById('autoTurnToggle');
     autoTurnDelay = document.getElementById('autoTurnDelay');
     autoTurnMax = document.getElementById('autoTurnMax');
-    autoTurnToggle = document.getElementById('autoTurnToggle');
-    autoTurnDelay = document.getElementById('autoTurnDelay');
-    autoTurnMax = document.getElementById('autoTurnMax');
-    singleSpeakerMode = document.getElementById('singleSpeakerMode');
 
     bindAutoSaveInputs();
 }
@@ -157,10 +153,6 @@ function bindAutoSaveInputs() {
     listen(autoTurnToggle, ['change']);
     listen(autoTurnDelay, ['change']);
     listen(autoTurnMax, ['change']);
-    listen(autoTurnToggle, ['change']);
-    listen(autoTurnDelay, ['change']);
-    listen(autoTurnMax, ['change']);
-    listen(singleSpeakerMode, ['change']);
 
     // 캐릭터 목록 변경 시 자동 저장 (전역 이벤트)
     try {
