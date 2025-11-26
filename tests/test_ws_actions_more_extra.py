@@ -43,6 +43,12 @@ class FakeDBHandler:
             msgs = msgs[-limit:]
         return msgs
 
+    async def count_messages(self, room_id, user_id, before_id=None):
+        msgs = self.messages.copy()
+        if before_id:
+            msgs = [m for m in msgs if m["message_id"] < before_id]
+        return len(msgs)
+
 
 def make_ctx(tmp_path, db_handler=None):
     ctx = AppContext(

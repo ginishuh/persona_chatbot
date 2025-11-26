@@ -67,8 +67,7 @@ async def get_narrative(ctx: AppContext, websocket, data: dict):
         return
 
     # 전체 메시지 수 조회 (시작 인덱스 계산용)
-    all_messages = await ctx.db_handler.list_messages(room_id, user_id, limit=None)
-    total_count = len(all_messages)
+    total_count = await ctx.db_handler.count_messages(room_id, user_id)
 
     # 더 이전 메시지가 있는지 확인
     has_more = False
@@ -158,10 +157,8 @@ async def load_more_narrative(ctx: AppContext, websocket, data: dict):
 
     # 시작 인덱스 계산
     if has_more and oldest_id:
-        older_all = await ctx.db_handler.list_messages(
-            room_id, user_id, before_id=oldest_id, limit=None
-        )
-        start_index = len(older_all) + 1
+        older_count = await ctx.db_handler.count_messages(room_id, user_id, before_id=oldest_id)
+        start_index = older_count + 1
     else:
         start_index = 1
 
