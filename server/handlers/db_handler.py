@@ -86,7 +86,8 @@ class DBHandler:
                     is_approved INTEGER DEFAULT 0,
                     role TEXT DEFAULT 'user',
                     approved_by INTEGER,
-                    approved_at TIMESTAMP
+                    approved_at TIMESTAMP,
+                    preferences TEXT DEFAULT '{}'
                 );
 
                 -- rooms 테이블 (user_id 기반)

@@ -145,7 +145,6 @@ async def chat(ctx: AppContext, websocket, data: dict):
 
     # 제공자별 처리
     model = data.get("model")
-    result = {"success": False, "error": "unknown"}
     try:
         if provider == "droid":
             handler = ctx.droid_handler
