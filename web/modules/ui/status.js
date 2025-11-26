@@ -82,9 +82,8 @@ export function updateModelOptions(provider, options = {}) {
         appendOption('gemini-2.5-flash', 'gemini-2.5-flash');
         appendOption('gemini-2.5-pro', 'gemini-2.5-pro');
     } else if (provider === 'claude') {
-        appendOption('기본(권장)', '');
-        appendOption('Sonnet (alias: sonnet)', 'sonnet');
-        appendOption('Haiku (alias: haiku)', 'haiku');
+        appendOption('Sonnet (기본)', 'sonnet');
+        appendOption('Haiku', 'haiku');
     } else if (provider === 'droid') {
         appendOption('서버 기본(커스텀)', '');
     } else {
@@ -92,7 +91,8 @@ export function updateModelOptions(provider, options = {}) {
     }
 
     const exists = Array.from(selectEl.options).some((opt) => opt.value === previous);
-    selectEl.value = exists ? previous : '';
+    const fallback = provider === 'claude' ? 'sonnet' : '';
+    selectEl.value = exists ? previous : fallback;
 
     if (provider === 'droid') {
         selectEl.disabled = true;
