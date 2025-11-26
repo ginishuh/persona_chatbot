@@ -19,6 +19,7 @@ from .actions import git as git_actions
 from .actions import history as history_actions
 from .actions import importer as import_actions
 from .actions import mode as mode_actions
+from .actions import preferences as preferences_actions
 from .actions import presets as presets_actions
 from .actions import rooms as rooms_actions
 from .actions import session as session_actions
@@ -60,6 +61,9 @@ ACTION_TABLE: dict[str, Handler] = {
     # session settings
     "get_session_settings": session_actions.get_session_settings,
     "set_session_retention": session_actions.set_session_retention,
+    # user preferences
+    "get_preferences": preferences_actions.get_preferences,
+    "update_preferences": preferences_actions.update_preferences,
     # token usage
     "get_token_usage": token_actions.get_token_usage,
     # import

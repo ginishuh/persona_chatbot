@@ -621,20 +621,12 @@
             });
         }
 
-        // 테마 토글
+        // 테마 초기 로드 (클릭 핸들러는 app.js에서 처리)
         (function() {
             const btn = document.getElementById('themeToggleBtn');
             const saved = localStorage.getItem('theme') || 'light';
             document.documentElement.setAttribute('data-theme', saved);
-            btn.textContent = saved === 'dark' ? '☀️' : '🌙';
-
-            btn.addEventListener('click', function() {
-                const current = document.documentElement.getAttribute('data-theme');
-                const next = current === 'dark' ? 'light' : 'dark';
-                document.documentElement.setAttribute('data-theme', next);
-                localStorage.setItem('theme', next);
-                btn.textContent = next === 'dark' ? '☀️' : '🌙';
-            });
+            if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
         })();
     </script>
 </body>

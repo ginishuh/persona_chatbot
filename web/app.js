@@ -535,6 +535,7 @@ function initializeAppData() {
     sendMessage({ action: 'get_narrative' });
     sendMessage({ action: 'get_history_settings' });
     sendMessage({ action: 'get_session_settings' });
+    sendMessage({ action: 'get_preferences' });
     // 서버에 저장된 방 목록 조회
     sendMessage({ action: 'room_list' });
 
@@ -750,6 +751,45 @@ function setupSessionRetentionControls() {
 }
 
 setupSessionRetentionControls();
+
+// ===== 사용자 설정(preferences) =====
+function applyUserPreferences(prefs) {
+    // 테마 적용
+    if (prefs.theme) {
+        document.documentElement.setAttribute('data-theme', prefs.theme);
+        localStorage.setItem('theme', prefs.theme);
+        const themeBtn = document.getElementById('themeToggleBtn');
+        if (themeBtn) {
+            themeBtn.textContent = prefs.theme === 'dark' ? '☀️' : '🌙';
+        }
+    }
+}
+
+function saveUserPreference(key, value) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    sendMessage({
+        action: 'update_preferences',
+        preferences: { [key]: value }
+    });
+}
+
+// 테마 토글 (localStorage + DOM + DB 저장 통합)
+function setupThemeToggle() {
+    const btn = document.getElementById('themeToggleBtn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        // DOM + localStorage 업데이트
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+        btn.textContent = next === 'dark' ? '☀️' : '🌙';
+        // DB에도 저장 (로그인 상태일 때)
+        saveUserPreference('theme', next);
+    });
+}
+
+setupThemeToggle();
 
 function scheduleTokenRefresh() {
     if (tokenRefreshTimeout) {
@@ -1237,6 +1277,18 @@ function handleMessage(msg) {
             if (data.success) {
                 applySessionRetentionUI(data.retention_enabled);
                 setSessionSettingsLoaded(true);
+            }
+            break;
+
+        case 'get_preferences':
+            if (data.success && data.preferences) {
+                applyUserPreferences(data.preferences);
+            }
+            break;
+
+        case 'update_preferences':
+            if (data.success) {
+                log('설정 저장 완료', 'success');
             }
             break;
 
