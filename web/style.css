@@ -31,10 +31,10 @@ body {
     outline-offset: 2px;
 }
 
-/* 접근성: 터치 타겟 최소 크기 */
+/* 접근성: 터치 타겟 최소 크기 (데스크톱은 작게, 모바일은 44px 유지) */
 button, .btn, .more-menu-btn, .narrative-menu-btn, .hamburger-btn {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 32px;
+    min-height: 32px;
 }
 
 /* 비활성/포커스 시각 상태 */
@@ -1052,6 +1052,12 @@ footer {
 }
 
 @media (max-width: 900px) {
+    /* 모바일: 터치 타겟 44px 유지 */
+    button, .btn, .more-menu-btn, .narrative-menu-btn, .hamburger-btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
     /* 햄버거 메뉴 표시 */
     .hamburger-btn {
         display: flex;
