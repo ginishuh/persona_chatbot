@@ -132,7 +132,7 @@ header {
 
 /* 더보기 메뉴 버튼 */
 .more-menu-btn {
-    display: none;
+    display: block;
     background: none;
     border: none;
     font-size: 1.5rem;
@@ -142,6 +142,13 @@ header {
     z-index: 1001;
     transition: transform 0.2s;
     color: var(--color-text-muted);
+}
+
+/* 데스크톱: 더보기 메뉴로 이동할 버튼들 숨김 */
+#loginBtn, #logoutBtn, #adminBtn, #backupBtn,
+#themeToggleBtn, #clearHistoryBtn, #resetSessionsBtn,
+#sessionStatusBadge {
+    display: none;
 }
 
 .more-menu-btn:hover {
@@ -672,7 +679,7 @@ header h1 {
     border-radius: var(--radius-md);
     word-wrap: break-word;
     white-space: pre-wrap;
-    font-size: var(--font-base);
+    font-size: var(--font-lg);
 }
 
 .chat-message.user .message-content {
@@ -1031,11 +1038,6 @@ footer {
 
     /* 서사기록 메뉴 버튼 표시 */
     .narrative-menu-btn {
-        display: block;
-    }
-
-    /* 더보기 메뉴 버튼 표시 */
-    .more-menu-btn {
         display: block;
     }
 
