@@ -160,6 +160,11 @@ export function setRooms(newRooms) {
 
 export function setCurrentRoom(room) {
     currentRoom = room;
+    // 헤더 배지 업데이트
+    const badge = document.getElementById('currentRoomBadge');
+    if (badge) {
+        badge.textContent = room ? `📁 ${room}` : '';
+    }
 }
 
 export function setPendingRoutePath(path) {
