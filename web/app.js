@@ -37,7 +37,10 @@ import {
     refreshRetryCount, setRefreshRetryCount,
     refreshInProgress, setRefreshInProgress,
     setCurrentHistoryLimit,
-    currentHistoryLimit
+    currentHistoryLimit,
+    chatHasMore, setChatHasMore,
+    chatOldestMessageId, setChatOldestMessageId,
+    chatLoadingMore, setChatLoadingMore
 } from './modules/core/state.js';
 import {
     setPendingFileList,
@@ -58,6 +61,7 @@ import {
 } from './modules/files/pending.js';
 import {
     refreshChatRefs, addChatMessage, addCharacterMessage,
+    createChatMessageElement, createCharacterMessageElement,
     sendChatMessage, handleChatStream, handleChatComplete,
     bindChatEvents, updateChatInputState,
     updateTokenDisplay, requestStopAll
@@ -1377,10 +1381,17 @@ function handleMessage(msg) {
                 // UI 반영
                 loadContext(ctx);
                     try { console.debug('room_load: got history from server length:', Array.isArray(room.history) ? room.history.length : 0); } catch (_) {}
+                // 페이지네이션 상태 저장
+                setChatHasMore(!!room.has_more);
+                if (Array.isArray(room.history) && room.history.length > 0) {
+                    setChatOldestMessageId(room.history[0].message_id || null);
+                } else {
+                    setChatOldestMessageId(null);
+                }
                 // 서버에서 전달한 히스토리가 있으면 메시지 화면에 즉시 렌더
                 try {
                     if (Array.isArray(room.history) && room.history.length > 0) {
-                        renderHistorySnapshot(room.history);
+                        renderHistorySnapshot(room.history, room.has_more);
                     }
                 } catch (_) {}
                 // 사용자 프로필 필드 채움
@@ -1408,6 +1419,26 @@ function handleMessage(msg) {
                 log('방 삭제 완료(설정)', 'success');
             } else {
                 log(`방 삭제 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'load_more_messages':
+            setChatLoadingMore(false);
+            if (data.success) {
+                const messages = data.messages || [];
+                setChatHasMore(!!data.has_more);
+                if (messages.length > 0) {
+                    setChatOldestMessageId(messages[0].message_id || null);
+                    prependHistoryMessages(messages, data.has_more);
+                }
+            } else {
+                // 에러 시 재시도 버튼으로 변경
+                loadMoreRetryCount++;
+                const errorMsg = loadMoreRetryCount >= 3
+                    ? '여러 번 실패 - 나중에 다시 시도'
+                    : data.error || '로드 실패';
+                setLoadMoreButtonError(errorMsg);
+                log(`이전 메시지 로드 실패: ${data.error}`, 'error');
             }
             break;
 
@@ -2476,12 +2507,112 @@ loadStoryBtn?.addEventListener('click', () => alert('스토리 불러오기 기�
 // 서사 이어하기 버튼
 resumeStoryBtn?.addEventListener('click', () => alert('스토리 이어하기 기능은 비활성화되었습니다.'));
 
-function renderHistorySnapshot(history) {
+// ===== 이전 메시지 로드 관련 헬퍼 =====
+const LOAD_MORE_MAX_RETRIES = 3;
+let loadMoreRetryCount = 0;
+
+/**
+ * "이전 메시지 불러오기" 버튼 생성
+ * @param {Object} options - 버튼 옵션
+ * @param {boolean} options.isError - 에러 상태 여부
+ * @param {string} options.errorMsg - 에러 메시지
+ * @returns {HTMLButtonElement}
+ */
+function createLoadMoreButton({ isError = false, errorMsg = '' } = {}) {
+    const btn = document.createElement('button');
+    btn.id = 'loadMoreMessagesBtn';
+    btn.className = 'btn btn-sm load-more-btn' + (isError ? ' error' : '');
+
+    if (isError) {
+        btn.innerHTML = `<span>⚠️ ${errorMsg || '로드 실패'} - 다시 시도</span>`;
+    } else {
+        btn.innerHTML = '<span>↑ 이전 메시지 불러오기</span>';
+    }
+
+    btn.addEventListener('click', loadMoreMessages);
+    return btn;
+}
+
+/**
+ * 로드 버튼을 로딩 상태로 변경
+ */
+function setLoadMoreButtonLoading() {
+    const btn = document.getElementById('loadMoreMessagesBtn');
+    if (!btn) return;
+    btn.classList.add('loading');
+    btn.classList.remove('error');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="load-more-spinner"></span><span>로딩 중...</span>';
+}
+
+/**
+ * 로드 버튼을 에러 상태로 변경
+ * @param {string} errorMsg - 에러 메시지
+ */
+function setLoadMoreButtonError(errorMsg) {
+    const btn = document.getElementById('loadMoreMessagesBtn');
+    if (!btn) return;
+    btn.classList.remove('loading');
+    btn.classList.add('error');
+    btn.disabled = false;
+    btn.innerHTML = `<span>⚠️ ${errorMsg || '로드 실패'} - 다시 시도</span>`;
+}
+
+/**
+ * 로드 버튼을 기본 상태로 복원
+ */
+function resetLoadMoreButton() {
+    const btn = document.getElementById('loadMoreMessagesBtn');
+    if (!btn) return;
+    btn.classList.remove('loading', 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<span>↑ 이전 메시지 불러오기</span>';
+}
+
+/**
+ * DOM에서 오래된 메시지 정리 (메모리 최적화)
+ * 이전 메시지 로드 시: 아래쪽(최신) 메시지 제거
+ * 새 메시지 추가 시: 위쪽(오래된) 메시지 제거
+ * @param {Object} options
+ * @param {number} options.maxMessages - 최대 유지할 메시지 수 (기본 300)
+ * @param {'top'|'bottom'} options.trimFrom - 제거할 방향 (기본 'bottom')
+ */
+const MAX_DOM_MESSAGES = 300;
+
+function trimExcessMessages({ maxMessages = MAX_DOM_MESSAGES, trimFrom = 'bottom' } = {}) {
+    if (!chatMessages) return;
+
+    const messages = chatMessages.querySelectorAll('.chat-message');
+    const excess = messages.length - maxMessages;
+
+    if (excess <= 0) return;
+
+    if (trimFrom === 'bottom') {
+        // 아래쪽(최신)부터 제거 - 이전 메시지 로드 시
+        for (let i = messages.length - 1; i >= messages.length - excess && i >= 0; i--) {
+            messages[i].remove();
+        }
+    } else {
+        // 위쪽(오래된)부터 제거 - 새 메시지 추가 시
+        // load-more 버튼은 건드리지 않음
+        let removed = 0;
+        for (let i = 0; i < messages.length && removed < excess; i++) {
+            messages[i].remove();
+            removed++;
+        }
+    }
+}
+
+function renderHistorySnapshot(history, hasMore = false) {
     try {
         chatMessages.innerHTML = '';
         if (!Array.isArray(history) || history.length === 0) {
             chatMessages.innerHTML = '<div class="chat-message system"><p>대화를 시작하세요</p></div>';
             return;
+        }
+        // "이전 메시지 불러오기" 버튼 (hasMore일 때만)
+        if (hasMore) {
+            chatMessages.appendChild(createLoadMoreButton());
         }
         history.forEach(msg => {
             const role = msg.role === 'user' ? 'user' : 'assistant';
@@ -2508,6 +2639,66 @@ function renderHistorySnapshot(history) {
         announce('히스토리가 갱신되었습니다');
     } catch (e) {
         console.error('renderHistorySnapshot error', e);
+    }
+}
+
+function loadMoreMessages() {
+    if (chatLoadingMore || !chatHasMore || !chatOldestMessageId) return;
+    setChatLoadingMore(true);
+    setLoadMoreButtonLoading();
+    sendMessage({
+        action: 'load_more_messages',
+        room_id: currentRoom,
+        before_id: chatOldestMessageId
+    });
+}
+
+function prependHistoryMessages(messages, hasMore) {
+    try {
+        if (!chatMessages || !Array.isArray(messages) || messages.length === 0) return;
+        // 기존 "Load more" 버튼 제거
+        const oldBtn = document.getElementById('loadMoreMessagesBtn');
+        if (oldBtn) oldBtn.remove();
+        // 스크롤 위치 기억
+        const scrollHeightBefore = chatMessages.scrollHeight;
+        // 새 메시지들을 맨 앞에 추가
+        const fragment = document.createDocumentFragment();
+        // hasMore면 새 버튼 먼저
+        if (hasMore) {
+            fragment.appendChild(createLoadMoreButton());
+        }
+        // 재시도 카운트 초기화 (성공했으므로)
+        loadMoreRetryCount = 0;
+        messages.forEach(msg => {
+            const role = msg.role === 'user' ? 'user' : 'assistant';
+            const content = msg.content || '';
+            if (role === 'assistant') {
+                const parsed = parseMultiCharacterResponse(content);
+                if (parsed.length > 0) {
+                    parsed.forEach(p => {
+                        const el = createCharacterMessageElement(p.character, p.text);
+                        el.dataset.permanent = 'true';
+                        fragment.appendChild(el);
+                    });
+                    return;
+                }
+                const el = createChatMessageElement('assistant', content);
+                el.dataset.permanent = 'true';
+                fragment.appendChild(el);
+            } else {
+                const el = createChatMessageElement('user', content);
+                fragment.appendChild(el);
+            }
+        });
+        // 맨 앞에 삽입
+        chatMessages.insertBefore(fragment, chatMessages.firstChild);
+        // 스크롤 위치 유지
+        const scrollHeightAfter = chatMessages.scrollHeight;
+        chatMessages.scrollTop = scrollHeightAfter - scrollHeightBefore;
+        // 메모리 최적화: 오래된 메시지가 너무 많으면 아래쪽(최신) 메시지 정리
+        trimExcessMessages({ trimFrom: 'bottom' });
+    } catch (e) {
+        console.error('prependHistoryMessages error', e);
     }
 }
 

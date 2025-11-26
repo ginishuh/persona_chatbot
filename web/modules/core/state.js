@@ -182,3 +182,20 @@ export function setCurrentHistoryLimit(limit) {
 export function setSessionSettingsLoaded(loaded) {
     sessionSettingsLoaded = loaded;
 }
+
+// ===== 채팅 페이지네이션 상태 =====
+export let chatHasMore = false;
+export let chatOldestMessageId = null;
+export let chatLoadingMore = false;
+
+export function setChatHasMore(hasMore) {
+    chatHasMore = hasMore;
+}
+
+export function setChatOldestMessageId(id) {
+    chatOldestMessageId = id;
+}
+
+export function setChatLoadingMore(loading) {
+    chatLoadingMore = loading;
+}

@@ -68,9 +68,7 @@ try {
     });
 } catch (_) {}
 
-export function addChatMessage(role, content) {
-    if (!chatMessages) refreshChatRefs();
-
+export function createChatMessageElement(role, content) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-message ${role}`;
 
@@ -85,15 +83,21 @@ export function addChatMessage(role, content) {
     messageDiv.appendChild(contentDiv);
     messageDiv.appendChild(timeSpan);
 
+    return messageDiv;
+}
+
+export function addChatMessage(role, content) {
+    if (!chatMessages) refreshChatRefs();
+
+    const messageDiv = createChatMessageElement(role, content);
+
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
     return messageDiv;
 }
 
-export function addCharacterMessage(characterName, text) {
-    if (!chatMessages) refreshChatRefs();
-
+export function createCharacterMessageElement(characterName, text) {
     const messageDiv = document.createElement('div');
 
     // 진행자인 경우 특별한 스타일 적용
@@ -127,6 +131,14 @@ export function addCharacterMessage(characterName, text) {
     messageDiv.appendChild(charNameDiv);
     messageDiv.appendChild(contentDiv);
     messageDiv.appendChild(timeSpan);
+
+    return messageDiv;
+}
+
+export function addCharacterMessage(characterName, text) {
+    if (!chatMessages) refreshChatRefs();
+
+    const messageDiv = createCharacterMessageElement(characterName, text);
 
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;

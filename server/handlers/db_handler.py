@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import shutil
-from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -587,21 +586,59 @@ class DBHandler:
             await self._conn.commit()
 
     async def list_messages(
-        self, room_id: str, user_id: int, limit: int | None = None
+        self,
+        room_id: str,
+        user_id: int,
+        limit: int | None = None,
+        before_id: int | None = None,
     ) -> list[dict[str, Any]]:
-        """메시지 조회 (user_id 기반)
+        """메시지 조회 (user_id 기반, 페이지네이션 지원)
 
         Args:
             room_id: 방 ID
             user_id: 사용자 ID
             limit: 최대 조회 개수
+            before_id: 이 message_id 이전 메시지만 조회 (페이지네이션용)
+
+        Returns:
+            메시지 목록 (오래된 순 정렬)
         """
         assert self._conn is not None
-        sql = "SELECT message_id, role, content, timestamp FROM messages WHERE room_id=? AND user_id=? ORDER BY message_id ASC"
-        params: Iterable[Any] = (room_id, user_id)
-        if limit:
-            sql += " LIMIT ?"
-            params = (room_id, user_id, limit)
+        params: list[Any] = [room_id, user_id]
+
+        if before_id:
+            # before_id 이전 메시지 중 최신 N개 (역순 조회 후 정렬)
+            sql = """
+                SELECT * FROM (
+                    SELECT message_id, role, content, timestamp
+                    FROM messages
+                    WHERE room_id=? AND user_id=? AND message_id < ?
+                    ORDER BY message_id DESC
+                    LIMIT ?
+                ) sub ORDER BY message_id ASC
+            """
+            params = [room_id, user_id, before_id, limit or 50]
+        elif limit:
+            # 최신 N개 메시지 (역순 조회 후 정렬)
+            sql = """
+                SELECT * FROM (
+                    SELECT message_id, role, content, timestamp
+                    FROM messages
+                    WHERE room_id=? AND user_id=?
+                    ORDER BY message_id DESC
+                    LIMIT ?
+                ) sub ORDER BY message_id ASC
+            """
+            params = [room_id, user_id, limit]
+        else:
+            # 전체 조회
+            sql = """
+                SELECT message_id, role, content, timestamp
+                FROM messages
+                WHERE room_id=? AND user_id=?
+                ORDER BY message_id ASC
+            """
+
         cur = await self._conn.execute(sql, params)
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
