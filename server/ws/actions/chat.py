@@ -129,42 +129,60 @@ async def chat(ctx: AppContext, websocket, data: dict):
                 + system_prompt
             )
 
+    # 스트리밍 시작 시 취소 플래그 초기화
+    ctx.cancel_flags[websocket] = False
+
+    class StreamCancelled(Exception):
+        """스트림 취소 예외"""
+
+        pass
+
     async def stream_callback(json_data):
+        # 취소 플래그 확인
+        if ctx.cancel_flags.get(websocket, False):
+            raise StreamCancelled("Stream cancelled by user")
         await websocket.send(json.dumps({"action": "chat_stream", "data": json_data}))
 
     # 제공자별 처리
     model = data.get("model")
-    if provider == "droid":
-        handler = ctx.droid_handler
-        result = await handler.send_message(
-            prompt,
-            system_prompt=system_prompt,
-            callback=stream_callback,
-            session_id=provider_session_id,
-            model=None,  # 서버 기본 사용
-        )
-    elif provider == "gemini":
-        handler = ctx.gemini_handler
-        result = await handler.send_message(
-            prompt,
-            system_prompt=system_prompt,
-            callback=stream_callback,
-            session_id=provider_session_id,
-            model=model,
-        )
-    else:
-        handler = ctx.claude_handler
-        logger.info(f"[DEBUG] Claude handler 호출 전 - handler={handler}")
-        result = await handler.send_message(
-            prompt,
-            system_prompt=system_prompt,
-            callback=stream_callback,
-            session_id=provider_session_id,
-            model=model,
-        )
-        logger.info(
-            f"[DEBUG] Claude handler 호출 후 - result={result.get('success') if result else None}"
-        )
+    result = {"success": False, "error": "unknown"}
+    try:
+        if provider == "droid":
+            handler = ctx.droid_handler
+            result = await handler.send_message(
+                prompt,
+                system_prompt=system_prompt,
+                callback=stream_callback,
+                session_id=provider_session_id,
+                model=None,  # 서버 기본 사용
+            )
+        elif provider == "gemini":
+            handler = ctx.gemini_handler
+            result = await handler.send_message(
+                prompt,
+                system_prompt=system_prompt,
+                callback=stream_callback,
+                session_id=provider_session_id,
+                model=model,
+            )
+        else:
+            handler = ctx.claude_handler
+            logger.info(f"[DEBUG] Claude handler 호출 전 - handler={handler}")
+            result = await handler.send_message(
+                prompt,
+                system_prompt=system_prompt,
+                callback=stream_callback,
+                session_id=provider_session_id,
+                model=model,
+            )
+            logger.info(
+                f"[DEBUG] Claude handler 호출 후 - result={result.get('success') if result else None}"
+            )
+    except StreamCancelled:
+        logger.info("Stream cancelled by user")
+        result = {"success": False, "error": "cancelled", "cancelled": True}
+        await websocket.send(json.dumps({"action": "chat_complete", "data": result}))
+        return
 
     # 응답 히스토리 반영
     if result.get("success") and result.get("message"):

@@ -1717,6 +1717,19 @@ if (settingsModalOverlay) {
     });
 }
 
+// 설정 모달 탭 전환
+document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        const targetTab = tab.dataset.tab;
+        // 탭 버튼 활성화
+        document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        // 탭 콘텐츠 표시
+        document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelector(`.settings-tab-content[data-tab="${targetTab}"]`)?.classList.add('active');
+    });
+});
+
 // ===== 관리자 모달 =====
 // 로그인 버튼
 if (loginBtn) {

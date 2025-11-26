@@ -1298,6 +1298,45 @@ footer {
     color: var(--color-text);
 }
 
+/* Settings tabs */
+.settings-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--color-border);
+    background: var(--color-muted);
+    padding: 0 1rem;
+}
+.settings-tab {
+    padding: 0.75rem 1rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.settings-tab:hover {
+    color: var(--color-text);
+    background: var(--color-surface);
+}
+.settings-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    background: var(--color-surface);
+    font-weight: 600;
+}
+.settings-tab-content {
+    display: none;
+}
+.settings-tab-content.active {
+    display: block;
+}
+
 .settings-modal-body {
     flex: 1;
     overflow-y: auto;

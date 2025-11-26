@@ -12,7 +12,7 @@ import io
 import json
 import os
 import zipfile
-from datetime import datetime
+from datetime import UTC, datetime
 from http.server import SimpleHTTPRequestHandler
 from socketserver import TCPServer
 from urllib.parse import parse_qs, urlparse
@@ -160,7 +160,7 @@ def run_http_server(ctx: AppContext):
                     export_obj = {
                         "version": "1.0",
                         "export_type": scope,
-                        "exported_at": datetime.utcnow().isoformat() + "Z",
+                        "exported_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                     }
 
                     def room_snapshot(rid: str) -> dict:
@@ -260,7 +260,7 @@ def run_http_server(ctx: AppContext):
                                 rooms_acc.append(room_snapshot(rid))
                         export_obj["rooms"] = rooms_acc
 
-                    tsname = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+                    tsname = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
                     if fmt == "zip":
                         buf = io.BytesIO()
                         with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -335,7 +335,7 @@ def run_http_server(ctx: AppContext):
                         self.wfile.write(body)
                         return
 
-                    tsname = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+                    tsname = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
                     self.send_response(200)
                     self.send_header("Content-Type", "application/x-ndjson")
                     self.send_header("Cache-Control", "no-store")
@@ -349,7 +349,7 @@ def run_http_server(ctx: AppContext):
                         {
                             "type": "meta",
                             "version": "1.0",
-                            "exported_at": datetime.utcnow().isoformat() + "Z",
+                            "exported_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                             "scope": scope,
                             "include": sorted(list(includes)),
                             **({"start": start} if start else {}),
@@ -569,7 +569,7 @@ def run_http_server(ctx: AppContext):
                             lines.append("")
                         return title, "\n".join(lines).encode("utf-8")
 
-                    tsname = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+                    tsname = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
                     if scope == "single":
                         title, md_bytes = render_md(room_id)
                         fname = f"{title or room_id}_{tsname}.md".replace("/", "_")

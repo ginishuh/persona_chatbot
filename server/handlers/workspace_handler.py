@@ -1,4 +1,5 @@
 import json
+from datetime import UTC
 from pathlib import Path
 
 import aiofiles
@@ -534,7 +535,7 @@ class WorkspaceHandler:
 
                     title = filename[:-3] if filename.endswith(".md") else filename
                     rid = self._sanitize_room(title)
-                    iso = datetime.utcnow().isoformat() + "Z"
+                    iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
                     header = (
                         f"---\n"
                         f"title: {title}\n"
