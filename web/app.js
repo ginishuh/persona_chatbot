@@ -1390,10 +1390,13 @@ function handleMessage(msg) {
                 }
                 // 서버에서 전달한 히스토리가 있으면 메시지 화면에 즉시 렌더
                 try {
+                    console.debug('room_load: chatMessages element:', chatMessages);
                     if (Array.isArray(room.history) && room.history.length > 0) {
                         renderHistorySnapshot(room.history, room.has_more);
                     }
-                } catch (_) {}
+                } catch (e) {
+                    console.error('room_load: renderHistorySnapshot 실패:', e);
+                }
                 // 사용자 프로필 필드 채움
                 try {
                     const prof = room.user_profile || {};
@@ -2605,14 +2608,21 @@ function trimExcessMessages({ maxMessages = MAX_DOM_MESSAGES, trimFrom = 'bottom
 
 function renderHistorySnapshot(history, hasMore = false) {
     try {
-        chatMessages.innerHTML = '';
+        // chat.js와 동기화를 위해 매번 DOM에서 가져옴
+        refreshChatRefs();
+        const chatMsgsEl = document.getElementById('chatMessages');
+        if (!chatMsgsEl) {
+            console.error('renderHistorySnapshot: chatMessages element not found');
+            return;
+        }
+        chatMsgsEl.innerHTML = '';
         if (!Array.isArray(history) || history.length === 0) {
-            chatMessages.innerHTML = '<div class="chat-message system"><p>대화를 시작하세요</p></div>';
+            chatMsgsEl.innerHTML = '<div class="chat-message system"><p>대화를 시작하세요</p></div>';
             return;
         }
         // "이전 메시지 불러오기" 버튼 (hasMore일 때만)
         if (hasMore) {
-            chatMessages.appendChild(createLoadMoreButton());
+            chatMsgsEl.appendChild(createLoadMoreButton());
         }
         history.forEach(msg => {
             const role = msg.role === 'user' ? 'user' : 'assistant';
