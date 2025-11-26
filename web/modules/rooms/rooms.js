@@ -120,10 +120,6 @@ export function refreshRoomRefs() {
     autoTurnToggle = document.getElementById('autoTurnToggle');
     autoTurnDelay = document.getElementById('autoTurnDelay');
     autoTurnMax = document.getElementById('autoTurnMax');
-    autoTurnToggle = document.getElementById('autoTurnToggle');
-    autoTurnDelay = document.getElementById('autoTurnDelay');
-    autoTurnMax = document.getElementById('autoTurnMax');
-    singleSpeakerMode = document.getElementById('singleSpeakerMode');
 
     bindAutoSaveInputs();
 }
@@ -157,10 +153,6 @@ function bindAutoSaveInputs() {
     listen(autoTurnToggle, ['change']);
     listen(autoTurnDelay, ['change']);
     listen(autoTurnMax, ['change']);
-    listen(autoTurnToggle, ['change']);
-    listen(autoTurnDelay, ['change']);
-    listen(autoTurnMax, ['change']);
-    listen(singleSpeakerMode, ['change']);
 
     // 캐릭터 목록 변경 시 자동 저장 (전역 이벤트)
     try {
@@ -376,9 +368,10 @@ export function renderRoomsRightPanelList() {
         container.style = 'display:flex; gap:0.25rem; margin-bottom:4px; align-items:stretch;';
 
         const btn = document.createElement('button');
-        btn.className = 'btn btn-sm';
+        const isActive = it.rid === currentRoom;
+        btn.className = isActive ? 'btn btn-sm btn-primary' : 'btn btn-sm';
         btn.style = 'flex:1; text-align:left;';
-        btn.textContent = it.title;
+        btn.textContent = isActive ? `● ${it.title}` : it.title;
         btn.addEventListener('click', () => {
             navigate(`/rooms/${encodeURIComponent(it.rid)}`);
         });

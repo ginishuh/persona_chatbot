@@ -535,6 +535,7 @@ function initializeAppData() {
     sendMessage({ action: 'get_narrative' });
     sendMessage({ action: 'get_history_settings' });
     sendMessage({ action: 'get_session_settings' });
+    sendMessage({ action: 'get_preferences' });
     // 서버에 저장된 방 목록 조회
     sendMessage({ action: 'room_list' });
 
@@ -750,6 +751,60 @@ function setupSessionRetentionControls() {
 }
 
 setupSessionRetentionControls();
+
+// ===== 사용자 설정(preferences) =====
+function applyUserPreferences(prefs) {
+    // 테마 적용
+    if (prefs.theme) {
+        document.documentElement.setAttribute('data-theme', prefs.theme);
+        localStorage.setItem('theme', prefs.theme);
+        // 헤더 버튼
+        const headerBtn = document.getElementById('themeToggleBtn');
+        if (headerBtn) headerBtn.textContent = prefs.theme === 'dark' ? '☀️' : '🌙';
+        // 모바일 더보기 메뉴 버튼
+        const moreBtn = document.getElementById('moreThemeToggleBtn');
+        if (moreBtn) {
+            const icon = moreBtn.querySelector('[data-icon]');
+            if (icon) icon.dataset.icon = prefs.theme === 'dark' ? 'sun' : 'moon';
+        }
+    }
+}
+
+function saveUserPreference(key, value) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    sendMessage({
+        action: 'update_preferences',
+        preferences: { [key]: value }
+    });
+}
+
+// 테마 토글 (localStorage + DOM + DB 저장 통합)
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    // DOM + localStorage 업데이트
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    // 버튼 아이콘 업데이트
+    const headerBtn = document.getElementById('themeToggleBtn');
+    const moreBtn = document.getElementById('moreThemeToggleBtn');
+    if (headerBtn) headerBtn.textContent = next === 'dark' ? '☀️' : '🌙';
+    if (moreBtn) {
+        const icon = moreBtn.querySelector('[data-icon]');
+        if (icon) icon.dataset.icon = next === 'dark' ? 'sun' : 'moon';
+    }
+    // DB에도 저장 (로그인 상태일 때)
+    saveUserPreference('theme', next);
+}
+
+function setupThemeToggle() {
+    const headerBtn = document.getElementById('themeToggleBtn');
+    const moreBtn = document.getElementById('moreThemeToggleBtn');
+    if (headerBtn) headerBtn.addEventListener('click', toggleTheme);
+    if (moreBtn) moreBtn.addEventListener('click', toggleTheme);
+}
+
+setupThemeToggle();
 
 function scheduleTokenRefresh() {
     if (tokenRefreshTimeout) {
@@ -1240,6 +1295,18 @@ function handleMessage(msg) {
             }
             break;
 
+        case 'get_preferences':
+            if (data.success && data.preferences) {
+                applyUserPreferences(data.preferences);
+            }
+            break;
+
+        case 'update_preferences':
+            if (data.success) {
+                log('설정 저장 완료', 'success');
+            }
+            break;
+
         case 'set_session_retention':
             if (data.success) {
                 setSessionSettingsLoaded(true);
@@ -1716,6 +1783,19 @@ if (settingsModalOverlay) {
         focusLastSettingsTrigger();
     });
 }
+
+// 설정 모달 탭 전환
+document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        const targetTab = tab.dataset.tab;
+        // 탭 버튼 활성화
+        document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        // 탭 콘텐츠 표시
+        document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelector(`.settings-tab-content[data-tab="${targetTab}"]`)?.classList.add('active');
+    });
+});
 
 // ===== 관리자 모달 =====
 // 로그인 버튼

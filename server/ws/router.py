@@ -10,6 +10,7 @@ from collections.abc import Awaitable, Callable
 
 from server.core.app_context import AppContext
 
+from .actions import cancel as cancel_actions
 from .actions import chat as chat_actions
 from .actions import config as config_actions
 from .actions import context as context_actions
@@ -18,6 +19,7 @@ from .actions import git as git_actions
 from .actions import history as history_actions
 from .actions import importer as import_actions
 from .actions import mode as mode_actions
+from .actions import preferences as preferences_actions
 from .actions import presets as presets_actions
 from .actions import rooms as rooms_actions
 from .actions import session as session_actions
@@ -59,6 +61,9 @@ ACTION_TABLE: dict[str, Handler] = {
     # session settings
     "get_session_settings": session_actions.get_session_settings,
     "set_session_retention": session_actions.set_session_retention,
+    # user preferences
+    "get_preferences": preferences_actions.get_preferences,
+    "update_preferences": preferences_actions.update_preferences,
     # token usage
     "get_token_usage": token_actions.get_token_usage,
     # import
@@ -71,6 +76,7 @@ ACTION_TABLE: dict[str, Handler] = {
     "resume_from_story": stories_actions.resume_from_story,
     # chat
     "chat": chat_actions.chat,
+    "cancel_stream": cancel_actions.cancel_stream,
     # git
     "git_status": git_actions.git_status,
     "git_push": git_actions.git_push,

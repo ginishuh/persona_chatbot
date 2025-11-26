@@ -1,11 +1,15 @@
 # 📖 Persona Chat: 멀티 캐릭터 대화 스튜디오
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-supported-brightgreen.svg)](https://www.docker.com/)
+
 > "혼자 쓰는 채팅창"을 "캐릭터들이 뛰어노는 TRPG 테이블"로 바꾸는 웹 앱
 
 Persona Chat은 **웹 기반 멀티 캐릭터 대화·서사 관리 시스템**입니다.
 Claude Code, Droid CLI, Gemini CLI를 AI 백엔드로 사용하고, WebSocket으로 **실시간 스트리밍 대화**를 제공합니다.
 
-> 2025-11-12 기준
+> **2025-11 기준**
 > Claude ✅ / Droid ✅ / Gemini ✅
 > 로컬 실행과 Docker Compose 환경 모두에서 동작 확인 완료
 
@@ -110,7 +114,7 @@ droid auth login
 
 ```bash
 # 프로젝트 클론
-git clone <repository-url>
+git clone https://github.com/ginishuh/persona_chatbot.git
 cd persona_chatbot
 
 # Python 가상환경 설정(권장 디렉터리명: .venv)
@@ -756,13 +760,13 @@ SHOW_TOKEN_USAGE=1
 * [x] 캐릭터 프리셋 저장 및 관리
 * [x] 간단 로그인 + JWT 세션 갱신
 * [x] 모델별 토큰 사용량 표시(Claude)
+* [x] 다크/라이트 테마 전환
+* [x] 회원제 시스템 (사용자별 데이터 격리)
 * [ ] Claude API 직접 연동(현재는 CLI 기반)
-* [ ] 대화 히스토리 영구 저장(DB 확장)
 * [ ] 다중 컨텍스트 프로필(세이브 슬롯)
 * [ ] 캐릭터 아바타/이미지 지원
 * [ ] 음성 출력(TTS) 연동
 * [ ] 다국어 지원
-* [ ] 다크/라이트 테마 전환
 
 ---
 

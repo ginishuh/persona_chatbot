@@ -33,6 +33,7 @@ class AppContext:
     login_attempts: dict = field(default_factory=dict)
     websocket_to_session: dict = field(default_factory=dict)
     sessions: dict = field(default_factory=dict)
+    cancel_flags: dict = field(default_factory=dict)  # websocket -> bool (스트림 취소 플래그)
 
     # 핸들러/서비스
     file_handler: Any | None = None

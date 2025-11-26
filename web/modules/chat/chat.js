@@ -470,6 +470,8 @@ export function requestStopAll() {
     currentAssistantMessage = null;
     if (chatInput) chatInput.disabled = false;
     if (sendChatBtn) sendChatBtn.disabled = false;
+    // 서버에 스트림 취소 요청
+    sendMessage({ action: 'cancel_stream' });
     log('응답/자동턴을 중단했습니다.', 'info');
 }
 

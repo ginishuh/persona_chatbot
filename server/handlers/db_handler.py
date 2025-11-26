@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -45,8 +46,8 @@ class DBHandler:
         row = await cur.fetchone()
         current_version = row[0] if row else 0
 
-        # 최신 버전: v4 (user_id 기반 재설계)
-        TARGET_VERSION = 4
+        # 최신 버전: v5 (사용자 설정 preferences 컬럼 추가)
+        TARGET_VERSION = 5
 
         # user_version == 0이지만 테이블이 존재하면 스키마 검사
         if current_version == 0:
@@ -85,7 +86,8 @@ class DBHandler:
                     is_approved INTEGER DEFAULT 0,
                     role TEXT DEFAULT 'user',
                     approved_by INTEGER,
-                    approved_at TIMESTAMP
+                    approved_at TIMESTAMP,
+                    preferences TEXT DEFAULT '{}'
                 );
 
                 -- rooms 테이블 (user_id 기반)
@@ -136,6 +138,11 @@ class DBHandler:
             await self._maybe_backup_legacy_db()
             await self._migrate_to_v4()
             current_version = 4
+
+        # v4 → v5: preferences 컬럼 추가
+        if current_version == 4:
+            await self._migrate_to_v5()
+            current_version = 5
 
         # 버전 업데이트
         if current_version == TARGET_VERSION:
@@ -462,6 +469,18 @@ class DBHandler:
 
         await self._conn.commit()
 
+    async def _migrate_to_v5(self) -> None:
+        """v4 → v5: users 테이블에 preferences 컬럼 추가."""
+        assert self._conn is not None
+
+        # preferences 컬럼이 이미 있는지 확인
+        cur = await self._conn.execute("PRAGMA table_info(users)")
+        columns = {row[1] for row in await cur.fetchall()}
+        if "preferences" not in columns:
+            await self._conn.execute("ALTER TABLE users ADD COLUMN preferences TEXT DEFAULT '{}'")
+            await self._conn.commit()
+            logger.info("Migrated to v5: added preferences column to users table")
+
     # ===== Rooms =====
     async def upsert_room(
         self,
@@ -726,6 +745,37 @@ class DBHandler:
         )
         row = await cur.fetchone()
         return dict(row) if row else None
+
+    async def get_user_preferences(self, user_id: int) -> dict[str, Any]:
+        """사용자 설정 조회"""
+        assert self._conn is not None
+        cur = await self._conn.execute(
+            "SELECT preferences FROM users WHERE user_id = ?",
+            (user_id,),
+        )
+        row = await cur.fetchone()
+        if row and row[0]:
+            try:
+                return json.loads(row[0])
+            except json.JSONDecodeError as e:
+                logger.warning(f"Invalid preferences JSON for user {user_id}: {e}")
+                return {}
+        return {}
+
+    async def update_user_preferences(self, user_id: int, preferences: dict[str, Any]) -> bool:
+        """사용자 설정 업데이트 (병합)"""
+        assert self._conn is not None
+        # 기존 설정 가져오기
+        existing = await self.get_user_preferences(user_id)
+        # 병합
+        existing.update(preferences)
+        # 저장
+        await self._conn.execute(
+            "UPDATE users SET preferences = ? WHERE user_id = ?",
+            (json.dumps(existing, ensure_ascii=False), user_id),
+        )
+        await self._conn.commit()
+        return True
 
     async def get_user_by_id(self, user_id: int) -> dict[str, Any] | None:
         """사용자 ID로 조회"""
