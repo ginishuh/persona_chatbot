@@ -244,6 +244,9 @@ header h1 {
 }
 
 .current-room-badge {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
@@ -253,7 +256,7 @@ header h1 {
     border-radius: var(--radius-full);
     font-size: var(--font-sm);
     font-weight: 500;
-    max-width: 150px;
+    max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

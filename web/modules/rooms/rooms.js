@@ -213,12 +213,12 @@ export function renderRoomsUI() {
             } catch (_) {}
         }
         // room_id가 없으면 currentRoom을 null로 유지
+    } else if (hasCurrent) {
+        // 기존 currentRoom이 유효하면 해당 방 내용 로드
+        sendMessage({ action: 'room_load', room_id: currentRoom });
     }
 
     roomSelect.value = currentRoom || '';
-    if (currentRoom) {
-        // announce(`채팅방 전환: ${currentRoom}`); // announce is global, maybe import or ignore
-    }
 
     // 채팅 입력 상태 업데이트
     updateChatInputState(!!currentRoom);
