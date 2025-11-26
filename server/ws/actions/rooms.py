@@ -138,13 +138,16 @@ async def room_load(ctx: AppContext, websocket, data: dict):
     if ctx_obj and ctx.context_handler:
         ctx.context_handler.load_from_dict(ctx_obj)
 
+    # 페이지네이션: 최근 50개만 로드 (성능 최적화)
+    MESSAGE_LIMIT = 50
+
     # 가능한 경우, DB에 저장된 메시지를 읽어와 세션의 room 히스토리에 복원
     try:
         _, sess = sm.get_or_create_session(ctx, websocket, user_id)
         rid, room = sm.get_room(ctx, sess, room_id)
         if ctx.db_handler:
             try:
-                rows = await ctx.db_handler.list_messages(room_id, user_id)
+                rows = await ctx.db_handler.list_messages(room_id, user_id, limit=MESSAGE_LIMIT)
             except sqlite3.Error as exc:
                 logger.debug("room_load - DB에서 메시지 조회 실패", exc_info=exc)
                 rows = []
@@ -169,11 +172,20 @@ async def room_load(ctx: AppContext, websocket, data: dict):
 
     # 응답에 히스토리(있을 경우)를 포함시켜 클라이언트가 바로 렌더링
     history_rows = []
+    has_more = False
     try:
         if ctx.db_handler:
-            history_rows = await ctx.db_handler.list_messages(room_id, user_id)
+            history_rows = await ctx.db_handler.list_messages(room_id, user_id, limit=MESSAGE_LIMIT)
+            # 더 이전 메시지가 있는지 확인
+            if history_rows:
+                oldest_id = history_rows[0].get("message_id")
+                if oldest_id:
+                    older = await ctx.db_handler.list_messages(
+                        room_id, user_id, limit=1, before_id=oldest_id
+                    )
+                    has_more = len(older) > 0
             logger.debug(
-                f"room_load - including {len(history_rows)} history rows in response for room={room_id} user_id={user_id}"
+                f"room_load - including {len(history_rows)} history rows in response for room={room_id} user_id={user_id}, has_more={has_more}"
             )
     except sqlite3.Error as exc:
         logger.debug("room_load - 응답에 포함할 히스토리 조회 실패", exc_info=exc)
@@ -190,11 +202,89 @@ async def room_load(ctx: AppContext, websocket, data: dict):
                         "title": db_row.get("title") or room_id,
                         "context": ctx_obj,
                         "history": history_rows,
+                        "has_more": has_more,
                     },
                 },
             }
         )
     )
+
+
+async def load_more_messages(ctx: AppContext, websocket, data: dict):
+    """이전 메시지 추가 로드 (페이지네이션)
+
+    Args:
+        room_id: 채팅방 ID
+        before_id: 이 message_id 이전 메시지 로드
+    """
+    if not ctx.db_handler:
+        await websocket.send(
+            json.dumps(
+                {"action": "load_more_messages", "data": {"success": False, "error": "DB 없음"}}
+            )
+        )
+        return
+
+    user_id = sm.get_user_id_from_token(ctx, data)
+    if not user_id:
+        await websocket.send(
+            json.dumps(
+                {"action": "load_more_messages", "data": {"success": False, "error": "인증 필요"}}
+            )
+        )
+        return
+
+    room_id = data.get("room_id") or "default"
+    before_id = data.get("before_id")
+
+    if not before_id:
+        await websocket.send(
+            json.dumps(
+                {
+                    "action": "load_more_messages",
+                    "data": {"success": False, "error": "before_id 필요"},
+                }
+            )
+        )
+        return
+
+    MESSAGE_LIMIT = 50
+
+    try:
+        messages = await ctx.db_handler.list_messages(
+            room_id, user_id, limit=MESSAGE_LIMIT, before_id=before_id
+        )
+
+        # 더 이전 메시지가 있는지 확인
+        has_more = False
+        if messages:
+            oldest_id = messages[0].get("message_id")
+            if oldest_id:
+                older = await ctx.db_handler.list_messages(
+                    room_id, user_id, limit=1, before_id=oldest_id
+                )
+                has_more = len(older) > 0
+
+        await websocket.send(
+            json.dumps(
+                {
+                    "action": "load_more_messages",
+                    "data": {
+                        "success": True,
+                        "room_id": room_id,
+                        "messages": messages,
+                        "has_more": has_more,
+                    },
+                }
+            )
+        )
+    except sqlite3.Error as exc:
+        logger.error(f"load_more_messages - DB 오류: {exc}")
+        await websocket.send(
+            json.dumps(
+                {"action": "load_more_messages", "data": {"success": False, "error": "DB 오류"}}
+            )
+        )
 
 
 async def room_delete(ctx: AppContext, websocket, data: dict):

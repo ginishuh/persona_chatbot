@@ -37,7 +37,10 @@ import {
     refreshRetryCount, setRefreshRetryCount,
     refreshInProgress, setRefreshInProgress,
     setCurrentHistoryLimit,
-    currentHistoryLimit
+    currentHistoryLimit,
+    chatHasMore, setChatHasMore,
+    chatOldestMessageId, setChatOldestMessageId,
+    chatLoadingMore, setChatLoadingMore
 } from './modules/core/state.js';
 import {
     setPendingFileList,
@@ -58,6 +61,7 @@ import {
 } from './modules/files/pending.js';
 import {
     refreshChatRefs, addChatMessage, addCharacterMessage,
+    createChatMessageElement, createCharacterMessageElement,
     sendChatMessage, handleChatStream, handleChatComplete,
     bindChatEvents, updateChatInputState,
     updateTokenDisplay, requestStopAll
@@ -1377,10 +1381,17 @@ function handleMessage(msg) {
                 // UI 반영
                 loadContext(ctx);
                     try { console.debug('room_load: got history from server length:', Array.isArray(room.history) ? room.history.length : 0); } catch (_) {}
+                // 페이지네이션 상태 저장
+                setChatHasMore(!!room.has_more);
+                if (Array.isArray(room.history) && room.history.length > 0) {
+                    setChatOldestMessageId(room.history[0].message_id || null);
+                } else {
+                    setChatOldestMessageId(null);
+                }
                 // 서버에서 전달한 히스토리가 있으면 메시지 화면에 즉시 렌더
                 try {
                     if (Array.isArray(room.history) && room.history.length > 0) {
-                        renderHistorySnapshot(room.history);
+                        renderHistorySnapshot(room.history, room.has_more);
                     }
                 } catch (_) {}
                 // 사용자 프로필 필드 채움
@@ -1408,6 +1419,20 @@ function handleMessage(msg) {
                 log('방 삭제 완료(설정)', 'success');
             } else {
                 log(`방 삭제 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'load_more_messages':
+            setChatLoadingMore(false);
+            if (data.success) {
+                const messages = data.messages || [];
+                setChatHasMore(!!data.has_more);
+                if (messages.length > 0) {
+                    setChatOldestMessageId(messages[0].message_id || null);
+                    prependHistoryMessages(messages, data.has_more);
+                }
+            } else {
+                log(`이전 메시지 로드 실패: ${data.error}`, 'error');
             }
             break;
 
@@ -2476,12 +2501,21 @@ loadStoryBtn?.addEventListener('click', () => alert('스토리 불러오기 기�
 // 서사 이어하기 버튼
 resumeStoryBtn?.addEventListener('click', () => alert('스토리 이어하기 기능은 비활성화되었습니다.'));
 
-function renderHistorySnapshot(history) {
+function renderHistorySnapshot(history, hasMore = false) {
     try {
         chatMessages.innerHTML = '';
         if (!Array.isArray(history) || history.length === 0) {
             chatMessages.innerHTML = '<div class="chat-message system"><p>대화를 시작하세요</p></div>';
             return;
+        }
+        // "이전 메시지 불러오기" 버튼 (hasMore일 때만)
+        if (hasMore) {
+            const loadMoreBtn = document.createElement('button');
+            loadMoreBtn.id = 'loadMoreMessagesBtn';
+            loadMoreBtn.className = 'btn btn-sm load-more-btn';
+            loadMoreBtn.textContent = '↑ 이전 메시지 불러오기';
+            loadMoreBtn.addEventListener('click', loadMoreMessages);
+            chatMessages.appendChild(loadMoreBtn);
         }
         history.forEach(msg => {
             const role = msg.role === 'user' ? 'user' : 'assistant';
@@ -2508,6 +2542,68 @@ function renderHistorySnapshot(history) {
         announce('히스토리가 갱신되었습니다');
     } catch (e) {
         console.error('renderHistorySnapshot error', e);
+    }
+}
+
+function loadMoreMessages() {
+    if (chatLoadingMore || !chatHasMore || !chatOldestMessageId) return;
+    setChatLoadingMore(true);
+    const btn = document.getElementById('loadMoreMessagesBtn');
+    if (btn) btn.textContent = '로딩 중...';
+    sendMessage({
+        action: 'load_more_messages',
+        room_id: currentRoom,
+        before_id: chatOldestMessageId
+    });
+}
+
+function prependHistoryMessages(messages, hasMore) {
+    try {
+        if (!chatMessages || !Array.isArray(messages) || messages.length === 0) return;
+        // 기존 "Load more" 버튼 제거
+        const oldBtn = document.getElementById('loadMoreMessagesBtn');
+        if (oldBtn) oldBtn.remove();
+        // 스크롤 위치 기억
+        const scrollHeightBefore = chatMessages.scrollHeight;
+        // 새 메시지들을 맨 앞에 추가
+        const fragment = document.createDocumentFragment();
+        // hasMore면 새 버튼 먼저
+        if (hasMore) {
+            const loadMoreBtn = document.createElement('button');
+            loadMoreBtn.id = 'loadMoreMessagesBtn';
+            loadMoreBtn.className = 'btn btn-sm load-more-btn';
+            loadMoreBtn.textContent = '↑ 이전 메시지 불러오기';
+            loadMoreBtn.addEventListener('click', loadMoreMessages);
+            fragment.appendChild(loadMoreBtn);
+        }
+        messages.forEach(msg => {
+            const role = msg.role === 'user' ? 'user' : 'assistant';
+            const content = msg.content || '';
+            if (role === 'assistant') {
+                const parsed = parseMultiCharacterResponse(content);
+                if (parsed.length > 0) {
+                    parsed.forEach(p => {
+                        const el = createCharacterMessageElement(p.character, p.text);
+                        el.dataset.permanent = 'true';
+                        fragment.appendChild(el);
+                    });
+                    return;
+                }
+                const el = createChatMessageElement('assistant', content);
+                el.dataset.permanent = 'true';
+                fragment.appendChild(el);
+            } else {
+                const el = createChatMessageElement('user', content);
+                fragment.appendChild(el);
+            }
+        });
+        // 맨 앞에 삽입
+        chatMessages.insertBefore(fragment, chatMessages.firstChild);
+        // 스크롤 위치 유지
+        const scrollHeightAfter = chatMessages.scrollHeight;
+        chatMessages.scrollTop = scrollHeightAfter - scrollHeightBefore;
+    } catch (e) {
+        console.error('prependHistoryMessages error', e);
     }
 }
 
