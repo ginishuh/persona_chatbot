@@ -758,9 +758,14 @@ function applyUserPreferences(prefs) {
     if (prefs.theme) {
         document.documentElement.setAttribute('data-theme', prefs.theme);
         localStorage.setItem('theme', prefs.theme);
-        const themeBtn = document.getElementById('themeToggleBtn');
-        if (themeBtn) {
-            themeBtn.textContent = prefs.theme === 'dark' ? '☀️' : '🌙';
+        // 헤더 버튼
+        const headerBtn = document.getElementById('themeToggleBtn');
+        if (headerBtn) headerBtn.textContent = prefs.theme === 'dark' ? '☀️' : '🌙';
+        // 모바일 더보기 메뉴 버튼
+        const moreBtn = document.getElementById('moreThemeToggleBtn');
+        if (moreBtn) {
+            const icon = moreBtn.querySelector('[data-icon]');
+            if (icon) icon.dataset.icon = prefs.theme === 'dark' ? 'sun' : 'moon';
         }
     }
 }
@@ -774,19 +779,29 @@ function saveUserPreference(key, value) {
 }
 
 // 테마 토글 (localStorage + DOM + DB 저장 통합)
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    // DOM + localStorage 업데이트
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    // 버튼 아이콘 업데이트
+    const headerBtn = document.getElementById('themeToggleBtn');
+    const moreBtn = document.getElementById('moreThemeToggleBtn');
+    if (headerBtn) headerBtn.textContent = next === 'dark' ? '☀️' : '🌙';
+    if (moreBtn) {
+        const icon = moreBtn.querySelector('[data-icon]');
+        if (icon) icon.dataset.icon = next === 'dark' ? 'sun' : 'moon';
+    }
+    // DB에도 저장 (로그인 상태일 때)
+    saveUserPreference('theme', next);
+}
+
 function setupThemeToggle() {
-    const btn = document.getElementById('themeToggleBtn');
-    if (!btn) return;
-    btn.addEventListener('click', () => {
-        const current = document.documentElement.getAttribute('data-theme');
-        const next = current === 'dark' ? 'light' : 'dark';
-        // DOM + localStorage 업데이트
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('theme', next);
-        btn.textContent = next === 'dark' ? '☀️' : '🌙';
-        // DB에도 저장 (로그인 상태일 때)
-        saveUserPreference('theme', next);
-    });
+    const headerBtn = document.getElementById('themeToggleBtn');
+    const moreBtn = document.getElementById('moreThemeToggleBtn');
+    if (headerBtn) headerBtn.addEventListener('click', toggleTheme);
+    if (moreBtn) moreBtn.addEventListener('click', toggleTheme);
 }
 
 setupThemeToggle();
