@@ -40,7 +40,10 @@ import {
     currentHistoryLimit,
     chatHasMore, setChatHasMore,
     chatOldestMessageId, setChatOldestMessageId,
-    chatLoadingMore, setChatLoadingMore
+    chatLoadingMore, setChatLoadingMore,
+    narrativeHasMore, setNarrativeHasMore,
+    narrativeOldestId, setNarrativeOldestId,
+    narrativeLoadingMore, setNarrativeLoadingMore
 } from './modules/core/state.js';
 import {
     setPendingFileList,
@@ -1271,7 +1274,28 @@ function handleMessage(msg) {
 
         case 'get_narrative':
             if (data.success) {
-                updateNarrative(data.markdown);
+                setNarrativeHasMore(!!data.has_more);
+                setNarrativeOldestId(data.oldest_id || null);
+                updateNarrative(data.markdown, data.has_more);
+            }
+            break;
+
+        case 'load_more_narrative':
+            setNarrativeLoadingMore(false);
+            if (data.success) {
+                setNarrativeHasMore(!!data.has_more);
+                setNarrativeOldestId(data.oldest_id || null);
+                prependNarrativeContent(data.markdown, data.has_more);
+            } else {
+                setNarrativeLoadMoreButtonError(data.error || '로드 실패');
+                log(`이전 서사 로드 실패: ${data.error}`, 'error');
+            }
+            break;
+
+        case 'get_full_narrative':
+            if (data.success && pendingNarrativeExport) {
+                doNarrativeExport(data.markdown);
+                pendingNarrativeExport = false;
             }
             break;
 
@@ -1700,22 +1724,159 @@ if (sessionRetentionToggle) {
 }
 
 // ===== 서사 관리 =====
+let pendingNarrativeExport = false;
 
-function updateNarrative(markdown) {
-    if (!markdown || markdown.includes('아직 대화가 없습니다')) {
-        narrativeContent.innerHTML = '<p class="placeholder">대화가 진행되면 여기에 서사가 기록됩니다.</p>';
-        return;
-    }
-
-    // 간단한 마크다운 렌더링
-    let html = markdown
+/**
+ * 마크다운을 HTML로 변환
+ */
+function markdownToHtml(markdown) {
+    return markdown
         .replace(/^# (.+)$/gm, '<h1>$1</h1>')
         .replace(/^## (.+)$/gm, '<h2>$1</h2>')
         .replace(/^---$/gm, '<hr>')
         .replace(/\n\n/g, '</p><p>')
         .replace(/^(.+)$/gm, '<p>$1</p>');
+}
 
+/**
+ * "이전 서사 불러오기" 버튼 생성
+ */
+function createNarrativeLoadMoreButton() {
+    const btn = document.createElement('button');
+    btn.id = 'loadMoreNarrativeBtn';
+    btn.className = 'btn btn-sm load-more-btn';
+    btn.innerHTML = '<span>↑ 이전 서사 불러오기</span>';
+    btn.addEventListener('click', loadMoreNarrative);
+    return btn;
+}
+
+/**
+ * 서사 로드 버튼을 로딩 상태로 변경
+ */
+function setNarrativeLoadMoreButtonLoading() {
+    const btn = document.getElementById('loadMoreNarrativeBtn');
+    if (!btn) return;
+    btn.classList.add('loading');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="load-more-spinner"></span><span>로딩 중...</span>';
+}
+
+/**
+ * 서사 로드 버튼을 에러 상태로 변경
+ */
+function setNarrativeLoadMoreButtonError(errorMsg) {
+    const btn = document.getElementById('loadMoreNarrativeBtn');
+    if (!btn) return;
+    btn.classList.remove('loading');
+    btn.classList.add('error');
+    btn.disabled = false;
+    btn.innerHTML = `<span>⚠️ ${errorMsg || '로드 실패'} - 다시 시도</span>`;
+}
+
+/**
+ * 서사 패널 업데이트
+ */
+function updateNarrative(markdown, hasMore = false) {
+    if (!markdown || markdown.includes('아직 대화가 없습니다')) {
+        narrativeContent.innerHTML = '<p class="placeholder">대화가 진행되면 여기에 서사가 기록됩니다.</p>';
+        return;
+    }
+
+    // 마크다운 → HTML 변환
+    let html = '';
+
+    // "이전 서사 불러오기" 버튼 (hasMore일 때)
+    if (hasMore) {
+        html += '<div id="narrativeLoadMoreContainer"></div>';
+    }
+
+    html += markdownToHtml(markdown);
     narrativeContent.innerHTML = html;
+
+    // 버튼 삽입 (DOM에 추가된 후)
+    if (hasMore) {
+        const container = document.getElementById('narrativeLoadMoreContainer');
+        if (container) {
+            container.appendChild(createNarrativeLoadMoreButton());
+        }
+    }
+
+    // 최신 내용(아래)이 보이도록 스크롤
+    narrativeContent.scrollTop = narrativeContent.scrollHeight;
+}
+
+/**
+ * 이전 서사 로드
+ */
+function loadMoreNarrative() {
+    if (narrativeLoadingMore || !narrativeHasMore || !narrativeOldestId) return;
+    setNarrativeLoadingMore(true);
+    setNarrativeLoadMoreButtonLoading();
+    sendMessage({
+        action: 'load_more_narrative',
+        room_id: currentRoom,
+        before_id: narrativeOldestId
+    });
+}
+
+/**
+ * 이전 서사 내용을 맨 앞에 추가
+ */
+function prependNarrativeContent(markdown, hasMore) {
+    if (!narrativeContent || !markdown) return;
+
+    // 기존 버튼 제거
+    const oldBtn = document.getElementById('loadMoreNarrativeBtn');
+    const oldContainer = document.getElementById('narrativeLoadMoreContainer');
+    if (oldBtn) oldBtn.remove();
+    if (oldContainer) oldContainer.remove();
+
+    // 스크롤 위치 기억
+    const scrollHeightBefore = narrativeContent.scrollHeight;
+
+    // 새 컨텐츠 준비
+    let newHtml = '';
+    if (hasMore) {
+        newHtml += '<div id="narrativeLoadMoreContainer"></div>';
+    }
+    newHtml += markdownToHtml(markdown);
+
+    // 맨 앞에 삽입 (제목 다음에)
+    const h1 = narrativeContent.querySelector('h1');
+    if (h1) {
+        h1.insertAdjacentHTML('afterend', newHtml);
+    } else {
+        narrativeContent.insertAdjacentHTML('afterbegin', newHtml);
+    }
+
+    // 버튼 삽입
+    if (hasMore) {
+        const container = document.getElementById('narrativeLoadMoreContainer');
+        if (container) {
+            container.appendChild(createNarrativeLoadMoreButton());
+        }
+    }
+
+    // 스크롤 위치 유지
+    const scrollHeightAfter = narrativeContent.scrollHeight;
+    narrativeContent.scrollTop = scrollHeightAfter - scrollHeightBefore;
+}
+
+/**
+ * 서사 내보내기 실행 (전체 서사 마크다운으로)
+ */
+function doNarrativeExport(markdown) {
+    const defaultName = `서사_${new Date().toISOString().slice(0, 10)}`;
+    const filename = currentRoom || defaultName;
+
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    log('서사가 저장되었습니다.', 'success');
 }
 
 // 서사 내용을 마크다운으로 변환
@@ -1741,7 +1902,7 @@ function getNarrativeMarkdown() {
     return markdown;
 }
 
-// 서사 저장
+// 서사 저장 (전체 서사를 DB에서 가져와 내보내기)
 saveNarrativeBtn.addEventListener('click', () => {
     const hasContent = narrativeContent.innerText && !narrativeContent.innerText.includes('대화가 진행되면');
     if (!hasContent) {
@@ -1749,30 +1910,12 @@ saveNarrativeBtn.addEventListener('click', () => {
         return;
     }
 
-    const defaultName = `서사_${new Date().toISOString().slice(0, 10)}`;
-    const filename = prompt('채팅방(서사) 이름을 입력하세요:', currentRoom || defaultName) || currentRoom || defaultName;
-    if (!filename) return;
-
-    const exists = (typeof latestStories !== 'undefined') && latestStories.some(f => f.name === filename || f.filename === filename || f.filename === `${filename}.md`);
-    const append = !!exists; // 동일 파일명은 항상 덧붙이기 정책
-    if (exists) {
-        log(`기존 파일에 덧붙여 저장: ${filename}`, 'info');
-    }
-
-    // 서버 원본 서사를 사용하여 저장 (append 지원)
+    // 전체 서사를 DB에서 가져와 내보내기
+    pendingNarrativeExport = true;
     sendMessage({
-        action: 'save_story',
-        filename: filename,
-        use_server: true,
-        append: append
+        action: 'get_full_narrative',
+        room_id: currentRoom
     });
-    setCurrentRoom(filename);
-    try { localStorage.setItem(CURRENT_ROOM_KEY, currentRoom); } catch (_) {}
-    // 서사 저장과 동시에 방 설정도 저장
-    try {
-        const config = collectRoomConfig(currentRoom);
-        sendMessage({ action: 'room_save', room_id: currentRoom, config });
-    } catch (_) {}
 });
 
 // updateHeaderTokenDisplay imported from modules (Note: module implementation might differ)

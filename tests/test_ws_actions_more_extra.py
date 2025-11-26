@@ -24,7 +24,33 @@ class FakeWS:
         self.sent.append(msg)
 
 
-def make_ctx(tmp_path):
+class FakeDBHandler:
+    """서사 페이지네이션 테스트용 가짜 DB 핸들러"""
+
+    def __init__(self):
+        self.messages = []
+        self._msg_id = 0
+
+    def add_message(self, role: str, content: str):
+        self._msg_id += 1
+        self.messages.append({"message_id": self._msg_id, "role": role, "content": content})
+
+    async def list_messages(self, room_id, user_id, limit=None, before_id=None):
+        msgs = self.messages.copy()
+        if before_id:
+            msgs = [m for m in msgs if m["message_id"] < before_id]
+        if limit:
+            msgs = msgs[-limit:]
+        return msgs
+
+    async def count_messages(self, room_id, user_id, before_id=None):
+        msgs = self.messages.copy()
+        if before_id:
+            msgs = [m for m in msgs if m["message_id"] < before_id]
+        return len(msgs)
+
+
+def make_ctx(tmp_path, db_handler=None):
     ctx = AppContext(
         project_root=tmp_path,
         bind_host="127.0.0.1",
@@ -42,6 +68,7 @@ def make_ctx(tmp_path):
     ctx.workspace_handler = WorkspaceHandler(str(tmp_path / "persona_data"))
     ctx.token_usage_handler = TokenUsageHandler()
     ctx.token_usage_handler.session_usage = {}
+    ctx.db_handler = db_handler
     # sessions mapping used by session_manager
     ctx.sessions = {}
     ctx.websocket_to_session = {}
@@ -95,19 +122,26 @@ async def test_context_get_with_db(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_history_actions_and_snapshot(tmp_path, monkeypatch):
-    ctx = make_ctx(tmp_path)
+    # DB 핸들러 설정 (서사 페이지네이션용)
+    fake_db = FakeDBHandler()
+    ctx = make_ctx(tmp_path, db_handler=fake_db)
     ws = FakeWS()
 
     # auth
     monkeypatch.setattr(sm, "get_user_id_from_token", lambda c, d: 11)
 
-    # get_narrative when empty
+    # get_narrative when empty (DB 비어있음)
     await history_actions.get_narrative(ctx, ws, {})
     m = json.loads(ws.sent[-1])
     assert m["action"] == "get_narrative"
     assert m["data"]["success"] is True
+    assert "대화가 없습니다" in m["data"]["markdown"]
 
-    # add messages
+    # add messages to DB
+    fake_db.add_message("user", "hello")
+    fake_db.add_message("assistant", "hi")
+
+    # add to in-memory history for other tests
     _, sess = sm.get_or_create_session(ctx, ws, 11)
     _, room = sm.get_room(ctx, sess, None)
     room["history"].add_user_message("hello")

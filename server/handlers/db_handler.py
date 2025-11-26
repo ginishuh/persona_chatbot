@@ -643,6 +643,27 @@ class DBHandler:
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
 
+    async def count_messages(self, room_id: str, user_id: int, before_id: int | None = None) -> int:
+        """메시지 개수 조회 (user_id 기반)
+
+        Args:
+            room_id: 방 ID
+            user_id: 사용자 ID
+            before_id: 이 message_id 이전 메시지만 카운트 (페이지네이션용)
+
+        Returns:
+            메시지 개수
+        """
+        assert self._conn is not None
+        params: list[Any] = [room_id, user_id]
+        sql = "SELECT COUNT(*) FROM messages WHERE room_id=? AND user_id=?"
+        if before_id is not None:
+            sql += " AND message_id < ?"
+            params.append(before_id)
+        cur = await self._conn.execute(sql, params)
+        row = await cur.fetchone()
+        return row[0] if row else 0
+
     async def list_messages_range(
         self,
         room_id: str,
