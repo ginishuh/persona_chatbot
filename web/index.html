@@ -168,6 +168,14 @@
                         <p class="hint">응답 말미에 A)/B)/C) 형식의 선택지를 반드시 포함하도록 유도합니다.</p>
                     </div>
                     <div class="context-section">
+                        <label><span data-icon="mic"></span> 발화 방식</label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="singleSpeakerMode" />
+                            <span>한 번에 한 명씩 말하기(라운드 로빈)</span>
+                        </label>
+                        <p class="hint">다인 채팅에서 턴마다 한 캐릭터만 발화하도록 강제합니다.</p>
+                    </div>
+                    <div class="context-section">
                         <label><span data-icon="clock"></span> 자동 턴 진행</label>
                         <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
                             <label class="checkbox-label"><input type="checkbox" id="autoTurnToggle"> <span>자동턴 ON</span></label>
@@ -183,7 +191,7 @@
                                 <option value="unlimited">무제한</option>
                             </select>
                         </div>
-                        <p class="hint">단일 화자 모드와 함께 사용하세요. Gemini에서는 비활성화됩니다.</p>
+                        <p class="hint">위 '발화 방식'이 활성화되어야 합니다. Gemini에서는 비활성화됩니다.</p>
                     </div>
                 </div>
 
@@ -204,14 +212,6 @@
                             <span>대화/서술/효과음 분리</span>
                         </label>
                         <p class="hint">활성화 시: [캐릭터] 대사, *효과음*, 서술(태그없음)</p>
-                    </div>
-                    <div class="context-section">
-                        <label><span data-icon="mic"></span> 발화 방식</label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="singleSpeakerMode" />
-                            <span>한 번에 한 명씩 말하기(라운드 로빈)</span>
-                        </label>
-                        <p class="hint">다인 채팅에서 턴마다 한 캐릭터만 발화하도록 강제합니다.</p>
                     </div>
                     <!-- 프리셋 관리 -->
                     <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid var(--color-border);">
