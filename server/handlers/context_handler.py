@@ -525,3 +525,6 @@ Response Example:
             self.set_choice_count(context_dict["choice_count"])
         # 대화 모드는 누락 시에도 기본값으로 리셋하여 이전 방 설정이 남지 않도록 처리
         self.set_conversation_mode(context_dict.get("conversation_mode"))
+        # 세션 유지 설정
+        if "session_retention" in context_dict:
+            self.set_session_retention(context_dict["session_retention"])
