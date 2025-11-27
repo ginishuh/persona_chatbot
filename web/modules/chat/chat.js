@@ -487,6 +487,15 @@ export function requestStopAll() {
     log('응답/자동턴을 중단했습니다.', 'info');
 }
 
+// 토큰 수를 k 단위로 포맷 (1000 이상이면 1k, 1500이면 1.5k)
+function formatTokenCount(num) {
+    if (num >= 1000) {
+        const k = num / 1000;
+        return k % 1 === 0 ? `${k}k` : `${k.toFixed(1)}k`;
+    }
+    return String(num);
+}
+
 export function updateTokenDisplay(tokenUsage, provider = 'claude') {
     if (!tokenUsageDisplay) refreshChatRefs();
 
@@ -519,9 +528,9 @@ export function updateTokenDisplay(tokenUsage, provider = 'claude') {
         promptTok + completionTok;
 
     tokenUsageDisplay.classList.remove('hidden');
-    if (tokenPrompt) tokenPrompt.textContent = promptTok;
-    if (tokenCompletion) tokenCompletion.textContent = completionTok;
-    if (tokenTotal) tokenTotal.textContent = totalTok;
+    if (tokenPrompt) tokenPrompt.textContent = formatTokenCount(promptTok);
+    if (tokenCompletion) tokenCompletion.textContent = formatTokenCount(completionTok);
+    if (tokenTotal) tokenTotal.textContent = formatTokenCount(totalTok);
 }
 
 export function bindChatEvents() {
