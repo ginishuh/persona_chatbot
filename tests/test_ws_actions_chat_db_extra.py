@@ -31,8 +31,14 @@ def make_ctx(tmp_path):
     )
 
     class CH:
+        def __init__(self):
+            self._ctx = {}
+
         def get_context(self):
-            return {}
+            return self._ctx
+
+        def update_context(self, updates):
+            self._ctx.update(updates)
 
         def build_system_prompt(self, history_text):
             return "sys"
@@ -97,6 +103,9 @@ async def test_provider_session_update_and_clear(tmp_path, monkeypatch):
     ws = FakeWS()
     monkeypatch.setattr(sm, "get_user_id_from_token", lambda c, d: 60)
 
+    # 세션유지 ON으로 설정
+    ctx.context_handler.update_context({"session_retention": True})
+
     # create session and room
     _, sess = sm.get_or_create_session(ctx, ws, 60)
     _, room = sm.get_room(ctx, sess, None)
@@ -113,7 +122,9 @@ async def test_provider_session_update_and_clear(tmp_path, monkeypatch):
     await chat_actions.chat(ctx, ws, {"prompt": "x", "provider": "claude"})
     assert room.setdefault("provider_sessions", {}).get("claude") == "S1"
 
-    # second response no session_id -> should remove provider_sessions entry
+    # 세션유지 OFF로 변경 -> 세션 정보 삭제됨
+    ctx.context_handler.update_context({"session_retention": False})
+
     async def send_no_session(prompt, system_prompt, callback, session_id, model=None):
         await callback({})
         return {"success": True, "message": "m2", "token_info": None, "session_id": None}

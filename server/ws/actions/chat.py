@@ -45,7 +45,16 @@ async def chat(ctx: AppContext, websocket, data: dict):
 
     speaker = data.get("speaker")
 
+    # 세션유지 설정 확인 (방 컨텍스트에서)
+    session_retention = ctx.context_handler.get_context().get("session_retention", False)
+    logger.info(
+        f"[DEBUG] session_retention={session_retention}, provider_sessions={provider_sessions}"
+    )
+
     def get_provider_session_id():
+        # 세션유지가 OFF면 항상 None 반환 (새 세션)
+        if not session_retention:
+            return None
         # 캐릭터별 세션 지원: provider별 dict로 세션 분리
         sess = provider_sessions.get(provider)
         if speaker:
@@ -55,6 +64,7 @@ async def chat(ctx: AppContext, websocket, data: dict):
         return sess if not isinstance(sess, dict) else None
 
     provider_session_id = get_provider_session_id()
+    logger.info(f"[DEBUG] provider_session_id={provider_session_id}")
 
     # 성인 동의 확인
     try:
@@ -218,9 +228,9 @@ async def chat(ctx: AppContext, websocket, data: dict):
         session_key=str(user_id), room_id=rid  # 레거시 호환용
     )
 
-    # 프로바이더 세션ID 업데이트
+    # 프로바이더 세션ID 업데이트 (세션유지가 ON일 때만)
     new_session_id = result.get("session_id")
-    if new_session_id:
+    if session_retention and new_session_id:
         if speaker:
             # provider별 dict로 관리
             if not isinstance(provider_sessions.get(provider), dict):
@@ -228,7 +238,8 @@ async def chat(ctx: AppContext, websocket, data: dict):
             provider_sessions[provider][speaker] = new_session_id
         else:
             provider_sessions[provider] = new_session_id
-    else:
+    elif not session_retention:
+        # 세션유지 OFF면 세션 정보 삭제
         if speaker and isinstance(provider_sessions.get(provider), dict):
             provider_sessions[provider].pop(speaker, None)
         else:

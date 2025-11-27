@@ -758,7 +758,7 @@ header h1 {
     border-radius: var(--radius-md);
     word-wrap: break-word;
     white-space: pre-wrap;
-    font-size: var(--font-lg);
+    font-size: 1rem;
 }
 
 .chat-message.user .message-content {
@@ -1124,6 +1124,11 @@ footer {
     /* 서사기록 메뉴 버튼 표시 */
     .narrative-menu-btn {
         display: block;
+    }
+
+    /* 모바일에서 중앙 방 이름 숨김 (로고 가림 방지) */
+    .current-room-badge {
+        display: none;
     }
 
     /* 헤더 레이아웃 조정 */
