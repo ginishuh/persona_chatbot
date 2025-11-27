@@ -4,6 +4,7 @@ import pytest
 
 from server.core import session_manager as sm
 from server.core.app_context import AppContext
+from server.handlers.context_handler import ContextHandler
 from server.ws.actions import chat as chat_actions
 
 
@@ -135,3 +136,76 @@ async def test_provider_session_update_and_clear(tmp_path, monkeypatch):
     ctx.claude_handler = H2()
     await chat_actions.chat(ctx, ws, {"prompt": "y", "provider": "claude"})
     assert "claude" not in room.get("provider_sessions", {})
+
+
+@pytest.mark.asyncio
+async def test_load_from_dict_restores_session_retention(tmp_path, monkeypatch):
+    """실제 ContextHandler로 load_from_dict → chat 흐름에서 session_retention 유지 검증"""
+    ctx = AppContext(
+        project_root=tmp_path,
+        bind_host="127.0.0.1",
+        login_required=False,
+        jwt_secret="s",
+        jwt_algorithm="HS256",
+        access_ttl_seconds=60,
+        refresh_ttl_seconds=120,
+        login_username="",
+        login_rate_limit_max_attempts=5,
+        login_rate_limit_window_seconds=900,
+        token_expired_grace_seconds=60,
+    )
+
+    # 실제 ContextHandler 사용
+    ctx.context_handler = ContextHandler()
+    ctx.token_usage_handler = type(
+        "T", (), {"add_usage": lambda *a, **k: None, "get_formatted_summary": lambda *a, **k: {}}
+    )()
+    ctx.sessions = {}
+    ctx.websocket_to_session = {}
+
+    ws = FakeWS()
+    monkeypatch.setattr(sm, "get_user_id_from_token", lambda c, d: 70)
+
+    # 1. session_retention=True 설정 후 context를 dict로 저장
+    ctx.context_handler.set_session_retention(True)
+    saved_context = ctx.context_handler.get_context()
+    assert saved_context.get("session_retention") is True
+
+    # 2. 새 ContextHandler에서 load_from_dict로 복원
+    ctx.context_handler = ContextHandler()
+    ctx.context_handler.load_from_dict(saved_context)
+
+    # 3. session_retention이 복원되었는지 확인
+    restored_ctx = ctx.context_handler.get_context()
+    assert restored_ctx.get("session_retention") is True
+
+    # 4. chat 호출 시 session_id가 유지되는지 확인
+    captured_session_ids = []
+
+    async def capture_send(prompt, system_prompt, callback, session_id, model=None):
+        captured_session_ids.append(session_id)
+        await callback({})
+        return {"success": True, "message": "resp", "token_info": None, "session_id": "NEW_SESSION"}
+
+    class CaptureHandler:
+        send_message = staticmethod(capture_send)
+
+    ctx.claude_handler = CaptureHandler()
+    ctx.droid_handler = None
+    ctx.gemini_handler = None
+
+    # 첫 번째 chat: session_id=None 전달 (새 세션)
+    await chat_actions.chat(ctx, ws, {"prompt": "first", "provider": "claude"})
+    assert captured_session_ids[-1] is None
+
+    # 두 번째 chat: session_id="NEW_SESSION" 전달 (세션 유지)
+    await chat_actions.chat(ctx, ws, {"prompt": "second", "provider": "claude"})
+    assert captured_session_ids[-1] == "NEW_SESSION"
+
+    # 5. session_retention=False로 변경 후 다시 load_from_dict
+    ctx.context_handler.set_session_retention(False)
+    saved_off = ctx.context_handler.get_context()
+
+    ctx.context_handler = ContextHandler()
+    ctx.context_handler.load_from_dict(saved_off)
+    assert ctx.context_handler.get_context().get("session_retention") is False

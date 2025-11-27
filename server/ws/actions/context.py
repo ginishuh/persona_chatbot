@@ -72,6 +72,17 @@ async def set_context(ctx: AppContext, websocket, data: dict[str, Any]):
         ch.set_conversation_mode(conversation_mode)
     if session_retention is not None:
         ch.set_session_retention(session_retention)
+        # session_retention이 False로 변경되면 즉시 provider_sessions 정리
+        if not session_retention and prev_ctx.get("session_retention"):
+            try:
+                user_id = sm.get_user_id_from_token(ctx, data)
+                if user_id:
+                    _, sess = sm.get_or_create_session(ctx, websocket, user_id)
+                    _, room = sm.get_room(ctx, sess, room_id)
+                    room["provider_sessions"] = {}
+                    logger.debug("session_retention OFF: provider_sessions cleared")
+            except Exception:
+                pass
 
     # room_id가 있으면 DB에 저장 (user_id 기반)
     if room_id and ctx.db_handler:
