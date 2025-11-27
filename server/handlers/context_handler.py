@@ -24,6 +24,7 @@ class ContextHandler:
             "narrator_drive": "guide",  # describe | guide | direct
             "choice_policy": "off",  # off | require
             "choice_count": 3,
+            "session_retention": False,  # 세션 유지: True면 provider 세션 ID 유지
         }
 
     def set_world(self, world_description):
@@ -132,6 +133,10 @@ class ContextHandler:
         if n > 5:
             n = 5
         self.current_context["choice_count"] = n
+
+    def set_session_retention(self, enabled):
+        """세션 유지 설정 (True면 provider 세션 ID 유지)."""
+        self.current_context["session_retention"] = bool(enabled)
 
     def set_ai_provider(self, provider):
         """

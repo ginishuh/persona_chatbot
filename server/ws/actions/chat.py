@@ -47,9 +47,7 @@ async def chat(ctx: AppContext, websocket, data: dict):
 
     # 세션유지 설정 확인 (방 컨텍스트에서)
     session_retention = ctx.context_handler.get_context().get("session_retention", False)
-    logger.info(
-        f"[DEBUG] session_retention={session_retention}, provider_sessions={provider_sessions}"
-    )
+    logger.debug(f"session_retention={session_retention}")
 
     def get_provider_session_id():
         # 세션유지가 OFF면 항상 None 반환 (새 세션)
@@ -64,7 +62,7 @@ async def chat(ctx: AppContext, websocket, data: dict):
         return sess if not isinstance(sess, dict) else None
 
     provider_session_id = get_provider_session_id()
-    logger.info(f"[DEBUG] provider_session_id={provider_session_id}")
+    logger.debug(f"provider_session_id={provider_session_id[:8] if provider_session_id else None}")
 
     # 성인 동의 확인
     try:

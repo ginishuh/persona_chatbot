@@ -47,6 +47,7 @@ async def set_context(ctx: AppContext, websocket, data: dict[str, Any]):
     choice_policy = data.get("choice_policy")
     choice_count = data.get("choice_count")
     conversation_mode = data.get("conversation_mode")
+    session_retention = data.get("session_retention")
 
     prev_ctx = ch.get_context()
     ch.set_world(world)
@@ -69,6 +70,8 @@ async def set_context(ctx: AppContext, websocket, data: dict[str, Any]):
         ch.set_choice_count(choice_count)
     if conversation_mode is not None:
         ch.set_conversation_mode(conversation_mode)
+    if session_retention is not None:
+        ch.set_session_retention(session_retention)
 
     # room_id가 있으면 DB에 저장 (user_id 기반)
     if room_id and ctx.db_handler:
