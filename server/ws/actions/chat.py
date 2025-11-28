@@ -63,8 +63,8 @@ async def chat(ctx: AppContext, websocket, data: dict):
 
     provider_session_id = get_provider_session_id()
 
-    # 세션 연동 지원 프로바이더 (gemini는 미지원)
-    SESSION_PROVIDERS = {"claude", "droid"}
+    # 세션 연동 지원 프로바이더
+    SESSION_PROVIDERS = {"claude", "droid", "gemini"}
 
     # 세션 ON인데 현재 프로바이더 세션이 없으면 DB에서 해당 프로바이더만 복원
     # (다른 프로바이더 세션이 있어도 현재 프로바이더는 복원해야 함)

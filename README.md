@@ -295,7 +295,7 @@ asyncio.run(create_admin())
 참고
 
 * 서사(Markdown) 저장은 항상 **전체 대화 기준**입니다.
-* Gemini는 stateless만 지원합니다. (세션 유지 불가)
+* 세션 유지 토글은 **Claude/Droid/Gemini** 모두 지원합니다 (각 CLI의 `--resume` 기능 활용).
 * 세션 유지 OFF로 전환하면 기존 세션은 바로 초기화됩니다.
 * **세션 유지 ON일 때 맥락 길이 설정은 비활성화됩니다.** (CLI가 자체 맥락 관리)
 
@@ -358,7 +358,7 @@ npm install -g @google/gemini-cli
 gemini auth login
 ```
 
-* stateless 동작 (세션 유지 불가)
+* 세션 유지 지원 (UI 토글 연동)
 
 ### Droid (Factory.ai)
 

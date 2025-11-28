@@ -19,7 +19,9 @@ class GeminiHandler:
         self.chatbot_workspace = Path(__file__).parent.parent.parent / "chatbot_workspace"
         self.chatbot_workspace.mkdir(exist_ok=True)
 
-    async def start(self, system_prompt=None, model: str | None = None):
+    async def start(
+        self, system_prompt=None, model: str | None = None, resume_session_id: str | None = None
+    ):
         """Gemini 프로세스 시작"""
         if self.process is not None:
             logger.warning("Gemini process already running")
@@ -27,6 +29,11 @@ class GeminiHandler:
 
         try:
             args = [self.gemini_path, "--output-format", "stream-json"]
+
+            # 세션 이어가기
+            if resume_session_id:
+                args.extend(["--resume", str(resume_session_id)])
+                logger.info(f"Gemini resuming session: {resume_session_id}")
 
             # 모델 지정 (환경변수 또는 호출 파라미터)
             use_model = model or (self.default_model or None)
@@ -73,13 +80,13 @@ class GeminiHandler:
             prompt: 전송할 프롬프트
             system_prompt: 시스템 프롬프트 (캐릭터 설정 등) - 프롬프트에 포함됨
             callback: 각 JSON 라인을 받을 때 호출될 async 콜백 함수
-            session_id: (미사용) 향후 세션 지원용
+            session_id: 이어서 사용할 세션 ID (있다면 --resume으로 전달)
 
         Returns:
             최종 결과 딕셔너리
         """
         if self.process is None:
-            await self.start(model=model)
+            await self.start(model=model, resume_session_id=session_id)
 
         try:
             # System prompt를 프롬프트 앞에 추가
