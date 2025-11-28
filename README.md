@@ -297,6 +297,7 @@ asyncio.run(create_admin())
 * 서사(Markdown) 저장은 항상 **전체 대화 기준**입니다.
 * Gemini는 stateless만 지원합니다. (세션 유지 불가)
 * 세션 유지 OFF로 전환하면 기존 세션은 바로 초기화됩니다.
+* **세션 유지 ON일 때 맥락 길이 설정은 비활성화됩니다.** (CLI가 자체 맥락 관리)
 
 ### 4) 히스토리 & Export
 
@@ -391,11 +392,14 @@ persona_chatbot/
 │       ├── history_handler.py       # 대화 히스토리(윈도우) 관리
 │       ├── db_handler.py            # SQLite 영속 계층(aiosqlite)
 │       ├── workspace_handler.py     # 프리셋/파일(템플릿) 관리
+│       ├── token_usage_handler.py   # 토큰 사용량 집계
+│       ├── file_handler.py          # 파일 읽기/쓰기
+│       ├── git_handler.py           # Git 상태 조회
 │       └── mode_handler.py          # 모드 상태 관리(스크립트용)
 ├── web/
 │   ├── index.html                   # 레이아웃 UI(좌:설정 / 중:채팅 / 우:히스토리)
 │   ├── app.js                       # 프론트엔드 로직
-│   └── style.css                    # 라이트 테마 스타일
+│   └── style.css                    # 라이트/다크 테마 스타일
 ├── chatbot_workspace/
 │   ├── CLAUDE.md                    # 챗봇 전용 지침(샘플에서 복사)
 │   └── GEMINI.md                    # Gemini 전용 지침(샘플에서 복사)
@@ -680,8 +684,9 @@ lsof -i :8765
 
 * 🧠 맥락 길이 슬라이더를 늘리거나, `무제한` 토글을 켭니다.
 * ♻️ 세션 유지 토글을 ON으로 설정합니다(Claude/Droid만).
+  * 세션 유지 ON일 때 맥락 길이 설정은 비활성화됩니다 (CLI가 자체 맥락 관리).
 * 서버 기본값을 바꾸려면
-  `server/handlers/history_handler.py`의 `HistoryHandler(max_turns=50)` 값을 조정합니다.
+  `server/core/session_manager.py`의 `HistoryHandler(max_turns=30)` 값을 조정합니다.
 
 ---
 
