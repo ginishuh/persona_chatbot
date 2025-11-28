@@ -565,6 +565,11 @@ header h1 {
     pointer-events: none;
 }
 
+.context-section.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
 .select-input {
     width: 100%;
     background: var(--color-surface);

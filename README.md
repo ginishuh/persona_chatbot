@@ -216,7 +216,7 @@ docker compose down
 
 ```bash
 # 컨테이너 접속 후 관리자 계정 생성
-docker-compose -f docker-compose.yml.example exec persona-chatbot python3 -c "
+docker compose exec persona-chatbot python3 -c "
 from server.handlers.db_handler import DBHandler
 import asyncio
 
@@ -295,8 +295,9 @@ asyncio.run(create_admin())
 참고
 
 * 서사(Markdown) 저장은 항상 **전체 대화 기준**입니다.
-* Gemini는 stateless만 지원합니다. (세션 유지 불가)
+* 세션 유지 토글은 **Claude/Droid/Gemini** 모두 지원합니다 (각 CLI의 `--resume` 기능 활용).
 * 세션 유지 OFF로 전환하면 기존 세션은 바로 초기화됩니다.
+* **세션 유지 ON일 때 맥락 길이 설정은 비활성화됩니다.** (CLI가 자체 맥락 관리)
 
 ### 4) 히스토리 & Export
 
@@ -357,7 +358,7 @@ npm install -g @google/gemini-cli
 gemini auth login
 ```
 
-* stateless 동작 (세션 유지 불가)
+* 세션 유지 지원 (UI 토글 연동)
 
 ### Droid (Factory.ai)
 
@@ -391,15 +392,22 @@ persona_chatbot/
 │       ├── history_handler.py       # 대화 히스토리(윈도우) 관리
 │       ├── db_handler.py            # SQLite 영속 계층(aiosqlite)
 │       ├── workspace_handler.py     # 프리셋/파일(템플릿) 관리
+│       ├── token_usage_handler.py   # 토큰 사용량 집계
+│       ├── file_handler.py          # 파일 읽기/쓰기
+│       ├── git_handler.py           # Git 상태 조회
 │       └── mode_handler.py          # 모드 상태 관리(스크립트용)
 ├── web/
 │   ├── index.html                   # 레이아웃 UI(좌:설정 / 중:채팅 / 우:히스토리)
 │   ├── app.js                       # 프론트엔드 로직
-│   └── style.css                    # 라이트 테마 스타일
+│   └── style.css                    # 라이트/다크 테마 스타일
 ├── chatbot_workspace/
 │   ├── CLAUDE.md                    # 챗봇 전용 지침(샘플에서 복사)
 │   └── GEMINI.md                    # Gemini 전용 지침(샘플에서 복사)
 ├── persona_data/                    # 캐릭터/세계관 프리셋(별도 레포 권장)
+│   └── stories/                     # 서사 마크다운 저장 폴더 (구 STORIES/는 미사용)
+├── scripts/                         # 유틸리티 스크립트
+│   ├── ws_chat_test.py              # WebSocket 스모크 테스트
+│   └── sync_docs.py                 # AGENTS/CLAUDE/GEMINI.md 동기화
 ├── requirements.txt                 # Python 의존성
 └── README.md
 ```
@@ -424,7 +432,7 @@ persona_chatbot/
 | `clear_history`                           | 대화 히스토리 초기화               |
 | `get_narrative`                           | 히스토리 마크다운 가져오기            |
 | `get_history_settings`                    | 맥락 길이 설정 조회               |
-| `set_history_limit`                       | 맥락 길이 변경 (5~1000 또는 null) |
+| `set_history_limit`                       | 맥락 길이 변경 (5~60, 무제한은 null) |
 | `get_session_settings`                    | 세션 유지 설정 조회               |
 | `set_session_retention`                   | 세션 유지 토글(true/false)      |
 | `reset_sessions`                          | 모든 세션 ID 초기화              |
@@ -680,8 +688,14 @@ lsof -i :8765
 
 * 🧠 맥락 길이 슬라이더를 늘리거나, `무제한` 토글을 켭니다.
 * ♻️ 세션 유지 토글을 ON으로 설정합니다(Claude/Droid만).
+  * 세션 유지 ON일 때 맥락 길이 설정은 비활성화됩니다 (CLI가 자체 맥락 관리).
 * 서버 기본값을 바꾸려면
-  `server/handlers/history_handler.py`의 `HistoryHandler(max_turns=50)` 값을 조정합니다.
+  `server/core/session_manager.py`의 `HistoryHandler(max_turns=30)` 값을 조정합니다.
+
+### 빠른 진단 & 문서 갱신
+
+* **WebSocket 스모크 테스트**: `python scripts/ws_chat_test.py --provider claude --prompt "테스트"`
+* **문서 동기화**: `python scripts/sync_docs.py` — `docs/agents_base_en.md` 기준으로 AGENTS/CLAUDE/GEMINI.md 자동 생성
 
 ---
 
