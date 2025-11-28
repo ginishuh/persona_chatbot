@@ -250,7 +250,8 @@ async def chat(ctx: AppContext, websocket, data: dict):
             provider_sessions.pop(provider, None)
 
     # provider_sessions를 DB에 자동 저장 (서버 재시작 후 세션 복원용)
-    if ctx.db_handler and provider_sessions:
+    # 빈 객체도 저장해야 세션 OFF 시 DB에서 삭제됨
+    if ctx.db_handler:
         try:
             provider_sessions_json = json.dumps(provider_sessions, ensure_ascii=False)
             # room 정보 가져와서 upsert (provider_sessions만 업데이트)

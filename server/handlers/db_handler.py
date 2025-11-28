@@ -521,7 +521,8 @@ class DBHandler:
             title: 방 제목
             context_json: 컨텍스트 JSON
             provider_sessions_json: AI 프로바이더 세션 ID JSON (선택)
-                - None 또는 '{}': 기존 값 유지 (UPDATE 시)
+                - None: 기존 값 유지 (UPDATE 시)
+                - '{}': 빈 객체로 초기화 (세션 삭제)
                 - 실제 JSON: 새 값으로 업데이트
         """
         assert self._conn is not None
@@ -534,7 +535,7 @@ class DBHandler:
                   title=excluded.title,
                   context=excluded.context,
                   provider_sessions=CASE
-                    WHEN ? IS NULL OR ? = '{}' THEN provider_sessions
+                    WHEN ? IS NULL THEN provider_sessions
                     ELSE ?
                   END,
                   updated_at=CURRENT_TIMESTAMP
@@ -545,8 +546,7 @@ class DBHandler:
                     title,
                     context_json,
                     provider_sessions_json,  # INSERT용
-                    provider_sessions_json,  # CASE 조건1
-                    provider_sessions_json,  # CASE 조건2
+                    provider_sessions_json,  # CASE 조건
                     provider_sessions_json,  # CASE ELSE
                 ),
             )
