@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 class GeminiHandler:
     """Gemini CLI 프로세스 관리 및 통신"""
 
+    # 세션 에러 감지용 키워드
+    SESSION_ERROR_KEYWORDS = ("session", "expired", "invalid", "resume", "not found")
+
     def __init__(self, gemini_path=None):
         # 환경 변수 또는 기본값 사용
         self.gemini_path = gemini_path or os.getenv("GEMINI_PATH", "gemini")
@@ -18,6 +21,8 @@ class GeminiHandler:
         # 챗봇 전용 작업 디렉토리
         self.chatbot_workspace = Path(__file__).parent.parent.parent / "chatbot_workspace"
         self.chatbot_workspace.mkdir(exist_ok=True)
+        # 동시 호출 방지용 락
+        self._lock = asyncio.Lock()
 
     async def start(
         self, system_prompt=None, model: str | None = None, resume_session_id: str | None = None
@@ -70,6 +75,11 @@ class GeminiHandler:
         finally:
             self.process = None
 
+    def _check_session_error(self, text: str) -> bool:
+        """텍스트에서 세션 에러 키워드 감지"""
+        text_lower = text.lower()
+        return any(kw in text_lower for kw in self.SESSION_ERROR_KEYWORDS)
+
     async def send_message(
         self, prompt, system_prompt=None, callback=None, session_id=None, model: str | None = None
     ):
@@ -85,123 +95,152 @@ class GeminiHandler:
         Returns:
             최종 결과 딕셔너리
         """
-        if self.process is None:
-            await self.start(model=model, resume_session_id=session_id)
+        async with self._lock:  # 동시 호출 방지
+            if self.process is None:
+                await self.start(model=model, resume_session_id=session_id)
 
-        try:
-            # System prompt를 프롬프트 앞에 추가
-            full_prompt = prompt
-            if system_prompt:
-                full_prompt = f"{system_prompt}\n\n=== 사용자 메시지 ===\n{prompt}"
-
-            # 프롬프트 전송
-            prompt_with_newline = full_prompt + "\n"
-            self.process.stdin.write(prompt_with_newline.encode("utf-8"))
-            await self.process.stdin.drain()
-            self.process.stdin.close()  # stdin 닫기 (중요!)
-
-            # 응답 수신 (스트리밍)
-            assistant_message = ""
-            current_session_id = session_id
-
-            # stderr를 비동기로 읽어서 버퍼 막힘 방지
-            async def read_stderr():
-                while True:
-                    line = await self.process.stderr.readline()
-                    if not line:
-                        break
-                    logger.debug(f"Gemini stderr: {line.decode('utf-8').strip()}")
-
-            stderr_task = asyncio.create_task(read_stderr())
+            stderr_lines = []  # stderr 수집용
 
             try:
-                # stdout 읽기 (타임아웃 추가)
-                while True:
-                    try:
-                        line = await asyncio.wait_for(
-                            self.process.stdout.readline(), timeout=120.0  # 2분 타임아웃
-                        )
+                # System prompt를 프롬프트 앞에 추가
+                full_prompt = prompt
+                if system_prompt:
+                    full_prompt = f"{system_prompt}\n\n=== 사용자 메시지 ===\n{prompt}"
 
+                # 프롬프트 전송
+                prompt_with_newline = full_prompt + "\n"
+                self.process.stdin.write(prompt_with_newline.encode("utf-8"))
+                await self.process.stdin.drain()
+                self.process.stdin.close()  # stdin 닫기 (중요!)
+
+                # 응답 수신 (스트리밍)
+                assistant_message = ""
+                current_session_id = session_id
+
+                # stderr를 비동기로 읽어서 버퍼 막힘 방지 + 수집
+                async def read_stderr():
+                    while True:
+                        line = await self.process.stderr.readline()
                         if not line:
                             break
+                        line_text = line.decode("utf-8").strip()
+                        stderr_lines.append(line_text)
+                        logger.debug(f"Gemini stderr: {line_text}")
 
+                stderr_task = asyncio.create_task(read_stderr())
+
+                try:
+                    # stdout 읽기 (타임아웃 추가)
+                    while True:
                         try:
-                            data = json.loads(line.decode("utf-8").strip())
+                            line = await asyncio.wait_for(
+                                self.process.stdout.readline(), timeout=120.0  # 2분 타임아웃
+                            )
 
-                            # 세션 ID 저장 (있는 경우)
-                            if "session_id" in data:
-                                current_session_id = data.get("session_id")
-                                logger.info(f"Gemini Session ID: {current_session_id}")
-                                # 프론트엔드에 세션 시작 알림
+                            if not line:
+                                break
+
+                            try:
+                                data = json.loads(line.decode("utf-8").strip())
+
+                                # 세션 ID 저장 (있는 경우)
+                                if "session_id" in data:
+                                    current_session_id = data.get("session_id")
+                                    logger.info(f"Gemini Session ID: {current_session_id}")
+                                    # 프론트엔드에 세션 시작 알림
+                                    if callback:
+                                        await callback(
+                                            {
+                                                "type": "system",
+                                                "subtype": "gemini_init",
+                                                "session_id": current_session_id,
+                                            }
+                                        )
+
+                                # 콜백 호출 (Claude 형식으로 변환)
                                 if callback:
-                                    await callback(
-                                        {
-                                            "type": "system",
-                                            "subtype": "gemini_init",
-                                            "session_id": current_session_id,
-                                        }
-                                    )
+                                    # Gemini 형식: {"type":"message","role":"assistant","content":"...","delta":true}
+                                    if (
+                                        data.get("type") == "message"
+                                        and data.get("role") == "assistant"
+                                    ):
+                                        content = data.get("content", "")
+                                        if content and data.get("delta"):
+                                            # Claude 형식으로 변환: content_block_delta
+                                            claude_format = {
+                                                "type": "content_block_delta",
+                                                "delta": {"text": content},
+                                            }
+                                            await callback(claude_format)
+                                            assistant_message += content
 
-                            # 콜백 호출 (Claude 형식으로 변환)
-                            if callback:
-                                # Gemini 형식: {"type":"message","role":"assistant","content":"...","delta":true}
-                                if (
-                                    data.get("type") == "message"
-                                    and data.get("role") == "assistant"
-                                ):
-                                    content = data.get("content", "")
-                                    if content and data.get("delta"):
-                                        # Claude 형식으로 변환: content_block_delta
-                                        claude_format = {
-                                            "type": "content_block_delta",
-                                            "delta": {"text": content},
-                                        }
-                                        await callback(claude_format)
-                                        assistant_message += content
+                            except json.JSONDecodeError:
+                                # JSON이 아닌 일반 텍스트일 수 있음
+                                line_text = line.decode("utf-8").strip()
+                                if line_text and callback:
+                                    claude_format = {
+                                        "type": "content_block_delta",
+                                        "delta": {"text": line_text},
+                                    }
+                                    await callback(claude_format)
+                                    assistant_message += line_text
+                                logger.debug(f"Non-JSON output: {line_text}")
+                                continue
 
-                        except json.JSONDecodeError:
-                            # JSON이 아닌 일반 텍스트일 수 있음
-                            line_text = line.decode("utf-8").strip()
-                            if line_text and callback:
-                                claude_format = {
-                                    "type": "content_block_delta",
-                                    "delta": {"text": line_text},
-                                }
-                                await callback(claude_format)
-                                assistant_message += line_text
-                            logger.debug(f"Non-JSON output: {line_text}")
-                            continue
+                        except TimeoutError:
+                            logger.error("Timeout waiting for Gemini response")
+                            break
 
-                    except TimeoutError:
-                        logger.error("Timeout waiting for Gemini response")
-                        break
+                finally:
+                    stderr_task.cancel()
+                    try:
+                        await stderr_task
+                    except asyncio.CancelledError:
+                        pass
 
-            finally:
-                stderr_task.cancel()
+                # 프로세스 종료 대기 및 returncode 확인
+                returncode = await self.process.wait()
+                self.process = None
 
-            # 프로세스 종료 대기
-            await self.process.wait()
-            self.process = None
+                # stderr에서 세션 에러 감지
+                stderr_text = "\n".join(stderr_lines)
+                session_error_in_stderr = self._check_session_error(stderr_text)
 
-            # Gemini는 토큰 정보를 제공하지 않으므로 None으로 반환
-            return {
-                "success": True,
-                "message": assistant_message,
-                "token_info": None,
-                "session_id": current_session_id,
-                "session_expired": False,
-            }
+                # 비정상 종료 또는 stderr에 세션 에러 키워드가 있으면
+                if returncode != 0:
+                    logger.warning(f"Gemini exited with code {returncode}, stderr: {stderr_text}")
+                    return {
+                        "success": False,
+                        "error": f"Gemini exited with code {returncode}",
+                        "token_info": None,
+                        "session_id": current_session_id,
+                        "session_expired": session_error_in_stderr,
+                    }
 
-        except Exception as e:
-            logger.error(f"Error sending message: {e}")
-            await self.stop()
-            error_msg = str(e).lower()
-            session_error = any(
-                kw in error_msg for kw in ("session", "expired", "invalid", "resume")
-            )
-            return {
-                "success": False,
-                "error": str(e),
-                "session_id": session_id,
-                "session_expired": session_error,
-            }
+                # 정상 종료지만 stderr에 세션 에러 힌트가 있는 경우
+                if session_error_in_stderr:
+                    logger.warning(f"Gemini session error detected in stderr: {stderr_text}")
+
+                # Gemini는 토큰 정보를 제공하지 않으므로 None으로 반환
+                return {
+                    "success": True,
+                    "message": assistant_message,
+                    "token_info": None,
+                    "session_id": current_session_id,
+                    "session_expired": session_error_in_stderr,
+                }
+
+            except Exception as e:
+                logger.error(f"Error sending message: {e}")
+                await self.stop()
+                error_msg = str(e).lower()
+                stderr_text = "\n".join(stderr_lines)
+                session_error = self._check_session_error(error_msg) or self._check_session_error(
+                    stderr_text
+                )
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "session_id": session_id,
+                    "session_expired": session_error,
+                }
