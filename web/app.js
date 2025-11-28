@@ -675,7 +675,6 @@ function applyHistoryLimitUI(limit) {
         if (!unlimited && typeof limit === 'number') {
             historyLengthSlider.value = limit;
         }
-        historyLengthSlider.disabled = unlimited;
     }
 
     if (historyUnlimitedToggle) {
@@ -685,6 +684,9 @@ function applyHistoryLimitUI(limit) {
     if (historyLengthValue) {
         historyLengthValue.textContent = formatHistoryLimitLabel(limit);
     }
+
+    // 슬라이더 비활성화 상태 갱신 (무제한/세션유지 조건 통합)
+    updateHistorySliderDisabled();
 }
 
 function sendHistoryLimit(limit) {
@@ -733,6 +735,25 @@ function setupHistoryControls() {
 
 setupHistoryControls();
 
+// 맥락길이 슬라이더 비활성화 조건: 무제한 OR 세션유지 ON
+function updateHistorySliderDisabled() {
+    const isUnlimited = historyUnlimitedToggle?.checked;
+    const isSessionRetention = sessionRetentionToggle?.checked;
+    const shouldDisableSlider = isUnlimited || isSessionRetention;
+    const shouldDisableSection = isSessionRetention; // 세션유지 ON이면 섹션 전체 비활성화
+
+    const section = historyLengthSlider?.closest('.context-section');
+    if (section) {
+        section.classList.toggle('disabled', shouldDisableSection);
+    }
+    if (historyLengthSlider) {
+        historyLengthSlider.disabled = shouldDisableSlider;
+    }
+    if (historyUnlimitedToggle) {
+        historyUnlimitedToggle.disabled = isSessionRetention;
+    }
+}
+
 function applySessionRetentionUI(enabled) {
     if (sessionRetentionToggle) {
         sessionRetentionToggle.checked = !!enabled;
@@ -744,12 +765,16 @@ function applySessionRetentionUI(enabled) {
         sessionStatusBadge.textContent = isOn ? 'ON' : 'OFF';
         sessionStatusBadge.classList.toggle('on', isOn);
     }
+    // 세션유지 상태 반영 후 슬라이더 비활성화 갱신
+    updateHistorySliderDisabled();
 }
 
 function setupSessionRetentionControls() {
     if (!sessionRetentionToggle) return;
     sessionRetentionToggle.addEventListener('change', () => {
         if (!sessionSettingsLoaded) return;
+        // 세션유지 상태 변경 시 슬라이더 비활성화 갱신
+        updateHistorySliderDisabled();
         sendMessage({
             action: 'set_session_retention',
             enabled: sessionRetentionToggle.checked
