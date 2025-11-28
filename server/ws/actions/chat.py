@@ -63,9 +63,17 @@ async def chat(ctx: AppContext, websocket, data: dict):
 
     provider_session_id = get_provider_session_id()
 
+    # 세션 연동 지원 프로바이더 (gemini는 미지원)
+    SESSION_PROVIDERS = {"claude", "droid"}
+
     # 세션 ON인데 현재 프로바이더 세션이 없으면 DB에서 해당 프로바이더만 복원
     # (다른 프로바이더 세션이 있어도 현재 프로바이더는 복원해야 함)
-    if session_retention and provider_session_id is None and ctx.db_handler:
+    if (
+        session_retention
+        and provider in SESSION_PROVIDERS
+        and provider_session_id is None
+        and ctx.db_handler
+    ):
         try:
             db_room = await ctx.db_handler.get_room(rid, user_id)
             if db_room:
@@ -248,37 +256,38 @@ async def chat(ctx: AppContext, websocket, data: dict):
         session_key=str(user_id), room_id=rid  # 레거시 호환용
     )
 
-    # 프로바이더 세션ID 업데이트
+    # 프로바이더 세션ID 업데이트 (세션 지원 프로바이더만)
     new_session_id = result.get("session_id")
     should_save_to_db = False
 
-    if session_retention and new_session_id:
-        # 세션유지 ON + 새 세션 → 메모리 및 DB 저장
-        if speaker:
-            if not isinstance(provider_sessions.get(provider), dict):
-                provider_sessions[provider] = {}
-            provider_sessions[provider][speaker] = new_session_id
-        else:
-            provider_sessions[provider] = new_session_id
-        should_save_to_db = True
-    elif not session_retention:
-        # 세션유지 OFF → 메모리만 비움, DB는 건드리지 않음 (토글 실수 방지)
-        if speaker and isinstance(provider_sessions.get(provider), dict):
-            provider_sessions[provider].pop(speaker, None)
-        else:
-            provider_sessions.pop(provider, None)
-        # should_save_to_db = False (DB 보존)
+    if provider in SESSION_PROVIDERS:
+        if session_retention and new_session_id:
+            # 세션유지 ON + 새 세션 → 메모리 및 DB 저장
+            if speaker:
+                if not isinstance(provider_sessions.get(provider), dict):
+                    provider_sessions[provider] = {}
+                provider_sessions[provider][speaker] = new_session_id
+            else:
+                provider_sessions[provider] = new_session_id
+            should_save_to_db = True
+        elif not session_retention:
+            # 세션유지 OFF → 메모리만 비움, DB는 건드리지 않음 (토글 실수 방지)
+            if speaker and isinstance(provider_sessions.get(provider), dict):
+                provider_sessions[provider].pop(speaker, None)
+            else:
+                provider_sessions.pop(provider, None)
+            # should_save_to_db = False (DB 보존)
 
-    # 프로바이더가 세션 에러 반환 시 해당 세션만 DB에서 삭제
-    # (실제로 죽은 세션만 정리 - 만료/인증 에러)
-    session_error = result.get("session_expired") or result.get("session_invalid")
-    if session_error and provider_session_id:
-        logger.info(f"세션 에러 감지 - DB에서 세션 삭제: provider={provider}")
-        if speaker and isinstance(provider_sessions.get(provider), dict):
-            provider_sessions[provider].pop(speaker, None)
-        else:
-            provider_sessions.pop(provider, None)
-        should_save_to_db = True
+        # 프로바이더가 세션 에러 반환 시 해당 세션만 DB에서 삭제
+        # (실제로 죽은 세션만 정리 - 만료/인증 에러)
+        session_error = result.get("session_expired") or result.get("session_invalid")
+        if session_error and provider_session_id:
+            logger.info(f"세션 에러 감지 - DB에서 세션 삭제: provider={provider}")
+            if speaker and isinstance(provider_sessions.get(provider), dict):
+                provider_sessions[provider].pop(speaker, None)
+            else:
+                provider_sessions.pop(provider, None)
+            should_save_to_db = True
 
     # provider_sessions를 DB에 저장 (세션 ON 저장 또는 세션 에러 정리 시만)
     if ctx.db_handler and should_save_to_db:
