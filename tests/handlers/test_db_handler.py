@@ -71,6 +71,80 @@ class TestDBHandler:
         assert room["context"] == new_context
 
     @pytest.mark.asyncio
+    async def test_upsert_room_with_provider_sessions(self, db):
+        """provider_sessions 저장 및 조회 테스트 (서버 재시작 후 세션 복원용)"""
+        room_id = "session_test_room"
+        user_id = 1
+
+        # provider_sessions 포함하여 방 생성
+        provider_sessions = '{"claude": "abc-123", "gemini": "def-456"}'
+        await db.upsert_room(
+            room_id, user_id, "세션 테스트 방", '{"test": true}', provider_sessions
+        )
+
+        # 조회 확인
+        room = await db.get_room(room_id, user_id)
+        assert room is not None
+        assert room["provider_sessions"] == provider_sessions
+
+    @pytest.mark.asyncio
+    async def test_upsert_room_provider_sessions_update(self, db):
+        """provider_sessions 업데이트 테스트"""
+        room_id = "session_update_room"
+        user_id = 1
+
+        # 초기 생성 (provider_sessions 없이)
+        await db.upsert_room(room_id, user_id, "방 제목", "{}")
+
+        room = await db.get_room(room_id, user_id)
+        assert room["provider_sessions"] == "{}"
+
+        # provider_sessions 업데이트
+        new_sessions = '{"claude": "new-session-id"}'
+        await db.upsert_room(room_id, user_id, "방 제목", "{}", new_sessions)
+
+        room = await db.get_room(room_id, user_id)
+        assert room["provider_sessions"] == new_sessions
+
+    @pytest.mark.asyncio
+    async def test_upsert_room_provider_sessions_preserved_on_null(self, db):
+        """provider_sessions가 None으로 전달되면 기존 값 유지 테스트"""
+        room_id = "session_preserve_room"
+        user_id = 1
+
+        # 초기 생성 (provider_sessions 있음)
+        initial_sessions = '{"claude": "keep-this"}'
+        await db.upsert_room(room_id, user_id, "방 제목", "{}", initial_sessions)
+
+        # provider_sessions 없이 업데이트 (기존 값 유지되어야 함)
+        await db.upsert_room(room_id, user_id, "새 제목", '{"new": true}', None)
+
+        room = await db.get_room(room_id, user_id)
+        assert room["title"] == "새 제목"
+        # COALESCE로 기존 값 유지
+        assert room["provider_sessions"] == initial_sessions
+
+    @pytest.mark.asyncio
+    async def test_upsert_room_provider_sessions_clear_with_empty(self, db):
+        """provider_sessions를 빈 객체로 전달하면 초기화되는 테스트"""
+        room_id = "session_clear_room"
+        user_id = 1
+
+        # 초기 생성 (provider_sessions 있음)
+        initial_sessions = '{"claude": "old-session"}'
+        await db.upsert_room(room_id, user_id, "방 제목", "{}", initial_sessions)
+
+        room = await db.get_room(room_id, user_id)
+        assert room["provider_sessions"] == initial_sessions
+
+        # 빈 객체로 업데이트 (세션 초기화)
+        await db.upsert_room(room_id, user_id, "방 제목", "{}", "{}")
+
+        room = await db.get_room(room_id, user_id)
+        # 빈 객체로 덮어쓰기 됨
+        assert room["provider_sessions"] == "{}"
+
+    @pytest.mark.asyncio
     async def test_list_rooms(self, db):
         """채팅방 목록 조회 테스트"""
         user_id = 1

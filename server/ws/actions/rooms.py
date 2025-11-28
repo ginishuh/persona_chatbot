@@ -81,8 +81,21 @@ async def room_save(ctx: AppContext, websocket, data: dict):
 
     title = conf.get("title") or room_id
     context_json = json.dumps(conf.get("context") or {}, ensure_ascii=False)
+
+    # 메모리의 provider_sessions를 DB에 저장 (서버 재시작 후 세션 복원용)
+    provider_sessions_json = None
+    try:
+        _, sess = sm.get_or_create_session(ctx, websocket, user_id)
+        rid, room = sm.get_room(ctx, sess, room_id)
+        provider_sessions = room.get("provider_sessions", {})
+        if provider_sessions:
+            provider_sessions_json = json.dumps(provider_sessions, ensure_ascii=False)
+            logger.debug(f"room_save - provider_sessions 저장: {provider_sessions_json[:100]}...")
+    except Exception as exc:
+        logger.debug(f"room_save - provider_sessions 가져오기 실패: {exc}")
+
     logger.debug("upsert_room 호출 전")
-    await ctx.db_handler.upsert_room(room_id, user_id, title, context_json)
+    await ctx.db_handler.upsert_room(room_id, user_id, title, context_json, provider_sessions_json)
     logger.debug("upsert_room 완료")
     logger.debug(f"room_save - upserted room: user_id={user_id} room_id={room_id} title={title}")
     logger.debug(f"room_save - upsert_room completed for user_id={user_id} room_id={room_id}")
@@ -138,6 +151,16 @@ async def room_load(ctx: AppContext, websocket, data: dict):
     if ctx_obj and ctx.context_handler:
         ctx.context_handler.load_from_dict(ctx_obj)
 
+    # DB에서 provider_sessions 복원 (서버 재시작 후 세션 이어가기용)
+    provider_sessions_restored = {}
+    try:
+        ps_json = db_row.get("provider_sessions") or "{}"
+        provider_sessions_restored = json.loads(ps_json)
+        if provider_sessions_restored:
+            logger.debug(f"room_load - provider_sessions 복원: {ps_json[:100]}...")
+    except (json.JSONDecodeError, TypeError) as exc:
+        logger.debug(f"room_load - provider_sessions JSON 파싱 실패: {exc}")
+
     # 페이지네이션: 최근 50개만 로드 (성능 최적화)
     MESSAGE_LIMIT = 50
 
@@ -145,6 +168,11 @@ async def room_load(ctx: AppContext, websocket, data: dict):
     try:
         _, sess = sm.get_or_create_session(ctx, websocket, user_id)
         rid, room = sm.get_room(ctx, sess, room_id)
+
+        # provider_sessions 메모리에 복원
+        if provider_sessions_restored:
+            room["provider_sessions"] = provider_sessions_restored
+            logger.debug(f"room_load - provider_sessions 메모리 복원 완료: {room_id}")
         if ctx.db_handler:
             try:
                 rows = await ctx.db_handler.list_messages(room_id, user_id, limit=MESSAGE_LIMIT)

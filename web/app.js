@@ -862,6 +862,18 @@ function attemptTokenRefresh() {
     }
 }
 
+// 채팅 중 인증 에러 발생 시 토큰 갱신 시도
+window.addEventListener('auth:chatError', () => {
+    if (refreshToken && !refreshInProgress) {
+        log('채팅 인증 에러 - 토큰 갱신 시도', 'info');
+        addChatMessage('system', '세션 갱신 중... 잠시 후 다시 시도해주세요.');
+        attemptTokenRefresh();
+    } else if (!refreshToken) {
+        addChatMessage('system', '세션이 만료되었습니다. 다시 로그인해주세요.');
+        showLoginModal();
+    }
+});
+
 // 오류 코드 → 사용자 메시지 매핑
 function mapAuthError(code) {
     switch (code) {

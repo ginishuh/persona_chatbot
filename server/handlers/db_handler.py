@@ -45,8 +45,8 @@ class DBHandler:
         row = await cur.fetchone()
         current_version = row[0] if row else 0
 
-        # 최신 버전: v5 (사용자 설정 preferences 컬럼 추가)
-        TARGET_VERSION = 5
+        # 최신 버전: v6 (provider_sessions 컬럼 추가)
+        TARGET_VERSION = 6
 
         # user_version == 0이지만 테이블이 존재하면 스키마 검사
         if current_version == 0:
@@ -95,6 +95,7 @@ class DBHandler:
                     room_id TEXT NOT NULL,
                     title TEXT NOT NULL,
                     context TEXT,
+                    provider_sessions TEXT DEFAULT '{}',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (user_id, room_id),
@@ -131,7 +132,7 @@ class DBHandler:
                 """
             )
             await self._conn.commit()
-            current_version = 4
+            current_version = 6
         elif current_version < 4:
             # 구버전 DB: v4로 마이그레이션 (기존 데이터 버림)
             await self._maybe_backup_legacy_db()
@@ -142,6 +143,11 @@ class DBHandler:
         if current_version == 4:
             await self._migrate_to_v5()
             current_version = 5
+
+        # v5 → v6: provider_sessions 컬럼 추가
+        if current_version == 5:
+            await self._migrate_to_v6()
+            current_version = 6
 
         # 버전 업데이트
         if current_version == TARGET_VERSION:
@@ -480,6 +486,24 @@ class DBHandler:
             await self._conn.commit()
             logger.info("Migrated to v5: added preferences column to users table")
 
+    async def _migrate_to_v6(self) -> None:
+        """v5 → v6: rooms 테이블에 provider_sessions 컬럼 추가.
+
+        provider_sessions는 각 AI 프로바이더(claude, gemini, droid)의
+        세션 ID를 JSON으로 저장하여 서버 재시작 후에도 세션을 이어갈 수 있게 함.
+        """
+        assert self._conn is not None
+
+        # provider_sessions 컬럼이 이미 있는지 확인
+        cur = await self._conn.execute("PRAGMA table_info(rooms)")
+        columns = {row[1] for row in await cur.fetchall()}
+        if "provider_sessions" not in columns:
+            await self._conn.execute(
+                "ALTER TABLE rooms ADD COLUMN provider_sessions TEXT DEFAULT '{}'"
+            )
+            await self._conn.commit()
+            logger.info("Migrated to v6: added provider_sessions column to rooms table")
+
     # ===== Rooms =====
     async def upsert_room(
         self,
@@ -487,6 +511,7 @@ class DBHandler:
         user_id: int,
         title: str,
         context_json: str | None,
+        provider_sessions_json: str | None = None,
     ) -> None:
         """방 생성 또는 업데이트 (user_id 기반)
 
@@ -495,19 +520,35 @@ class DBHandler:
             user_id: 사용자 ID
             title: 방 제목
             context_json: 컨텍스트 JSON
+            provider_sessions_json: AI 프로바이더 세션 ID JSON (선택)
+                - None: 기존 값 유지 (UPDATE 시)
+                - '{}': 빈 객체로 초기화 (세션 삭제)
+                - 실제 JSON: 새 값으로 업데이트
         """
         assert self._conn is not None
         async with self._lock:
             await self._conn.execute(
                 """
-                INSERT INTO rooms(user_id, room_id, title, context)
-                VALUES(?, ?, ?, ?)
+                INSERT INTO rooms(user_id, room_id, title, context, provider_sessions)
+                VALUES(?, ?, ?, ?, COALESCE(?, '{}'))
                 ON CONFLICT(user_id, room_id) DO UPDATE SET
                   title=excluded.title,
                   context=excluded.context,
+                  provider_sessions=CASE
+                    WHEN ? IS NULL THEN provider_sessions
+                    ELSE ?
+                  END,
                   updated_at=CURRENT_TIMESTAMP
                 """,
-                (user_id, room_id, title, context_json),
+                (
+                    user_id,
+                    room_id,
+                    title,
+                    context_json,
+                    provider_sessions_json,  # INSERT용
+                    provider_sessions_json,  # CASE 조건
+                    provider_sessions_json,  # CASE ELSE
+                ),
             )
             await self._conn.commit()
 
@@ -542,7 +583,7 @@ class DBHandler:
         """
         assert self._conn is not None
         cur = await self._conn.execute(
-            "SELECT user_id, room_id, title, context, created_at, updated_at FROM rooms WHERE room_id = ? AND user_id = ?",
+            "SELECT user_id, room_id, title, context, provider_sessions, created_at, updated_at FROM rooms WHERE room_id = ? AND user_id = ?",
             (room_id, user_id),
         )
         row = await cur.fetchone()

@@ -467,8 +467,15 @@ export function handleChatComplete(response) {
         }
     } else {
         log('채팅 에러: ' + data.error, 'error');
-        addChatMessage('system', '에러: ' + data.error);
-        stopAutoTurn('오류로 자동턴을 중단합니다.');
+        // 인증 에러인 경우 토큰 갱신 시도 이벤트 발행
+        if (data.error === '인증 필요' || data.error === 'auth_required') {
+            window.dispatchEvent(new CustomEvent('auth:chatError'));
+            // 인증 에러는 자동 복구 시도 - 자동턴 조용히 중단
+            stopAutoTurn();
+        } else {
+            addChatMessage('system', '에러: ' + data.error);
+            stopAutoTurn('오류로 자동턴을 중단합니다.');
+        }
     }
 }
 
@@ -656,13 +663,15 @@ function syncAutoTurnState() {
 }
 
 function stopAutoTurn(reason = '') {
+    // 자동턴이 실제로 켜져있을 때만 로그 출력
+    const wasEnabled = autoTurnEnabled || autoTurnTimer;
     autoTurnEnabled = false;
     autoTurnCount = 0;
     if (autoTurnTimer) {
         clearTimeout(autoTurnTimer);
         autoTurnTimer = null;
     }
-    if (reason) log(reason, 'info');
+    if (reason && wasEnabled) log(reason, 'info');
 }
 
 function scheduleNextAutoTurn() {
