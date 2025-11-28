@@ -271,14 +271,7 @@ async def chat(ctx: AppContext, websocket, data: dict):
 
     # 프로바이더가 세션 에러 반환 시 해당 세션만 DB에서 삭제
     # (실제로 죽은 세션만 정리 - 만료/인증 에러)
-    # TODO: 프로바이더 핸들러에서 session_expired/session_invalid 명시적 반환 추가
-    error_msg = (result.get("error") or "").lower()
-    session_error_keywords = ["session", "expired", "invalid session", "resume"]
-    session_error = (
-        result.get("session_expired")
-        or result.get("session_invalid")
-        or (not result.get("success") and any(kw in error_msg for kw in session_error_keywords))
-    )
+    session_error = result.get("session_expired") or result.get("session_invalid")
     if session_error and provider_session_id:
         logger.info(f"세션 에러 감지 - DB에서 세션 삭제: provider={provider}")
         if speaker and isinstance(provider_sessions.get(provider), dict):

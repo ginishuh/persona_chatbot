@@ -448,4 +448,11 @@ class DroidHandler:
             logger.error(f"Error sending message: {e}")
             await self.stop()
             fallback_session_id = None if latest_session_id == session_id else latest_session_id
-            return {"success": False, "error": str(e), "session_id": fallback_session_id}
+            error_msg = str(e).lower()
+            session_error = any(kw in error_msg for kw in ("session", "expired", "invalid"))
+            return {
+                "success": False,
+                "error": str(e),
+                "session_id": fallback_session_id,
+                "session_expired": session_error,
+            }
