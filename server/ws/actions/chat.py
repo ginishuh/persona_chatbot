@@ -49,20 +49,6 @@ async def chat(ctx: AppContext, websocket, data: dict):
     session_retention = ctx.context_handler.get_context().get("session_retention", False)
     logger.debug(f"session_retention={session_retention}")
 
-    # 세션 ON인데 메모리가 비어있으면 DB에서 복원 시도
-    # (토글 OFF → ON 시 메모리는 비었지만 DB에는 있을 수 있음)
-    if session_retention and not provider_sessions and ctx.db_handler:
-        try:
-            db_room = await ctx.db_handler.get_room(rid, user_id)
-            if db_room:
-                ps_json = db_room.get("provider_sessions") or "{}"
-                restored = json.loads(ps_json)
-                if restored:
-                    provider_sessions.update(restored)
-                    logger.info(f"chat - 세션 복원 (DB→메모리): {list(restored.keys())}")
-        except Exception as exc:
-            logger.debug(f"chat - 세션 복원 실패: {exc}")
-
     def get_provider_session_id():
         # 세션유지가 OFF면 항상 None 반환 (새 세션)
         if not session_retention:
@@ -76,6 +62,22 @@ async def chat(ctx: AppContext, websocket, data: dict):
         return sess if not isinstance(sess, dict) else None
 
     provider_session_id = get_provider_session_id()
+
+    # 세션 ON인데 현재 프로바이더 세션이 없으면 DB에서 해당 프로바이더만 복원
+    # (다른 프로바이더 세션이 있어도 현재 프로바이더는 복원해야 함)
+    if session_retention and provider_session_id is None and ctx.db_handler:
+        try:
+            db_room = await ctx.db_handler.get_room(rid, user_id)
+            if db_room:
+                ps_json = db_room.get("provider_sessions") or "{}"
+                db_sessions = json.loads(ps_json)
+                db_provider_sess = db_sessions.get(provider)
+                if db_provider_sess:
+                    provider_sessions[provider] = db_provider_sess
+                    provider_session_id = get_provider_session_id()
+                    logger.info(f"chat - 세션 복원 (DB→메모리): provider={provider}")
+        except Exception as exc:
+            logger.debug(f"chat - 세션 복원 실패: {exc}")
     logger.debug(f"provider_session_id={provider_session_id[:8] if provider_session_id else None}")
 
     # 성인 동의 확인
