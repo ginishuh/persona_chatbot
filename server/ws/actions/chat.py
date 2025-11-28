@@ -232,29 +232,49 @@ async def chat(ctx: AppContext, websocket, data: dict):
         session_key=str(user_id), room_id=rid  # 레거시 호환용
     )
 
-    # 프로바이더 세션ID 업데이트 (세션유지가 ON일 때만)
+    # 프로바이더 세션ID 업데이트
     new_session_id = result.get("session_id")
+    should_save_to_db = False
+
     if session_retention and new_session_id:
+        # 세션유지 ON + 새 세션 → 메모리 및 DB 저장
         if speaker:
-            # provider별 dict로 관리
             if not isinstance(provider_sessions.get(provider), dict):
                 provider_sessions[provider] = {}
             provider_sessions[provider][speaker] = new_session_id
         else:
             provider_sessions[provider] = new_session_id
+        should_save_to_db = True
     elif not session_retention:
-        # 세션유지 OFF면 세션 정보 삭제
+        # 세션유지 OFF → 메모리만 비움, DB는 건드리지 않음 (토글 실수 방지)
         if speaker and isinstance(provider_sessions.get(provider), dict):
             provider_sessions[provider].pop(speaker, None)
         else:
             provider_sessions.pop(provider, None)
+        # should_save_to_db = False (DB 보존)
 
-    # provider_sessions를 DB에 자동 저장 (서버 재시작 후 세션 복원용)
-    # 빈 객체도 저장해야 세션 OFF 시 DB에서 삭제됨
-    if ctx.db_handler:
+    # 프로바이더가 세션 에러 반환 시 해당 세션만 DB에서 삭제
+    # (실제로 죽은 세션만 정리 - 만료/인증 에러)
+    # TODO: 프로바이더 핸들러에서 session_expired/session_invalid 명시적 반환 추가
+    error_msg = (result.get("error") or "").lower()
+    session_error_keywords = ["session", "expired", "invalid session", "resume"]
+    session_error = (
+        result.get("session_expired")
+        or result.get("session_invalid")
+        or (not result.get("success") and any(kw in error_msg for kw in session_error_keywords))
+    )
+    if session_error and provider_session_id:
+        logger.info(f"세션 에러 감지 - DB에서 세션 삭제: provider={provider}")
+        if speaker and isinstance(provider_sessions.get(provider), dict):
+            provider_sessions[provider].pop(speaker, None)
+        else:
+            provider_sessions.pop(provider, None)
+        should_save_to_db = True
+
+    # provider_sessions를 DB에 저장 (세션 ON 저장 또는 세션 에러 정리 시만)
+    if ctx.db_handler and should_save_to_db:
         try:
             provider_sessions_json = json.dumps(provider_sessions, ensure_ascii=False)
-            # room 정보 가져와서 upsert (provider_sessions만 업데이트)
             existing_room = await ctx.db_handler.get_room(rid, user_id)
             if existing_room:
                 await ctx.db_handler.upsert_room(
