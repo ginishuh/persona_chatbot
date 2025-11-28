@@ -862,6 +862,16 @@ function attemptTokenRefresh() {
     }
 }
 
+// 채팅 중 인증 에러 발생 시 토큰 갱신 시도
+window.addEventListener('auth:chatError', () => {
+    if (refreshToken && !refreshInProgress) {
+        log('채팅 인증 에러 - 토큰 갱신 시도', 'info');
+        attemptTokenRefresh();
+    } else if (!refreshToken) {
+        showLoginModal();
+    }
+});
+
 // 오류 코드 → 사용자 메시지 매핑
 function mapAuthError(code) {
     switch (code) {

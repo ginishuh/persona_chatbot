@@ -96,8 +96,14 @@ async def chat(ctx: AppContext, websocket, data: dict):
     except Exception:
         pass
 
-    # 히스토리 텍스트: 세션이 있어도 최근 윈도우를 항상 포함
-    history_text = room["history"].get_history_text()
+    # 히스토리 텍스트: 세션 연동 시 생략 (CLI가 이미 기억하고 있음)
+    if session_retention and provider_session_id:
+        # 세션 이어가기 - CLI가 대화 기록을 자체 관리하므로 히스토리 생략
+        history_text = ""
+        logger.debug(f"세션 연동 중 - 히스토리 생략 (session_id={provider_session_id[:8]}...)")
+    else:
+        # 새 세션 또는 세션 연동 OFF - 히스토리 포함
+        history_text = room["history"].get_history_text()
 
     # 시스템 프롬프트
     system_prompt = ctx.context_handler.build_system_prompt(history_text)
@@ -242,6 +248,24 @@ async def chat(ctx: AppContext, websocket, data: dict):
             provider_sessions[provider].pop(speaker, None)
         else:
             provider_sessions.pop(provider, None)
+
+    # provider_sessions를 DB에 자동 저장 (서버 재시작 후 세션 복원용)
+    if ctx.db_handler and provider_sessions:
+        try:
+            provider_sessions_json = json.dumps(provider_sessions, ensure_ascii=False)
+            # room 정보 가져와서 upsert (provider_sessions만 업데이트)
+            existing_room = await ctx.db_handler.get_room(rid, user_id)
+            if existing_room:
+                await ctx.db_handler.upsert_room(
+                    rid,
+                    user_id,
+                    existing_room.get("title") or rid,
+                    existing_room.get("context"),
+                    provider_sessions_json,
+                )
+                logger.debug(f"chat - provider_sessions DB 저장 완료: {rid}")
+        except Exception as exc:
+            logger.debug(f"chat - provider_sessions DB 저장 실패: {exc}")
 
     await websocket.send(
         json.dumps(
