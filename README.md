@@ -216,7 +216,7 @@ docker compose down
 
 ```bash
 # 컨테이너 접속 후 관리자 계정 생성
-docker-compose -f docker-compose.yml.example exec persona-chatbot python3 -c "
+docker compose exec persona-chatbot python3 -c "
 from server.handlers.db_handler import DBHandler
 import asyncio
 
@@ -404,6 +404,10 @@ persona_chatbot/
 │   ├── CLAUDE.md                    # 챗봇 전용 지침(샘플에서 복사)
 │   └── GEMINI.md                    # Gemini 전용 지침(샘플에서 복사)
 ├── persona_data/                    # 캐릭터/세계관 프리셋(별도 레포 권장)
+│   └── stories/                     # 서사 마크다운 저장 폴더 (구 STORIES/는 미사용)
+├── scripts/                         # 유틸리티 스크립트
+│   ├── ws_chat_test.py              # WebSocket 스모크 테스트
+│   └── sync_docs.py                 # AGENTS/CLAUDE/GEMINI.md 동기화
 ├── requirements.txt                 # Python 의존성
 └── README.md
 ```
@@ -428,7 +432,7 @@ persona_chatbot/
 | `clear_history`                           | 대화 히스토리 초기화               |
 | `get_narrative`                           | 히스토리 마크다운 가져오기            |
 | `get_history_settings`                    | 맥락 길이 설정 조회               |
-| `set_history_limit`                       | 맥락 길이 변경 (5~1000 또는 null) |
+| `set_history_limit`                       | 맥락 길이 변경 (5~60, 무제한은 null) |
 | `get_session_settings`                    | 세션 유지 설정 조회               |
 | `set_session_retention`                   | 세션 유지 토글(true/false)      |
 | `reset_sessions`                          | 모든 세션 ID 초기화              |
@@ -687,6 +691,11 @@ lsof -i :8765
   * 세션 유지 ON일 때 맥락 길이 설정은 비활성화됩니다 (CLI가 자체 맥락 관리).
 * 서버 기본값을 바꾸려면
   `server/core/session_manager.py`의 `HistoryHandler(max_turns=30)` 값을 조정합니다.
+
+### 빠른 진단 & 문서 갱신
+
+* **WebSocket 스모크 테스트**: `python scripts/ws_chat_test.py --provider claude --prompt "테스트"`
+* **문서 동기화**: `python scripts/sync_docs.py` — `docs/agents_base_en.md` 기준으로 AGENTS/CLAUDE/GEMINI.md 자동 생성
 
 ---
 
