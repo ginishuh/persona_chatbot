@@ -438,10 +438,16 @@ class DroidHandler:
             # 실패 최종 반환
             logger.warning(f"All Droid attempts failed (last session_id={latest_session_id})")
             fallback_session_id = None if latest_session_id == session_id else latest_session_id
+            # 에러 페이로드에서 세션 에러 감지
+            err_type = (err or {}).get("type", "") if isinstance(err, dict) else str(err)
+            session_error = any(
+                kw in err_type.lower() for kw in ("session", "expired", "invalid", "auth", "resume")
+            )
             return {
                 "success": False,
                 "error": err or {"type": "unknown"},
                 "session_id": fallback_session_id,
+                "session_expired": session_error,
             }
 
         except Exception as e:
