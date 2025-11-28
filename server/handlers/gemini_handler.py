@@ -189,9 +189,19 @@ class GeminiHandler:
                 "message": assistant_message,
                 "token_info": None,
                 "session_id": current_session_id,
+                "session_expired": False,
             }
 
         except Exception as e:
             logger.error(f"Error sending message: {e}")
             await self.stop()
-            return {"success": False, "error": str(e), "session_id": session_id}
+            error_msg = str(e).lower()
+            session_error = any(
+                kw in error_msg for kw in ("session", "expired", "invalid", "resume")
+            )
+            return {
+                "success": False,
+                "error": str(e),
+                "session_id": session_id,
+                "session_expired": session_error,
+            }
