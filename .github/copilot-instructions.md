@@ -125,6 +125,7 @@ Notes:
   - At the beginning of a session, call `activate_project` once to set the current repository root as the active project.
   - For code analysis/refactors/reference tracing or symbol/call-graph work, prefer Serena tools first; for trivial single-file or few-line edits, you may skip Serena and edit directly.
   - Add/keep `.serena/` in `.gitignore` because it contains absolute paths and caches.
-- Context7 MCP (official docs lookup):
-  - When answering “how to use X” for external frameworks/libs (FastAPI, websockets, SQLAlchemy, JWT, OpenAI SDK, React/JS DOM, etc.), prefer fetching the latest official docs/examples via Context7 instead of relying on memory.
-  - Skip only for trivial syntax you know cold; when unsure, favor a Context7-backed answer and cite the doc in comments/docs/PR notes when relevant.
+ - Context7 MCP (official docs lookup):
+   - For external frameworks/libraries (FastAPI, websockets, SQLAlchemy, JWT, OpenAI SDK, React/JS DOM, etc.), fetch the latest official docs/examples via Context7 first instead of relying on memory.
+   - For “how to use X” / “latest pattern for Y” questions, prefer Context7; skip only trivial syntax you know cold.
+   - When unsure, favor Context7-backed answers over guesses and cite/link the docs in comments/docs/PR notes as needed.

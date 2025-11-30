@@ -121,5 +121,6 @@ python scripts/ws_chat_test.py --provider gemini --prompt "Smoke: Gemini"
   - 코드 분석/리팩터링/참조 추적/심볼·호출 그래프 작업처럼 여러 파일이 엮인 작업은 Serena MCP를 우선 사용하고, 한 파일·몇 줄 정도의 사소한 수정이라면 Serena 호출 없이 바로 수정해도 된다.
   - `.serena/`는 절대경로/캐시를 포함하므로 `.gitignore`에 반드시 포함.
 - Context7 MCP(공식 문서 조회):
-  - FastAPI, websockets, SQLAlchemy, JWT, OpenAI SDK, React/JS DOM 등 외부 프레임워크/라이브러리 사용법을 설명할 때는 기억보다 Context7 기반 최신 공식 문서/예제를 우선 확인합니다.
-  - 단순 문법이 아닌 이상 Context7을 기본값으로, 애매하면 추측 대신 문서 근거를 남기고 답변/주석/PR 설명에 출처를 언급합니다.
+  - FastAPI, websockets, SQLAlchemy, JWT, OpenAI SDK, React/JS DOM 등 외부 라이브러리 사용법은 Context7으로 최신 공식 문서/예제를 먼저 확인합니다.
+  - “X를 어떻게 쓰나?”, “Y의 최신 패턴?” 같은 질문에서는 Context7을 우선하고, 정말 단순 문법이 아니면 기억만 믿지 않습니다.
+  - 애매하면 추측 대신 Context7 근거로 답하고, 필요 시 주석·문서·PR 설명에 출처를 남깁니다.
