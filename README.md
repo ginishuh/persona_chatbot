@@ -695,7 +695,7 @@ lsof -i :8765
 ### 빠른 진단 & 문서 갱신
 
 * **WebSocket 스모크 테스트**: `python scripts/ws_chat_test.py --provider claude --prompt "테스트"`
-* **문서 동기화**: `python scripts/sync_docs.py` — `docs/agents_base_en.md` 기준으로 AGENTS/CLAUDE/GEMINI.md 자동 생성
+* **문서 동기화**: `bash scripts/sync_agents_from_base.sh` — `docs/agents_base_en.md` 기준으로 AGENTS/CLAUDE/GEMINI.md 자동 생성
 
 ---
 
