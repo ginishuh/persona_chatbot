@@ -38,7 +38,7 @@
   - `AGENTS.md` (영어 지침)
 
 ### 문서 동기화
-- `python3 scripts/sync_docs.py`를 실행하면 베이스(영문)에서 아래 파일들이 자동 생성됩니다:
+- `bash scripts/sync_agents_from_base.sh`를 실행하면 베이스(영문)에서 아래 파일들이 자동 생성됩니다:
   - `AGENTS.md` (Codex/코딩 에이전트)
   - `CLAUDE.md` (Anthropic Claude)
   - `GEMINI.md` (Google Gemini)
