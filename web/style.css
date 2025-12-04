@@ -1614,6 +1614,10 @@ input::placeholder, textarea::placeholder {
 
 /* ===== 업데이트 토스트 ===== */
 .update-toast {
+    /* button 기본 스타일 리셋 */
+    border: none;
+    font-family: inherit;
+    /* 토스트 스타일 */
     position: fixed;
     bottom: 20px;
     left: 50%;
