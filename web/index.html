@@ -619,8 +619,66 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/sw.js')
-                .then(function(reg) { console.log('ServiceWorker 등록됨:', reg); })
+                .then(function(reg) {
+                    console.log('ServiceWorker 등록됨:', reg);
+
+                    // 접속할 때마다 업데이트 체크
+                    reg.update();
+
+                    // 새 SW 설치 감지
+                    reg.addEventListener('updatefound', function() {
+                        const newWorker = reg.installing;
+                        console.log('새 ServiceWorker 발견:', newWorker);
+
+                        newWorker.addEventListener('statechange', function() {
+                            // 새 SW가 설치 완료되고 대기 중일 때
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                showUpdateToast();
+                            }
+                        });
+                    });
+                })
                 .catch(function(err) { console.warn('ServiceWorker 등록 실패:', err); });
+            });
+
+            // 다른 탭에서 SW가 활성화되면 새로고침
+            navigator.serviceWorker.addEventListener('controllerchange', function() {
+                if (window._swReloading) return;
+                window._swReloading = true;
+                location.reload();
+            });
+        }
+
+        // 업데이트 토스트 표시
+        function showUpdateToast() {
+            // 이미 표시된 토스트가 있으면 무시
+            if (document.querySelector('.update-toast')) return;
+
+            const toast = document.createElement('div');
+            toast.className = 'update-toast';
+            toast.textContent = '새 버전이 있습니다. 클릭하여 업데이트';
+            toast.setAttribute('role', 'alert');
+            toast.setAttribute('tabindex', '0');
+
+            toast.addEventListener('click', function() {
+                // waiting 중인 SW에게 skipWaiting 메시지 전송
+                if (navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.ready.then(function(reg) {
+                        if (reg.waiting) {
+                            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                        } else {
+                            location.reload();
+                        }
+                    });
+                } else {
+                    location.reload();
+                }
+            });
+
+            document.body.appendChild(toast);
+            // 애니메이션을 위한 약간의 지연
+            requestAnimationFrame(function() {
+                toast.classList.add('show');
             });
         }
 

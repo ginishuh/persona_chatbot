@@ -1,4 +1,4 @@
-const CACHE_NAME = 'persona-chat-v2';
+const CACHE_NAME = 'persona-chat-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -18,7 +18,14 @@ self.addEventListener('install', (event) => {
       return cache.addAll(ASSETS_TO_CACHE.map((p) => new Request(p, { cache: 'no-cache' })));
     })
   );
-  self.skipWaiting();
+  // skipWaiting()은 클라이언트 요청 시에만 호출 (사용자가 토스트 클릭할 때)
+});
+
+// 클라이언트에서 SKIP_WAITING 메시지를 받으면 활성화
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (event) => {
