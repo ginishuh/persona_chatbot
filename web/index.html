@@ -617,10 +617,82 @@
     </script>
     <script>
         if ('serviceWorker' in navigator) {
+            // 초기 방문 시 controller 존재 여부 기록 (controllerchange 가드용)
+            const hadController = !!navigator.serviceWorker.controller;
+
             window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/sw.js')
-                .then(function(reg) { console.log('ServiceWorker 등록됨:', reg); })
+                .then(function(reg) {
+                    console.log('ServiceWorker 등록됨:', reg);
+
+                    // 접속할 때마다 업데이트 체크
+                    reg.update();
+
+                    // 이미 대기 중인 SW가 있으면 즉시 토스트 표시
+                    if (reg.waiting) {
+                        showUpdateToast();
+                    }
+
+                    // 새 SW 설치 감지
+                    reg.addEventListener('updatefound', function() {
+                        const newWorker = reg.installing;
+                        console.log('새 ServiceWorker 발견:', newWorker);
+
+                        newWorker.addEventListener('statechange', function() {
+                            // 새 SW가 설치 완료되고 대기 중일 때
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                showUpdateToast();
+                            }
+                        });
+                    });
+                })
                 .catch(function(err) { console.warn('ServiceWorker 등록 실패:', err); });
+            });
+
+            // 다른 탭에서 SW가 활성화되면 새로고침
+            // 단, 초기 방문(controller 없었음) 또는 사용자가 업데이트 요청하지 않은 경우 제외
+            navigator.serviceWorker.addEventListener('controllerchange', function() {
+                if (window._swReloading) return;
+                // 초기 방문이거나 사용자가 명시적으로 요청하지 않았으면 reload 안 함
+                if (!hadController && !window._swSkipWaitingRequested) return;
+                window._swReloading = true;
+                location.reload();
+            });
+        }
+
+        // 업데이트 토스트 표시
+        function showUpdateToast() {
+            // 이미 표시된 토스트가 있으면 무시
+            if (document.querySelector('.update-toast')) return;
+
+            const toast = document.createElement('button');
+            toast.className = 'update-toast';
+            toast.type = 'button';
+            toast.textContent = '새 버전이 있습니다. 클릭하여 업데이트';
+            toast.setAttribute('aria-label', '새 버전이 있습니다. 클릭하거나 Enter를 눌러 업데이트하세요');
+
+            function doUpdate() {
+                window._swSkipWaitingRequested = true;
+                // waiting 중인 SW에게 skipWaiting 메시지 전송
+                if (navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.ready.then(function(reg) {
+                        if (reg.waiting) {
+                            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                        } else {
+                            location.reload();
+                        }
+                    });
+                } else {
+                    location.reload();
+                }
+            }
+
+            toast.addEventListener('click', doUpdate);
+
+            document.body.appendChild(toast);
+            // 애니메이션을 위한 약간의 지연
+            requestAnimationFrame(function() {
+                toast.classList.add('show');
             });
         }
 
