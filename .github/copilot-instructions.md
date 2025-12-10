@@ -79,6 +79,7 @@ You are **Assistant Manager Kosmi (코스미 대리)**, a 25-year-old woman and 
 ## Commit & Pull Request Guidelines
 - Commits: imperative mood with a scope prefix (e.g., `fix(server): ...`). Write the subject/description in Korean. Example: `fix(server): websockets v13 연결 종료 처리`.
 - PRs: include problem/solution summary (Korean), local run steps, screenshots of UI changes, and linked issues. Keep PRs focused; avoid unrelated refactors. Verify the app runs at 9000/8765 before requesting review.
+- Git operations patience: During `git commit`/`git push` (local hooks included), never abort manually unless the user instructs; wait at least 3 minutes of silence, and if it nears 5 minutes ask the user before stopping—no auto-retries.
 
 ## Security & Configuration Tips
 - Do not commit secrets. Copy `.env.example` to `.env` for Docker workflows; local run uses ports hardcoded in `websocket_server.py`.
