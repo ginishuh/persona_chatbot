@@ -17,8 +17,8 @@ class DroidHandler:
     def __init__(self, droid_path=None):
         # 환경 변수 또는 기본값 사용
         self.droid_path = droid_path or os.getenv("DROID_PATH", "droid")
-        self.primary_model = os.getenv("DROID_MODEL", "custom:glm-4.6")
-        # 콤마로 구분된 폴백 모델 목록 (예: "glm-4.6,glm-4")
+        self.primary_model = os.getenv("DROID_MODEL", "custom:glm-4.7")
+        # 콤마로 구분된 폴백 모델 목록 (예: "glm-4.7,glm-4")
         self.fallback_models = [
             m.strip() for m in os.getenv("DROID_FALLBACK_MODELS", "").split(",") if m.strip()
         ]
