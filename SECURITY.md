@@ -6,17 +6,13 @@ Thank you for helping keep Persona Chat safe.
 
 | Version | Supported |
 |---------|-----------|
-| Latest on `main` | Yes |
-| Older releases | Best-effort only |
+| Latest on `main` | Best-effort |
 
 ## Reporting a vulnerability
 
 Please do **not** open a public GitHub issue for sensitive security reports.
 
-Report privately through one of these channels:
-
-1. **GitHub Security Advisories** — use the "Report a vulnerability" tab on this repository (if enabled).
-2. **Email** — send details to **ginishuh@gmail.com** with the subject `[SECURITY] Persona Chat`.
+Report privately through **GitHub Security Advisories** — use the "Report a vulnerability" tab on this repository.
 
 ## What to include
 
@@ -25,11 +21,9 @@ Report privately through one of these channels:
 - Likely impact and severity estimate
 - Suggested mitigation or fix, if you have one
 
-## Response timeline
+## Response expectations
 
-- **Acknowledgement** within 3 business days.
-- **Triage and initial assessment** within 7 business days.
-- A fix or mitigation will be coordinated before public disclosure.
+This is a small, maintainer-driven project. Reports are handled on a **best-effort** basis. We will do our best to acknowledge reports promptly and coordinate a fix before public disclosure, but we cannot guarantee specific response times.
 
 ## Scope
 

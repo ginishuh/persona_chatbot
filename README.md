@@ -25,13 +25,13 @@ Quick links: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Lice
 | **Live streaming** | Responses appear token-by-token over WebSocket; no waiting for a full reply. |
 | **Swap providers on the fly** | Claude Code CLI, Gemini CLI, and Droid CLI all plug into the same interface. |
 | **Narrative context panel** | Set the world, scenario, player character, NPCs, and GM style from a side panel — the AI reads it all. |
-| **Export everything** | JSON, Zip, or NDJSON stream. Import back over WebSocket. Your data never leaves your machine. |
+| **Export everything** | JSON, Zip, or NDJSON stream. Import back over WebSocket. Local storage and exports stay under your control. |
 
 ## Who This Is For
 
 - **Writers & TRPG players** — run structured party conversations and scenario sessions in your browser.
 - **Developers** — study a working example of multi-provider AI orchestration, WebSocket streaming, and session management.
-- **Privacy-first users** — keep characters, stories, and auth state entirely local. No cloud account required.
+- **Privacy-first users** — keep characters, stories, and auth state on your own machine. AI provider auth is needed, but nothing else leaves your control.
 
 ## Architecture at a Glance
 
