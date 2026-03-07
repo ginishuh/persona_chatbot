@@ -2,27 +2,46 @@
 
 Thank you for helping keep Persona Chat safe.
 
+## Supported versions
+
+| Version | Supported |
+|---------|-----------|
+| Latest on `main` | Yes |
+| Older releases | Best-effort only |
+
 ## Reporting a vulnerability
 
 Please do **not** open a public GitHub issue for sensitive security reports.
 
-Instead, report the issue privately through one of the following channels:
+Report privately through one of these channels:
 
-- GitHub private vulnerability reporting or security advisories, if enabled for this repository
-- a direct private message to the repository maintainer
-- `MAINTAINER-SECURITY-CONTACT` **(placeholder - maintainer review required)**
-
-If you maintain this repository, replace the placeholder above with a real email address or other private reporting channel.
+1. **GitHub Security Advisories** — use the "Report a vulnerability" tab on this repository (if enabled).
+2. **Email** — send details to **ginishuh@gmail.com** with the subject `[SECURITY] Persona Chat`.
 
 ## What to include
 
-Please include as much of the following as you can:
+- Affected version, branch, or commit
+- Reproduction steps or proof of concept
+- Likely impact and severity estimate
+- Suggested mitigation or fix, if you have one
 
-- affected version, branch, or commit
-- reproduction steps or a proof of concept
-- the likely impact
-- any suggested mitigation or fix
+## Response timeline
 
-## Disclosure expectations
+- **Acknowledgement** within 3 business days.
+- **Triage and initial assessment** within 7 business days.
+- A fix or mitigation will be coordinated before public disclosure.
 
-Please allow time for triage and a fix before public disclosure. Non-sensitive hardening ideas and general security improvements can still be opened as normal issues or pull requests.
+## Scope
+
+The following are in scope:
+
+- Authentication bypass or token manipulation
+- Unauthorized file read/write via WebSocket actions
+- Code injection through context fields or imported data
+- Sensitive data exposure (secrets, auth tokens in logs or exports)
+
+General hardening suggestions and non-sensitive improvements can be submitted as normal issues or pull requests.
+
+## Disclosure
+
+Please allow reasonable time for triage and a fix before any public disclosure. We aim to work collaboratively with reporters to resolve issues responsibly.
